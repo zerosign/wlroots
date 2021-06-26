@@ -714,6 +714,12 @@ void wlr_output_attach_buffer(struct wlr_output *output,
 	output->pending.buffer = wlr_buffer_lock(buffer);
 }
 
+void wlr_output_set_source_box(struct wlr_output *output,
+		struct wlr_box source_box) {
+	output->pending.source_box = source_box;
+	output->pending.committed |= WLR_OUTPUT_STATE_SOURCE_BOX;
+}
+
 void wlr_output_send_frame(struct wlr_output *output) {
 	output->frame_pending = false;
 	if (output->enabled) {
