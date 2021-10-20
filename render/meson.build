@@ -9,6 +9,7 @@ wlr_files += files(
 	'color.c',
 	'dmabuf.c',
 	'drm_format_set.c',
+	'drm_syncobj.c',
 	'pass.c',
 	'pixel_format.c',
 	'swapchain.c',
