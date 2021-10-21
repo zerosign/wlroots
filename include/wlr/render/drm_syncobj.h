@@ -63,6 +63,13 @@ struct wlr_drm_syncobj_timeline *wlr_drm_syncobj_timeline_ref(struct wlr_drm_syn
  */
 void wlr_drm_syncobj_timeline_unref(struct wlr_drm_syncobj_timeline *timeline);
 /**
+ * Transfer a point from a timeline to another.
+ *
+ * Both timelines must have been created with the same DRM FD.
+ */
+bool wlr_drm_syncobj_timeline_transfer(struct wlr_drm_syncobj_timeline *dst,
+	uint64_t dst_point, struct wlr_drm_syncobj_timeline *src, uint64_t src_point);
+/**
  * Check if a timeline point has been signalled or has materialized.
  *
  * Flags can be:
