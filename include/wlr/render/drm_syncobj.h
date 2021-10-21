@@ -38,6 +38,11 @@ struct wlr_drm_syncobj_timeline {
  */
 struct wlr_drm_syncobj_timeline *wlr_drm_syncobj_timeline_create(int drm_fd);
 /**
+ * Import a timeline from a drm_syncobj FD.
+ */
+struct wlr_drm_syncobj_timeline *wlr_drm_syncobj_timeline_import(int drm_fd,
+	int drm_syncobj_fd);
+/**
  * Reference a synchronization timeline.
  */
 struct wlr_drm_syncobj_timeline *wlr_drm_syncobj_timeline_ref(struct wlr_drm_syncobj_timeline *timeline);
