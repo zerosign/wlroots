@@ -51,10 +51,26 @@ static void shm_client_buffer_end_data_ptr_access(struct wlr_buffer *wlr_buffer)
 	}
 }
 
+static bool shm_client_buffer_get_shm(struct wlr_buffer *wlr_buffer,
+		struct wlr_shm_attributes *attribs) {
+	struct wlr_shm_client_buffer *buffer =
+		shm_client_buffer_from_buffer(wlr_buffer);
+
+	attribs->fd = -1;
+	attribs->width = wl_shm_buffer_get_width(buffer->shm_buffer);
+	attribs->height = wl_shm_buffer_get_height(buffer->shm_buffer);
+	attribs->offset = 0;
+	attribs->stride = wl_shm_buffer_get_stride(buffer->shm_buffer);
+	attribs->format = wl_shm_buffer_get_format(buffer->shm_buffer);
+
+	return true;
+}
+
 static const struct wlr_buffer_impl shm_client_buffer_impl = {
 	.destroy = shm_client_buffer_destroy,
 	.begin_data_ptr_access = shm_client_buffer_begin_data_ptr_access,
 	.end_data_ptr_access = shm_client_buffer_end_data_ptr_access,
+	.get_shm = shm_client_buffer_get_shm,
 };
 
 static void shm_client_buffer_resource_handle_destroy(
