@@ -142,9 +142,9 @@ static void set_plane_props(struct atomic *atom, struct wlr_box source_box,
 	}
 
 	uint32_t width = source_box.width ? (uint32_t)source_box.width :
-		fb->wlr_buf->width;
+		(uint32_t)fb->wlr_buf->width;
 	uint32_t height = source_box.height ? (uint32_t)source_box.height :
-		fb->wlr_buf->height;
+		(uint32_t)fb->wlr_buf->height;
 
 	// The src_* properties are in 16.16 fixed point
 	atomic_add(atom, id, props->src_x, (uint64_t)source_box.x << 16);
@@ -242,12 +242,12 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 	atomic_add(&atom, crtc->id, crtc->props.active, active);
 	if (active) {
 		struct wlr_box source_box;
-		if (state->committed & WLR_OUTPUT_STATE_SOURCE_BOX) {
+		if (state->base->committed & WLR_OUTPUT_STATE_SOURCE_BOX) {
 			/**
 			 * Grab source box from output in order to crop the
 			 * buffer.
 			 */
-			source_box = state->source_box;
+			source_box = state->base->source_box;
 		}
 		else {
 			// Use dummy source box
