@@ -1,12 +1,16 @@
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <libinput.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include <wlr/backend/interface.h>
 #include <wlr/backend/session.h>
 #include <wlr/util/log.h>
 #include "backend/libinput.h"
 #include "util/signal.h"
+
+#define WAIT_DEVICE_TIMEOUT 10000 // ms
 
 static struct wlr_libinput_backend *get_libinput_backend_from_backend(
 		struct wlr_backend *wlr_backend) {
@@ -45,6 +49,14 @@ static const struct libinput_interface libinput_impl = {
 	.close_restricted = libinput_close_restricted
 };
 
+static void backend_process_events(struct wlr_libinput_backend *backend) {
+	struct libinput_event *event;
+	while ((event = libinput_get_event(backend->libinput_context))) {
+		handle_libinput_event(backend, event);
+		libinput_event_destroy(event);
+	}
+}
+
 static int handle_libinput_readable(int fd, uint32_t mask, void *_backend) {
 	struct wlr_libinput_backend *backend = _backend;
 	int ret = libinput_dispatch(backend->libinput_context);
@@ -53,12 +65,38 @@ static int handle_libinput_readable(int fd, uint32_t mask, void *_backend) {
 		wl_display_terminate(backend->display);
 		return 0;
 	}
-	struct libinput_event *event;
-	while ((event = libinput_get_event(backend->libinput_context))) {
-		handle_libinput_event(backend, event);
-		libinput_event_destroy(event);
-	}
+	backend_process_events(backend);
 	return 0;
+}
+
+static uint64_t get_current_time_ms(void) {
+	struct timespec ts = {0};
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
+
+static bool backend_wait_device(struct wlr_libinput_backend *backend) {
+	uint64_t started_at = get_current_time_ms();
+	uint64_t timeout = WAIT_DEVICE_TIMEOUT;
+	struct wl_event_loop *event_loop =
+		wl_display_get_event_loop(backend->display);
+	while (backend->wlr_device_lists.size == 0) {
+		int ret = wl_event_loop_dispatch(event_loop, (int)timeout);
+		if (ret < 0) {
+			wlr_log_errno(WLR_ERROR, "Failed to wait for input devices: "
+				"wl_event_loop_dispatch failed");
+			return false;
+		}
+
+		uint64_t now = get_current_time_ms();
+		if (now >= started_at + WAIT_DEVICE_TIMEOUT) {
+			wlr_log(WLR_ERROR, "Timed out waiting for input devices");
+			break;
+		}
+		timeout = started_at + WAIT_DEVICE_TIMEOUT - now;
+	}
+
+	return backend->wlr_device_lists.size > 0;
 }
 
 static enum wlr_log_importance libinput_log_priority_to_wlr(
@@ -103,33 +141,29 @@ static bool backend_start(struct wlr_backend *wlr_backend) {
 	libinput_log_set_handler(backend->libinput_context, log_libinput);
 	libinput_log_set_priority(backend->libinput_context, LIBINPUT_LOG_PRIORITY_ERROR);
 
-	int libinput_fd = libinput_get_fd(backend->libinput_context);
-	char *no_devs = getenv("WLR_LIBINPUT_NO_DEVICES");
-	if (no_devs) {
-		if (strcmp(no_devs, "1") != 0) {
-			no_devs = NULL;
-		}
-	}
-	if (!no_devs && backend->wlr_device_lists.size == 0) {
-		handle_libinput_readable(libinput_fd, WL_EVENT_READABLE, backend);
-		if (backend->wlr_device_lists.size == 0) {
-			wlr_log(WLR_ERROR, "libinput initialization failed, no input devices");
-			wlr_log(WLR_ERROR, "Set WLR_LIBINPUT_NO_DEVICES=1 to suppress this check");
-			return false;
-		}
-	}
-
 	struct wl_event_loop *event_loop =
 		wl_display_get_event_loop(backend->display);
-	if (backend->input_event) {
-		wl_event_source_remove(backend->input_event);
-	}
+	int libinput_fd = libinput_get_fd(backend->libinput_context);
 	backend->input_event = wl_event_loop_add_fd(event_loop, libinput_fd,
 			WL_EVENT_READABLE, handle_libinput_readable, backend);
 	if (!backend->input_event) {
 		wlr_log(WLR_ERROR, "Failed to create input event on event loop");
 		return false;
 	}
+
+	backend_process_events(backend);
+
+	const char *no_devs = getenv("WLR_LIBINPUT_NO_DEVICES");
+	if (!no_devs || strcmp(no_devs, "1") != 0) {
+		if (!backend_wait_device(backend)) {
+			wlr_log(WLR_ERROR, "libinput initialization failed: no input devices found");
+			wlr_log(WLR_ERROR, "Set WLR_LIBINPUT_NO_DEVICES=1 to suppress this check");
+			return false;
+		}
+	} else {
+		wlr_log(WLR_INFO, "WLR_LIBINPUT_NO_DEVICES is set, skipping input device check");
+	}
+
 	wlr_log(WLR_DEBUG, "libinput successfully initialized");
 	return true;
 }
