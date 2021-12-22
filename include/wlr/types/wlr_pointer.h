@@ -96,6 +96,7 @@ struct wlr_event_pointer_swipe_update {
 	// Relative coordinates of the logical center of the gesture
 	// compared to the previous event.
 	double dx, dy;
+	double unaccel_dx, unaccel_dy;
 };
 
 struct wlr_event_pointer_swipe_end {
@@ -117,6 +118,7 @@ struct wlr_event_pointer_pinch_update {
 	// Relative coordinates of the logical center of the gesture
 	// compared to the previous event.
 	double dx, dy;
+	double unaccel_dx, unaccel_dy;
 	// Absolute scale compared to the begin event
 	double scale;
 	// Relative angle in degrees clockwise compared to the previous event.
