@@ -44,6 +44,7 @@ wlr_files += files(
 	'wlr_layer_shell_v1.c',
 	'wlr_linux_dmabuf_v1.c',
 	'wlr_matrix.c',
+	'wlr_mirror_v1.c',
 	'wlr_output_damage.c',
 	'wlr_output_layout.c',
 	'wlr_output_management_v1.c',

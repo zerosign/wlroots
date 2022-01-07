@@ -56,6 +56,9 @@ compositors = {
 		'src': 'scene-graph.c',
 		'proto': ['xdg-shell'],
 	},
+	'mirror': {
+		'src': 'mirror.c',
+	},
 }
 
 clients = {

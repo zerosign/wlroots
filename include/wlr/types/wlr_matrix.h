@@ -43,6 +43,11 @@ void wlr_matrix_rotate(float mat[static 9], float rad);
 void wlr_matrix_transform(float mat[static 9],
 	enum wl_output_transform transform);
 
+/** Writes a transformation matrix which applies the inverse of
+ *  transform to mat, such that  transform × inverse = identity */
+void wlr_matrix_transform_inv(float mat[static 9],
+	enum wl_output_transform transform);
+
 /** Writes a 2D orthographic projection matrix to mat of (width, height) with a
  *  specified wl_output_transform.
  *

@@ -117,6 +117,33 @@ void wlr_matrix_transform(float mat[static 9],
 	wlr_matrix_multiply(mat, mat, transforms[transform]);
 }
 
+void wlr_matrix_transform_inv(float mat[static 9],
+	enum wl_output_transform transform) {
+	enum wl_output_transform inv;
+
+	switch (transform) {
+		case WL_OUTPUT_TRANSFORM_90:
+			inv = WL_OUTPUT_TRANSFORM_270;
+			break;
+		case WL_OUTPUT_TRANSFORM_180:
+			inv = WL_OUTPUT_TRANSFORM_180;
+			break;
+		case WL_OUTPUT_TRANSFORM_270:
+			inv = WL_OUTPUT_TRANSFORM_90;
+			break;
+		case WL_OUTPUT_TRANSFORM_NORMAL:
+		case WL_OUTPUT_TRANSFORM_FLIPPED:
+		case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		default:
+			inv = transform;
+			break;
+	}
+
+	wlr_matrix_multiply(mat, mat, transforms[inv]);
+}
+
 // Equivalent to glOrtho(0, width, 0, height, 1, -1) with the transform applied
 void wlr_matrix_projection(float mat[static 9], int width, int height,
 		enum wl_output_transform transform) {
