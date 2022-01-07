@@ -679,6 +679,7 @@ void surface_update(struct wlr_wl_output *output) {
 	}
 
 	uint32_t scale = 1;
+	enum wl_output_subpixel subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
 
 	struct wlr_wl_active_remote_output *active;
 	wl_list_for_each(active, &output->active_remote_outputs, link) {
@@ -686,12 +687,18 @@ void surface_update(struct wlr_wl_output *output) {
 		if (scale < output->scale) {
 			scale = output->scale;
 		}
+
+		if (output->subpixel != WL_OUTPUT_SUBPIXEL_UNKNOWN) {
+			subpixel = output->subpixel;
+		}
 	}
 
 	struct wlr_output_state state = {
-		.committed = WLR_OUTPUT_STATE_MODE | WLR_OUTPUT_STATE_SCALE,
+		.committed = WLR_OUTPUT_STATE_MODE | WLR_OUTPUT_STATE_SCALE |
+			WLR_OUTPUT_STATE_SUBPIXEL,
 		.mode_type = WLR_OUTPUT_STATE_MODE_CUSTOM,
 		.scale = scale,
+		.subpixel = subpixel,
 		.custom_mode = {
 			.width = output->requested.width * scale,
 			.height = output->requested.height * scale

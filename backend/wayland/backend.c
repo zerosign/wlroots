@@ -252,7 +252,8 @@ static void wlr_output_handle_scale(void *data,
 static void wlr_output_handle_geometry(void *data, struct wl_output *wl_output,
 		int32_t x, int32_t y, int32_t phys_width, int32_t phys_height,
 		int32_t subpixel, const char *make, const char *model, int32_t transform) {
-	// This is intentionally left blank
+	struct wlr_wl_remote_output *output = data;
+	output->subpixel = subpixel;
 }
 
 static void wlr_output_handle_mode(void *data, struct wl_output *wl_output,
@@ -448,6 +449,7 @@ static void registry_global(void *data, struct wl_registry *registry,
 		output->scale = 1;
 		output->name = name;
 		output->backend = wl;
+		output->subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
 
 		wl_list_insert(&wl->remote_outputs, &output->link);
 		wl_output_add_listener(wl_output, &output_listener, output);

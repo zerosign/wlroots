@@ -56,6 +56,7 @@ struct wlr_wl_remote_output {
 	struct wl_output *output;
 	struct wlr_wl_backend *backend;
 	uint32_t scale;
+	enum wl_output_subpixel subpixel;
 
 	// we use this to identify the output in the
 	// global registry so that we can remove it later
