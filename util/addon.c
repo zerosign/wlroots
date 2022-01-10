@@ -45,3 +45,16 @@ struct wlr_addon *wlr_addon_find(struct wlr_addon_set *set, const void *owner,
 	}
 	return NULL;
 }
+
+void wlr_addon_find_all(struct wl_array *all, struct wlr_addon_set *set,
+		const struct wlr_addon_interface *impl) {
+	wl_array_init(all);
+	struct wlr_addon *addon;
+	wl_list_for_each(addon, &set->addons, link) {
+		if (addon->impl == impl) {
+			struct wlr_addon **addon_ptr = wl_array_add(all, sizeof(addon_ptr));
+			*addon_ptr = addon;
+		}
+	}
+}
+

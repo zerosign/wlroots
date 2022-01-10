@@ -41,6 +41,8 @@ struct wlr_mirror_v1_state {
 
 	struct wlr_mirror_v1_params params;
 
+	struct wlr_addon output_dst_addon;
+
 	struct wlr_output *output_src; // mutable
 	struct wlr_output *output_dst;
 
@@ -407,6 +409,23 @@ static void output_dst_handle_destroy(struct wl_listener *listener, void *data) 
  */
 
 /**
+ * BEGIN addons
+ */
+
+static void output_dst_addon_handle_destroy(struct wlr_addon *addon) {
+	// wlr_mirror_v1_destroy finishes addon, following output_dst_handle_destroy
+}
+
+static const struct wlr_addon_interface output_dst_addon_impl = {
+	.name = "wlr_mirror_output_dst",
+	.destroy = output_dst_addon_handle_destroy,
+};
+
+/**
+ * END addons
+ */
+
+/**
  * BEGIN public functions
  */
 
@@ -415,7 +434,7 @@ struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) 
 		wlr_log(WLR_ERROR, "Mirror dst '%s' not enabled", params->output_dst->name);
 		return NULL;
 	}
-	if (params->output_dst->mirror_dst) {
+	if (wlr_mirror_v1_output_is_dst(params->output_dst)) {
 		wlr_log(WLR_ERROR, "Mirror dst '%s' in use by another mirror session",
 				params->output_dst->name);
 		return NULL;
@@ -487,7 +506,8 @@ struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) 
 	state->needs_blank = true;
 	schedule_frame_dst(state);
 
-	state->output_dst->mirror_dst = true;
+	wlr_addon_init(&state->output_dst_addon, &state->output_dst->addons, mirror,
+			&output_dst_addon_impl);
 
 	return mirror;
 }
@@ -532,7 +552,7 @@ void wlr_mirror_v1_destroy(struct wlr_mirror_v1 *mirror) {
 	}
 
 	// the compositor may reclaim dst
-	state->output_dst->mirror_dst = false;
+	wlr_addon_finish(&state->output_dst_addon);
 
 	// end the user's mirror "session"
 	wlr_signal_emit_safe(&mirror->events.destroy, mirror);
@@ -582,6 +602,14 @@ void wlr_mirror_v1_request_box(struct wlr_mirror_v1 *mirror,
 	}
 
 	state->stats.requested_boxes++;
+}
+
+bool wlr_mirror_v1_output_is_dst(struct wlr_output *output) {
+	struct wl_array addons;
+	wlr_addon_find_all(&addons, &output->addons, &output_dst_addon_impl);
+	bool is_dst = addons.size > 0;
+	wl_array_release(&addons);
+	return is_dst;
 }
 
 /**

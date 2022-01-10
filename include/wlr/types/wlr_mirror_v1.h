@@ -11,6 +11,7 @@
 
 #include <wayland-client-protocol.h>
 #include <wayland-server-core.h>
+#include <wlr/util/addon.h>
 #include <wlr/util/box.h>
 
 /**
@@ -118,6 +119,11 @@ void wlr_mirror_v1_request_blank(struct wlr_mirror_v1 *mirror);
  */
 void wlr_mirror_v1_request_box(struct wlr_mirror_v1 *mirror,
 		struct wlr_output *output_src, struct wlr_box box);
+
+/**
+ * Output is in use as a dst by another mirror session.
+ */
+bool wlr_mirror_v1_output_is_dst(struct wlr_output *output);
 
 #endif
 
