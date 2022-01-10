@@ -3,15 +3,15 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_matrix.h>
-#include <wlr/types/wlr_mirror_v1.h>
+#include <wlr/types/wlr_mirror.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/util/log.h>
 #include <util/signal.h>
 
-struct wlr_mirror_v1_output_src {
+struct wlr_mirror_output_src {
 	struct wl_list link;
 
-	struct wlr_mirror_v1_state *state;
+	struct wlr_mirror_state *state;
 
 	struct wlr_output *output;
 
@@ -21,7 +21,7 @@ struct wlr_mirror_v1_output_src {
 	struct wl_listener destroy;
 };
 
-struct wlr_mirror_v1_stats {
+struct wlr_mirror_stats {
 	long requested_boxes;
 	long rendered_boxes;
 
@@ -36,23 +36,23 @@ struct wlr_mirror_v1_stats {
 /**
  * All immutable during session, except noted.
  */
-struct wlr_mirror_v1_state {
-	struct wlr_mirror_v1 *mirror;
+struct wlr_mirror_state {
+	struct wlr_mirror *mirror;
 
-	struct wlr_mirror_v1_params params;
+	struct wlr_mirror_params params;
 
 	struct wlr_output *output_src; // mutable
 	struct wlr_output *output_dst;
 
-	struct wl_list m_output_srcs; // wlr_mirror_v1_output_src::link
+	struct wl_list m_output_srcs; // wlr_mirror_output_src::link
 
 	struct wlr_texture *texture; // mutable
 	struct wlr_box box_src; // mutable
 	bool needs_blank; // mutable
 	bool cursor_locked; // mutable
 
-	// events (ready) may result in a call to wlr_mirror_v1_destroy.
-	// During emission, wlr_mirror_v1_destroy will not free mirror (specifically
+	// events (ready) may result in a call to wlr_mirror_destroy.
+	// During emission, wlr_mirror_destroy will not free mirror (specifically
 	// the wl_signal) and state.
 	// mirror and state will be free'd after wlr_signal_emit_safe is complete
 	// and has cleaned up the signal's list.
@@ -62,7 +62,7 @@ struct wlr_mirror_v1_state {
 	struct wl_listener output_dst_frame;
 	struct wl_listener output_dst_destroy;
 
-	struct wlr_mirror_v1_stats stats;
+	struct wlr_mirror_stats stats;
 };
 
 /**
@@ -129,7 +129,7 @@ static void calculate_absolute_box(struct wlr_box *absolute,
  * to dst.
  */
 static void calculate_dst_box(struct wlr_fbox *box_dst,
-		enum wlr_mirror_v1_scale scale_method,
+		enum wlr_mirror_scale scale_method,
 		enum wl_output_transform transform_src,
 		enum wl_output_transform transform_dst,
 		int32_t width_src, int32_t height_src,
@@ -145,13 +145,13 @@ static void calculate_dst_box(struct wlr_fbox *box_dst,
 	rotate_v_h(&width_dst_rotated, &height_dst_rotated, transform_dst, width_dst, height_dst);
 
 	switch (scale_method) {
-		case WLR_MIRROR_V1_SCALE_CENTER:
+		case WLR_MIRROR_SCALE_CENTER:
 			box_dst->width = width_src;
 			box_dst->height = height_src;
 			box_dst->x = (((float) width_dst_rotated) - width_src_rotated) / 2;
 			box_dst->y = (((float) height_dst_rotated) - height_src_rotated) / 2;
 			break;
-		case WLR_MIRROR_V1_SCALE_ASPECT:
+		case WLR_MIRROR_SCALE_ASPECT:
 			if (width_dst_rotated * height_src_rotated > height_dst_rotated * width_src_rotated) {
 				// expand to dst height
 				width_scaled = ((float) width_src_rotated) * height_dst_rotated / height_src_rotated;
@@ -171,7 +171,7 @@ static void calculate_dst_box(struct wlr_fbox *box_dst,
 			box_dst->x = (((float) width_dst_rotated) - width_scaled) / 2;
 			box_dst->y = (((float) height_dst_rotated) - height_scaled) / 2;
 			break;
-		case WLR_MIRROR_V1_SCALE_FULL:
+		case WLR_MIRROR_SCALE_FULL:
 		default:
 			if (src_rotated) {
 				box_dst->width = height_dst_rotated;
@@ -213,7 +213,7 @@ static void calculate_render_matrix(float mat[static 9], struct wlr_fbox *box_ds
 	wlr_matrix_multiply(mat, output_dst->transform_matrix, mat);
 }
 
-static void schedule_frame_dst(struct wlr_mirror_v1_state *state) {
+static void schedule_frame_dst(struct wlr_mirror_state *state) {
 
 	wlr_output_schedule_frame(state->output_dst);
 
@@ -223,10 +223,10 @@ static void schedule_frame_dst(struct wlr_mirror_v1_state *state) {
 
 /**
  * Remove all listeners for a src and remove it from state::m_output_srcs
- * Invoke wlr_mirror_v1_destroy if no other srcs remain.
+ * Invoke wlr_mirror_destroy if no other srcs remain.
  */
-static void remove_output_src(struct wlr_mirror_v1_output_src *src) {
-	struct wlr_mirror_v1_state *state = src->state;
+static void remove_output_src(struct wlr_mirror_output_src *src) {
+	struct wlr_mirror_state *state = src->state;
 
 	wl_list_remove(&src->commit.link);
 	wl_list_remove(&src->enable.link);
@@ -236,7 +236,7 @@ static void remove_output_src(struct wlr_mirror_v1_output_src *src) {
 	free(src);
 
 	if (wl_list_length(&state->m_output_srcs) == 0) {
-		wlr_mirror_v1_destroy(state->mirror);
+		wlr_mirror_destroy(state->mirror);
 	}
 }
 
@@ -249,10 +249,10 @@ static void remove_output_src(struct wlr_mirror_v1_output_src *src) {
  */
 
 static void output_src_handle_precommit(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_output_src *m_output_src =
+	struct wlr_mirror_output_src *m_output_src =
 		wl_container_of(listener, m_output_src, precommit);
-	struct wlr_mirror_v1_state *state = m_output_src->state;
-	struct wlr_mirror_v1 *mirror = state->mirror;
+	struct wlr_mirror_state *state = m_output_src->state;
+	struct wlr_mirror *mirror = state->mirror;
 
 	state->signal_emitting = true;
 	wlr_signal_emit_safe(&mirror->events.ready, m_output_src->output);
@@ -264,8 +264,8 @@ static void output_src_handle_precommit(struct wl_listener *listener, void *data
 }
 
 static void output_src_handle_commit(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_output_src *m_output_src = wl_container_of(listener, m_output_src, commit);
-	struct wlr_mirror_v1_state *state = m_output_src->state;
+	struct wlr_mirror_output_src *m_output_src = wl_container_of(listener, m_output_src, commit);
+	struct wlr_mirror_state *state = m_output_src->state;
 	struct wlr_output *output_src = m_output_src->output;
 	struct wlr_output_event_commit *event = data;
 
@@ -308,7 +308,7 @@ static void output_src_handle_commit(struct wl_listener *listener, void *data) {
 }
 
 static void output_dst_handle_frame(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_state *state = wl_container_of(listener, state, output_dst_frame);
+	struct wlr_mirror_state *state = wl_container_of(listener, state, output_dst_frame);
 
 	wl_list_remove(&state->output_dst_frame.link);
 	wl_list_init(&state->output_dst_frame.link);
@@ -367,7 +367,7 @@ static void output_dst_handle_frame(struct wl_listener *listener, void *data) {
 }
 
 static void output_src_handle_enable(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_output_src *src = wl_container_of(listener, src, enable);
+	struct wlr_mirror_output_src *src = wl_container_of(listener, src, enable);
 
 	if (!src->output->enabled) {
 		wlr_log(WLR_DEBUG, "Mirror src '%s' disabled", src->output->name);
@@ -376,7 +376,7 @@ static void output_src_handle_enable(struct wl_listener *listener, void *data) {
 }
 
 static void output_src_handle_destroy(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_output_src *src = wl_container_of(listener, src, destroy);
+	struct wlr_mirror_output_src *src = wl_container_of(listener, src, destroy);
 
 	wlr_log(WLR_DEBUG, "Mirror src '%s' destroyed", src->output->name);
 
@@ -384,22 +384,22 @@ static void output_src_handle_destroy(struct wl_listener *listener, void *data) 
 }
 
 static void output_dst_handle_enable(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_state *state = wl_container_of(listener, state, output_dst_enable);
-	struct wlr_mirror_v1 *mirror = state->mirror;
+	struct wlr_mirror_state *state = wl_container_of(listener, state, output_dst_enable);
+	struct wlr_mirror *mirror = state->mirror;
 
 	if (!state->output_dst->enabled) {
 		wlr_log(WLR_DEBUG, "Mirror dst '%s' disabled", state->output_dst->name);
-		wlr_mirror_v1_destroy(mirror);
+		wlr_mirror_destroy(mirror);
 	}
 }
 
 static void output_dst_handle_destroy(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_v1_state *state = wl_container_of(listener, state, output_dst_destroy);
-	struct wlr_mirror_v1 *mirror = state->mirror;
+	struct wlr_mirror_state *state = wl_container_of(listener, state, output_dst_destroy);
+	struct wlr_mirror *mirror = state->mirror;
 
 	wlr_log(WLR_DEBUG, "Mirror dst '%s' destroyed", state->output_dst->name);
 
-	wlr_mirror_v1_destroy(mirror);
+	wlr_mirror_destroy(mirror);
 }
 
 /**
@@ -410,7 +410,7 @@ static void output_dst_handle_destroy(struct wl_listener *listener, void *data) 
  * BEGIN public functions
  */
 
-struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) {
+struct wlr_mirror *wlr_mirror_create(struct wlr_mirror_params *params) {
 	if (!params->output_dst->enabled) {
 		wlr_log(WLR_ERROR, "Mirror dst '%s' not enabled", params->output_dst->name);
 		return NULL;
@@ -428,9 +428,9 @@ struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) 
 		}
 	}
 
-	struct wlr_mirror_v1 *mirror = calloc(1, sizeof(struct wlr_mirror_v1));
-	mirror->state = calloc(1, sizeof(struct wlr_mirror_v1_state));
-	struct wlr_mirror_v1_state *state = mirror->state;
+	struct wlr_mirror *mirror = calloc(1, sizeof(struct wlr_mirror));
+	mirror->state = calloc(1, sizeof(struct wlr_mirror_state));
+	struct wlr_mirror_state *state = mirror->state;
 	state->mirror = mirror;
 	state->output_dst = params->output_dst;
 
@@ -439,7 +439,7 @@ struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) 
 	wl_signal_init(&mirror->events.destroy);
 
 	// clone params
-	memcpy(&state->params, params, sizeof(struct wlr_mirror_v1_params));
+	memcpy(&state->params, params, sizeof(struct wlr_mirror_params));
 	wl_array_init(&state->params.output_srcs);
 	wl_array_copy(&state->params.output_srcs, &params->output_srcs);
 
@@ -459,8 +459,8 @@ struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) 
 
 	// srcs events
 	wl_array_for_each(output_src_ptr, &state->params.output_srcs) {
-		struct wlr_mirror_v1_output_src *m_output_src =
-			calloc(1, sizeof(struct wlr_mirror_v1_output_src));
+		struct wlr_mirror_output_src *m_output_src =
+			calloc(1, sizeof(struct wlr_mirror_output_src));
 		wl_list_insert(state->m_output_srcs.prev, &m_output_src->link);
 
 		m_output_src->state = state;
@@ -492,11 +492,11 @@ struct wlr_mirror_v1 *wlr_mirror_v1_create(struct wlr_mirror_v1_params *params) 
 	return mirror;
 }
 
-void wlr_mirror_v1_destroy(struct wlr_mirror_v1 *mirror) {
+void wlr_mirror_destroy(struct wlr_mirror *mirror) {
 	if (!mirror) {
 		return;
 	}
-	struct wlr_mirror_v1_state *state = mirror->state;
+	struct wlr_mirror_state *state = mirror->state;
 
 	wlr_log(WLR_DEBUG, "Mirror destroying dst '%s': "
 			"requested_boxes:%ld, rendered_boxes:%ld, "
@@ -515,7 +515,7 @@ void wlr_mirror_v1_destroy(struct wlr_mirror_v1 *mirror) {
 	wl_list_remove(&state->output_dst_destroy.link);
 
 	// all src output events
-	struct wlr_mirror_v1_output_src *src, *next;
+	struct wlr_mirror_output_src *src, *next;
 	wl_list_for_each_safe(src, next, &state->m_output_srcs, link) {
 		wl_list_remove(&src->commit.link);
 		wl_list_remove(&src->enable.link);
@@ -546,8 +546,8 @@ void wlr_mirror_v1_destroy(struct wlr_mirror_v1 *mirror) {
 	}
 }
 
-void wlr_mirror_v1_request_blank(struct wlr_mirror_v1 *mirror) {
-	struct wlr_mirror_v1_state *state = mirror->state;
+void wlr_mirror_request_blank(struct wlr_mirror *mirror) {
+	struct wlr_mirror_state *state = mirror->state;
 
 	state->needs_blank = true;
 
@@ -556,9 +556,9 @@ void wlr_mirror_v1_request_blank(struct wlr_mirror_v1 *mirror) {
 	mirror->state->stats.requested_blanks++;
 }
 
-void wlr_mirror_v1_request_box(struct wlr_mirror_v1 *mirror,
+void wlr_mirror_request_box(struct wlr_mirror *mirror,
 		struct wlr_output *output_src, struct wlr_box box) {
-	struct wlr_mirror_v1_state *state = mirror->state;
+	struct wlr_mirror_state *state = mirror->state;
 
 	state->needs_blank = false;
 
@@ -567,12 +567,12 @@ void wlr_mirror_v1_request_box(struct wlr_mirror_v1 *mirror,
 	wlr_output_transformed_resolution(output_src, &box_output.width, &box_output.height);
 	if (!wlr_box_intersection(&state->box_src, &box_output, &box)) {
 		wlr_log(WLR_ERROR, "Mirror box not within src, ending session.");
-		wlr_mirror_v1_destroy(mirror);
+		wlr_mirror_destroy(mirror);
 		return;
 	}
 
 	// listen for a commit on the specified output only
-	struct wlr_mirror_v1_output_src *m_output_src;
+	struct wlr_mirror_output_src *m_output_src;
 	wl_list_for_each(m_output_src, &state->m_output_srcs, link) {
 		if (m_output_src->output == output_src) {
 			wl_list_remove(&m_output_src->commit.link);

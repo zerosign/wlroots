@@ -151,7 +151,7 @@ struct wlr_output {
 	// Commit sequence number. Incremented on each commit, may overflow.
 	uint32_t commit_seq;
 
-	// dst for an active wlr_mirror_v1 session
+	// dst for an active wlr_mirror session
 	bool mirror_dst;
 
 	struct {

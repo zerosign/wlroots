@@ -9,14 +9,14 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_keyboard.h>
-#include <wlr/types/wlr_mirror_v1.h>
+#include <wlr/types/wlr_mirror.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/util/log.h>
 
 /**
- * Demonstrates wlr_mirror_v1. Comments describe mirror specific code.
+ * Demonstrates wlr_mirror. Comments describe mirror specific code.
  *
  * Mirrors the source output (src) on the destination output (dst).
  *
@@ -27,9 +27,9 @@ static const char usage[] =
 "usage: mirror <src> <dst>\n"
 "    e.g. mirror eDP-1 HDMI-A-1\n"
 "keys:\n"
-"    a: WLR_MIRROR_V1_SCALE_ASPECT\n"
-"    f: WLR_MIRROR_V1_SCALE_FULL\n"
-"    c: WLR_MIRROR_V1_SCALE_CENTER\n"
+"    a: WLR_MIRROR_SCALE_ASPECT\n"
+"    f: WLR_MIRROR_SCALE_FULL\n"
+"    c: WLR_MIRROR_SCALE_CENTER\n"
 "    esc: exit\n";
 
 struct sample_state {
@@ -56,9 +56,9 @@ struct sample_state {
 struct sample_mirror {
 	struct sample_state *state;
 
-	struct wlr_mirror_v1 *wlr_mirror;
+	struct wlr_mirror *wlr_mirror;
 
-	struct wlr_mirror_v1_params params;
+	struct wlr_mirror_params params;
 
 	struct wl_listener ready;
 	struct wl_listener destroy;
@@ -88,7 +88,7 @@ struct sample_keyboard {
 	struct wl_listener destroy;
 };
 
-void start_mirror(struct sample_state *state, enum wlr_mirror_v1_scale scale);
+void start_mirror(struct sample_state *state, enum wlr_mirror_scale scale);
 void end_mirror(struct sample_state *state);
 void handle_mirror_ready(struct wl_listener *listener, void *data);
 void handle_mirror_destroy(struct wl_listener *listener, void *data);
@@ -104,7 +104,7 @@ void handle_keyboard_destroy(struct wl_listener *listener, void *data);
 void render_rects(struct wlr_renderer *renderer, struct sample_output *output, float colour[]);
 
 // start a mirror session
-void start_mirror(struct sample_state *state, enum wlr_mirror_v1_scale scale) {
+void start_mirror(struct sample_state *state, enum wlr_mirror_scale scale) {
 	struct sample_output *output_src = state->output_src;
 	struct sample_output *output_dst = state->output_dst;
 	if (!output_src || !output_dst) {
@@ -137,7 +137,7 @@ void start_mirror(struct sample_state *state, enum wlr_mirror_v1_scale scale) {
 	wl_list_remove(&state->output_dst->frame.link);
 	wl_list_init(&state->output_dst->frame.link);
 
-	struct wlr_mirror_v1 *wlr_mirror = wlr_mirror_v1_create(&mirror->params);
+	struct wlr_mirror *wlr_mirror = wlr_mirror_create(&mirror->params);
 	mirror->wlr_mirror = wlr_mirror;
 
 	// ready events enabling us to make requests for the upcoming commit
@@ -154,8 +154,8 @@ void end_mirror(struct sample_state *state) {
 	wlr_log(WLR_DEBUG, "mirror end dst '%s'", state->output_dst->wlr_output->name);
 
 	if (state->mirror) {
-		// immediately emits wlr_mirror_v1::events::destroy
-		wlr_mirror_v1_destroy(state->mirror->wlr_mirror);
+		// immediately emits wlr_mirror::events::destroy
+		wlr_mirror_destroy(state->mirror->wlr_mirror);
 	}
 }
 
@@ -164,7 +164,7 @@ void handle_mirror_ready(struct wl_listener *listener, void *data) {
 	struct sample_mirror *mirror = wl_container_of(listener, mirror, ready);
 	struct sample_state *state = mirror->state;
 	struct sample_output *output_src = state->output_src;
-	struct wlr_mirror_v1 *wlr_mirror = state->mirror->wlr_mirror;
+	struct wlr_mirror *wlr_mirror = state->mirror->wlr_mirror;
 	struct wlr_output *wlr_output = data;
 
 	// only request for src
@@ -180,7 +180,7 @@ void handle_mirror_ready(struct wl_listener *listener, void *data) {
 		mirror->last_request = now;
 
 		// request a portion of src
-		wlr_mirror_v1_request_box(wlr_mirror, wlr_output, mirror->box);
+		wlr_mirror_request_box(wlr_mirror, wlr_output, mirror->box);
 
 		if ((mirror->box.x + mirror->box.width + mirror->dx) > output_src->width) {
 			mirror->dx = -1;
@@ -301,7 +301,7 @@ void handle_keyboard_key(struct wl_listener *listener, void *data) {
 	const xkb_keysym_t *syms;
 	int nsyms = xkb_state_key_get_syms(keyboard->device->keyboard->xkb_state, keycode, &syms);
 	bool start_end_mirror = false;
-	enum wlr_mirror_v1_scale scale;
+	enum wlr_mirror_scale scale;
 
 	for (int i = 0; i < nsyms; i++) {
 		xkb_keysym_t sym = syms[i];
@@ -311,15 +311,15 @@ void handle_keyboard_key(struct wl_listener *listener, void *data) {
 					wl_display_terminate(state->display);
 					break;
 				case XKB_KEY_f:
-					scale = WLR_MIRROR_V1_SCALE_FULL;
+					scale = WLR_MIRROR_SCALE_FULL;
 					start_end_mirror = true;
 					break;
 				case XKB_KEY_a:
-					scale = WLR_MIRROR_V1_SCALE_ASPECT;
+					scale = WLR_MIRROR_SCALE_ASPECT;
 					start_end_mirror = true;
 					break;
 				case XKB_KEY_c:
-					scale = WLR_MIRROR_V1_SCALE_CENTER;
+					scale = WLR_MIRROR_SCALE_CENTER;
 					start_end_mirror = true;
 					break;
 				default:
