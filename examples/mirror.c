@@ -27,9 +27,7 @@ static const char usage[] =
 "usage: mirror <src> <dst>\n"
 "    e.g. mirror eDP-1 HDMI-A-1\n"
 "keys:\n"
-"    a: WLR_MIRROR_SCALE_ASPECT\n"
-"    f: WLR_MIRROR_SCALE_FULL\n"
-"    c: WLR_MIRROR_SCALE_CENTER\n"
+"    m: toggle mirroring\n"
 "    esc: exit\n";
 
 struct sample_state {
@@ -88,7 +86,7 @@ struct sample_keyboard {
 	struct wl_listener destroy;
 };
 
-void start_mirror(struct sample_state *state, enum wlr_mirror_scale scale);
+void start_mirror(struct sample_state *state);
 void end_mirror(struct sample_state *state);
 void handle_mirror_ready(struct wl_listener *listener, void *data);
 void handle_mirror_destroy(struct wl_listener *listener, void *data);
@@ -104,7 +102,7 @@ void handle_keyboard_destroy(struct wl_listener *listener, void *data);
 void render_rects(struct wlr_renderer *renderer, struct sample_output *output, float colour[]);
 
 // start a mirror session
-void start_mirror(struct sample_state *state, enum wlr_mirror_scale scale) {
+void start_mirror(struct sample_state *state) {
 	struct sample_output *output_src = state->output_src;
 	struct sample_output *output_dst = state->output_dst;
 	if (!output_src || !output_dst) {
@@ -124,7 +122,6 @@ void start_mirror(struct sample_state *state, enum wlr_mirror_scale scale) {
 	mirror->dy = 1;
 
 	// params immutable over the session
-	mirror->params.scale = scale;
 	mirror->params.overlay_cursor = true;
 	mirror->params.output_dst = state->output_dst->wlr_output;
 
@@ -300,8 +297,6 @@ void handle_keyboard_key(struct wl_listener *listener, void *data) {
 	uint32_t keycode = event->keycode + 8;
 	const xkb_keysym_t *syms;
 	int nsyms = xkb_state_key_get_syms(keyboard->device->keyboard->xkb_state, keycode, &syms);
-	bool start_end_mirror = false;
-	enum wlr_mirror_scale scale;
 
 	for (int i = 0; i < nsyms; i++) {
 		xkb_keysym_t sym = syms[i];
@@ -310,29 +305,16 @@ void handle_keyboard_key(struct wl_listener *listener, void *data) {
 				case XKB_KEY_Escape:
 					wl_display_terminate(state->display);
 					break;
-				case XKB_KEY_f:
-					scale = WLR_MIRROR_SCALE_FULL;
-					start_end_mirror = true;
-					break;
-				case XKB_KEY_a:
-					scale = WLR_MIRROR_SCALE_ASPECT;
-					start_end_mirror = true;
-					break;
-				case XKB_KEY_c:
-					scale = WLR_MIRROR_SCALE_CENTER;
-					start_end_mirror = true;
+				case XKB_KEY_m:
+					if (state->mirror) {
+						end_mirror(state);
+					} else {
+						start_mirror(state);
+					}
 					break;
 				default:
 					break;
 			}
-		}
-	}
-
-	if (start_end_mirror) {
-		if (state->mirror) {
-			end_mirror(state);
-		} else {
-			start_mirror(state, scale);
 		}
 	}
 }

@@ -127,11 +127,10 @@ static void calculate_absolute_box(struct wlr_box *absolute,
 }
 
 /**
- * Position a box according to the scale method. It will be rotated from src
- * to dst.
+ * Position a box scaled to fit the width or height of dst. It will be rotated
+ * from src to dst.
  */
 static void calculate_dst_box(struct wlr_fbox *box_dst,
-		enum wlr_mirror_scale scale_method,
 		enum wl_output_transform transform_src,
 		enum wl_output_transform transform_dst,
 		int32_t width_src, int32_t height_src,
@@ -146,46 +145,24 @@ static void calculate_dst_box(struct wlr_fbox *box_dst,
 	rotate_v_h(&width_src_rotated, &height_src_rotated, transform_src, width_src, height_src);
 	rotate_v_h(&width_dst_rotated, &height_dst_rotated, transform_dst, width_dst, height_dst);
 
-	switch (scale_method) {
-		case WLR_MIRROR_SCALE_CENTER:
-			box_dst->width = width_src;
-			box_dst->height = height_src;
-			box_dst->x = (((float) width_dst_rotated) - width_src_rotated) / 2;
-			box_dst->y = (((float) height_dst_rotated) - height_src_rotated) / 2;
-			break;
-		case WLR_MIRROR_SCALE_ASPECT:
-			if (width_dst_rotated * height_src_rotated > height_dst_rotated * width_src_rotated) {
-				// expand to dst height
-				width_scaled = ((float) width_src_rotated) * height_dst_rotated / height_src_rotated;
-				height_scaled = height_dst_rotated;
-			} else {
-				// expand to dst width
-				width_scaled = width_dst_rotated;
-				height_scaled = ((float) height_src_rotated) * width_dst_rotated / width_src_rotated;
-			}
-			if (src_rotated) {
-				box_dst->width = height_scaled;
-				box_dst->height = width_scaled;
-			} else {
-				box_dst->width = width_scaled;
-				box_dst->height = height_scaled;
-			}
-			box_dst->x = (((float) width_dst_rotated) - width_scaled) / 2;
-			box_dst->y = (((float) height_dst_rotated) - height_scaled) / 2;
-			break;
-		case WLR_MIRROR_SCALE_FULL:
-		default:
-			if (src_rotated) {
-				box_dst->width = height_dst_rotated;
-				box_dst->height = width_dst_rotated;
-			} else {
-				box_dst->width = width_dst_rotated;
-				box_dst->height = height_dst_rotated;
-			}
-			box_dst->x = 0;
-			box_dst->y = 0;
-			break;
+	if (width_dst_rotated * height_src_rotated > height_dst_rotated * width_src_rotated) {
+		// expand to dst height
+		width_scaled = ((float) width_src_rotated) * height_dst_rotated / height_src_rotated;
+		height_scaled = height_dst_rotated;
+	} else {
+		// expand to dst width
+		width_scaled = width_dst_rotated;
+		height_scaled = ((float) height_src_rotated) * width_dst_rotated / width_src_rotated;
 	}
+	if (src_rotated) {
+		box_dst->width = height_scaled;
+		box_dst->height = width_scaled;
+	} else {
+		box_dst->width = width_scaled;
+		box_dst->height = height_scaled;
+	}
+	box_dst->x = (((float) width_dst_rotated) - width_scaled) / 2;
+	box_dst->y = (((float) height_dst_rotated) - height_scaled) / 2;
 }
 
 /**
@@ -340,7 +317,7 @@ static void output_dst_handle_frame(struct wl_listener *listener, void *data) {
 
 		// scale and position a box for the dst
 		struct wlr_fbox fbox_dst = {0};
-		calculate_dst_box(&fbox_dst, state->params.scale,
+		calculate_dst_box(&fbox_dst,
 				output_src->transform, output_dst->transform,
 				box_src.width, box_src.height,
 				output_dst->width, output_dst->height);

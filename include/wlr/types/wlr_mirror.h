@@ -18,6 +18,8 @@
  * Allows mirroring: rendering some contents of one output (the src) on another
  * output (the dst). dst is fixed for the duration of the session, src may vary.
  *
+ * Content will be scaled to fit the width or height of dst.
+ *
  * On output_srcs precommit, wlr_mirror::ready is emitted. The compositor may
  * call wlr_mirror_request_ to request to render a frame on dst.
  *
@@ -31,28 +33,10 @@
  *   wlr_mirror_destroy
  */
 
-enum wlr_mirror_scale {
-	/**
-	 * src will be stretched to cover dst, distorting if necessary.
-	 */
-	WLR_MIRROR_SCALE_FULL,
-	/**
-	 * src will be stretched to the width or the height of dst, preserving the
-	 * aspect ratio.
-	 */
-	WLR_MIRROR_SCALE_ASPECT,
-	/**
-	 * src will be rendered 1:1 at the center of dst. Content may be lost.
-	 */
-	WLR_MIRROR_SCALE_CENTER,
-};
-
 /**
  * Immutable over session.
  */
 struct wlr_mirror_params {
-
-	enum wlr_mirror_scale scale;
 
 	/**
 	 * Render the src cursor on dst.
