@@ -68,10 +68,6 @@ struct wlr_mirror_state {
 };
 
 /**
- * BEGIN helper functions
- */
-
-/**
  * Swaps v, h depending on rotation of the transform.
  */
 static void rotate_v_h(int32_t *v_rotated, int32_t *h_rotated,
@@ -92,7 +88,6 @@ static void rotate_v_h(int32_t *v_rotated, int32_t *h_rotated,
 static void calculate_absolute_box(struct wlr_box *absolute,
 		struct wlr_box *relative, enum wl_output_transform transform,
 		int32_t width, int32_t height) {
-
 	rotate_v_h(&absolute->x, &absolute->y, transform, relative->x, relative->y);
 	rotate_v_h(&absolute->width, &absolute->height, transform, relative->width, relative->height);
 
@@ -135,7 +130,6 @@ static void calculate_dst_box(struct wlr_box *box_dst,
 		enum wl_output_transform transform_dst,
 		int32_t width_src, int32_t height_src,
 		int32_t width_dst, int32_t height_dst) {
-
 	double width_scaled, height_scaled;
 	int32_t width_src_rotated, height_src_rotated;
 	int32_t width_dst_rotated, height_dst_rotated;
@@ -170,7 +164,6 @@ static void calculate_dst_box(struct wlr_box *box_dst,
  */
 static void calculate_render_matrix(float mat[static 9], struct wlr_box *box_dst,
 		enum wl_output_transform transform_src, float transform_matrix_dst[static 9]) {
-
 	// account for the rotated dimensions of dst
 	struct wlr_box box_rotated = *box_dst;
 	rotate_v_h(&box_rotated.width, &box_rotated.height, transform_src,
@@ -182,7 +175,6 @@ static void calculate_render_matrix(float mat[static 9], struct wlr_box *box_dst
 }
 
 static void schedule_frame_dst(struct wlr_mirror_state *state) {
-
 	wlr_output_schedule_frame(state->output_dst);
 
 	wl_list_remove(&state->output_dst_frame.link);
@@ -207,14 +199,6 @@ static void remove_output_src(struct wlr_mirror_output_src *src) {
 		wlr_mirror_destroy(state->mirror);
 	}
 }
-
-/**
- * END helper functions
- */
-
-/**
- * BEGIN wlr_mirror handler functions
- */
 
 static void output_src_handle_precommit(struct wl_listener *listener, void *data) {
 	struct wlr_mirror_output_src *m_output_src =
@@ -370,14 +354,6 @@ static void output_dst_handle_destroy(struct wl_listener *listener, void *data) 
 	wlr_mirror_destroy(mirror);
 }
 
-/**
- * END wlr_mirror handler functions
- */
-
-/**
- * BEGIN addons
- */
-
 static void output_dst_addon_handle_destroy(struct wlr_addon *addon) {
 	// wlr_mirror_v1_destroy finishes addon, following output_dst_handle_destroy
 }
@@ -386,14 +362,6 @@ static const struct wlr_addon_interface output_dst_addon_impl = {
 	.name = "wlr_mirror_output_dst",
 	.destroy = output_dst_addon_handle_destroy,
 };
-
-/**
- * END addons
- */
-
-/**
- * BEGIN public functions
- */
 
 struct wlr_mirror *wlr_mirror_create(struct wlr_mirror_params *params) {
 	if (!params->output_dst->enabled) {
@@ -577,8 +545,4 @@ bool wlr_mirror_v1_output_is_dst(struct wlr_output *output) {
 	wl_array_release(&addons);
 	return is_dst;
 }
-
-/**
- * END public functions
- */
 

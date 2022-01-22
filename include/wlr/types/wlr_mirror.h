@@ -37,7 +37,6 @@
  * Immutable over session.
  */
 struct wlr_mirror_params {
-
 	/**
 	 * Render the src cursor on dst.
 	 */
@@ -56,7 +55,6 @@ struct wlr_mirror_params {
 
 struct wlr_mirror_state;
 struct wlr_mirror {
-
 	struct {
 		/**
 		 * Ready to render a frame. Handler should call wlr_mirror_request_
