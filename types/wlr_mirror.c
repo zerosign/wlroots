@@ -62,7 +62,6 @@ struct wlr_mirror_state {
 
 	struct wl_listener output_dst_enable;
 	struct wl_listener output_dst_frame;
-	struct wl_listener output_dst_destroy;
 
 	struct wlr_mirror_stats stats;
 };
@@ -345,17 +344,13 @@ static void output_dst_handle_enable(struct wl_listener *listener, void *data) {
 	}
 }
 
-static void output_dst_handle_destroy(struct wl_listener *listener, void *data) {
-	struct wlr_mirror_state *state = wl_container_of(listener, state, output_dst_destroy);
+static void output_dst_addon_handle_destroy(struct wlr_addon *addon) {
+	struct wlr_mirror_state *state = wl_container_of(addon, state, output_dst_addon);
 	struct wlr_mirror *mirror = state->mirror;
 
 	wlr_log(WLR_DEBUG, "Mirror dst '%s' destroyed", state->output_dst->name);
 
 	wlr_mirror_destroy(mirror);
-}
-
-static void output_dst_addon_handle_destroy(struct wlr_addon *addon) {
-	// wlr_mirror_v1_destroy finishes addon, following output_dst_handle_destroy
 }
 
 static const struct wlr_addon_interface output_dst_addon_impl = {
@@ -403,10 +398,6 @@ struct wlr_mirror *wlr_mirror_create(struct wlr_mirror_params *params) {
 	wl_list_init(&state->output_dst_enable.link);
 	wl_signal_add(&state->output_dst->events.enable, &state->output_dst_enable);
 	state->output_dst_enable.notify = output_dst_handle_enable;
-
-	wl_list_init(&state->output_dst_destroy.link);
-	wl_signal_add(&state->output_dst->events.destroy, &state->output_dst_destroy);
-	state->output_dst_destroy.notify = output_dst_handle_destroy;
 
 	wlr_log(WLR_DEBUG, "Mirror creating dst '%s'", state->output_dst->name);
 
@@ -466,7 +457,6 @@ void wlr_mirror_destroy(struct wlr_mirror *mirror) {
 	// dst output events
 	wl_list_remove(&state->output_dst_enable.link);
 	wl_list_remove(&state->output_dst_frame.link);
-	wl_list_remove(&state->output_dst_destroy.link);
 
 	// all src output events
 	struct wlr_mirror_output_src *src, *next;
