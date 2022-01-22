@@ -130,7 +130,7 @@ static void calculate_absolute_box(struct wlr_box *absolute,
  * Position a box scaled to fit the width or height of dst. It will be rotated
  * from src to dst.
  */
-static void calculate_dst_box(struct wlr_fbox *box_dst,
+static void calculate_dst_box(struct wlr_box *box_dst,
 		enum wl_output_transform transform_src,
 		enum wl_output_transform transform_dst,
 		int32_t width_src, int32_t height_src,
@@ -147,49 +147,38 @@ static void calculate_dst_box(struct wlr_fbox *box_dst,
 
 	if (width_dst_rotated * height_src_rotated > height_dst_rotated * width_src_rotated) {
 		// expand to dst height
-		width_scaled = ((float) width_src_rotated) * height_dst_rotated / height_src_rotated;
+		width_scaled = ((double) width_src_rotated) * height_dst_rotated / height_src_rotated;
 		height_scaled = height_dst_rotated;
 	} else {
 		// expand to dst width
 		width_scaled = width_dst_rotated;
-		height_scaled = ((float) height_src_rotated) * width_dst_rotated / width_src_rotated;
+		height_scaled = ((double) height_src_rotated) * width_dst_rotated / width_src_rotated;
 	}
 	if (src_rotated) {
-		box_dst->width = height_scaled;
-		box_dst->height = width_scaled;
+		box_dst->width = round(height_scaled);
+		box_dst->height = round(width_scaled);
 	} else {
-		box_dst->width = width_scaled;
-		box_dst->height = height_scaled;
+		box_dst->width = round(width_scaled);
+		box_dst->height = round(height_scaled);
 	}
-	box_dst->x = (((float) width_dst_rotated) - width_scaled) / 2;
-	box_dst->y = (((float) height_dst_rotated) - height_scaled) / 2;
+	box_dst->x = round((((double) width_dst_rotated) - width_scaled) / 2);
+	box_dst->y = round((((double) height_dst_rotated) - height_scaled) / 2);
 }
 
 /**
- * Produce a transformation matrix that rotates/translates a box to the
- * dst.
+ * Produce a transformation matrix that un-transforms from src and transforms to dst.
  */
-static void calculate_render_matrix(float mat[static 9], struct wlr_fbox *box_dst,
-		struct wlr_output *output_src, struct wlr_output *output_dst) {
+static void calculate_render_matrix(float mat[static 9], struct wlr_box *box_dst,
+		enum wl_output_transform transform_src, float transform_matrix_dst[static 9]) {
 
-	// position at the dst
-	wlr_matrix_identity(mat);
-	wlr_matrix_translate(mat, box_dst->x, box_dst->y);
+	// account for the rotated dimensions of dst
+	struct wlr_box box_rotated = *box_dst;
+	rotate_v_h(&box_rotated.width, &box_rotated.height, transform_src,
+			box_rotated.width, box_rotated.height);
 
-	// un-rotate and transform from src
-	if (output_src->transform % 2 == 0) {
-		wlr_matrix_translate(mat, box_dst->width / 2.0, box_dst->height / 2.0);
-	} else {
-		wlr_matrix_translate(mat, box_dst->height / 2.0, box_dst->width / 2.0);
-	}
-	wlr_matrix_transform_inv(mat, output_src->transform);
-	wlr_matrix_translate(mat, - box_dst->width / 2.0, - box_dst->height / 2.0);
-
-	// scale to the dst
-	wlr_matrix_scale(mat, box_dst->width, box_dst->height);
-
-	// apply the dst transform
-	wlr_matrix_multiply(mat, output_dst->transform_matrix, mat);
+	// both transforms
+	wlr_matrix_project_box(mat, &box_rotated, wlr_output_transform_invert(transform_src),
+			0.0, transform_matrix_dst);
 }
 
 static void schedule_frame_dst(struct wlr_mirror_state *state) {
@@ -316,15 +305,15 @@ static void output_dst_handle_frame(struct wl_listener *listener, void *data) {
 				output_src->width, output_src->height);
 
 		// scale and position a box for the dst
-		struct wlr_fbox fbox_dst = {0};
-		calculate_dst_box(&fbox_dst,
+		struct wlr_box box_dst = {0};
+		calculate_dst_box(&box_dst,
 				output_src->transform, output_dst->transform,
 				box_src.width, box_src.height,
 				output_dst->width, output_dst->height);
 
-		// transform to dst
+		// transform from src to dst
 		float mat[9];
-		calculate_render_matrix(mat, &fbox_dst, output_src, output_dst);
+		calculate_render_matrix(mat, &box_dst, output_src->transform, output_dst->transform_matrix);
 
 		// render the subtexture
 		struct wlr_fbox fbox_sub = {
