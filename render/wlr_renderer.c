@@ -283,7 +283,7 @@ struct wlr_renderer *renderer_autocreate_with_drm_fd(int drm_fd) {
 #endif
 #if WLR_HAS_VULKAN_RENDERER
 		if (strcmp(name, "vulkan") == 0) {
-			return wlr_vk_renderer_create_with_drm_fd(drm_fd);
+			return wlr_vk_renderer_create_with_drm_fd(-1);
 		}
 #endif
 		if (strcmp(name, "pixman") == 0) {
