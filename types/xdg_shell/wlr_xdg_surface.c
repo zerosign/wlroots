@@ -17,16 +17,6 @@ struct wlr_xdg_surface *wlr_xdg_surface_from_wlr_surface(
 	return (struct wlr_xdg_surface *)surface->role_data;
 }
 
-static void xdg_surface_configure_destroy(
-		struct wlr_xdg_surface_configure *configure) {
-	if (configure == NULL) {
-		return;
-	}
-	wl_list_remove(&configure->link);
-	free(configure->toplevel_configure);
-	free(configure);
-}
-
 void unmap_xdg_surface(struct wlr_xdg_surface *surface) {
 	assert(surface->role != WLR_XDG_SURFACE_ROLE_NONE);
 
@@ -51,17 +41,41 @@ void unmap_xdg_surface(struct wlr_xdg_surface *surface) {
 		assert(false && "not reached");
 	}
 
-	struct wlr_xdg_surface_configure *configure, *tmp;
-	wl_list_for_each_safe(configure, tmp, &surface->configure_list, link) {
-		xdg_surface_configure_destroy(configure);
-	}
+	wlr_configurable_finish(&surface->configurable);
 
 	surface->configured = surface->mapped = false;
-	if (surface->configure_idle) {
-		wl_event_source_remove(surface->configure_idle);
-		surface->configure_idle = NULL;
-	}
 }
+
+uint32_t wlr_xdg_surface_schedule_configure(struct wlr_xdg_surface *surface) {
+	return wlr_configurable_schedule_configure(&surface->configurable);
+}
+
+static void xdg_surface_configurable_configure(
+		struct wlr_configurable *configurable,
+		struct wlr_configure *configure) {
+	struct wlr_xdg_surface *surface =
+		wl_container_of(configurable, surface, configurable);
+
+	wlr_signal_emit_safe(&surface->events.configure, configure);
+	xdg_surface_send_configure(surface->resource, configure->serial);
+}
+
+static void xdg_surface_configurable_ack_configure(
+		struct wlr_configurable *configurable,
+		struct wlr_configure *configure) {
+	struct wlr_xdg_surface *surface =
+		wl_container_of(configurable, surface, configurable);
+
+	surface->configured = true;
+	surface->pending.configure_serial = configure->serial;
+
+	wlr_signal_emit_safe(&surface->events.ack_configure, configure);
+}
+
+static const struct wlr_configurable_interface xdg_surface_configurable_impl = {
+	.configure = xdg_surface_configurable_configure,
+	.ack_configure = xdg_surface_configurable_ack_configure,
+};
 
 static void xdg_surface_handle_ack_configure(struct wl_client *client,
 		struct wl_resource *resource, uint32_t serial) {
@@ -77,100 +91,7 @@ static void xdg_surface_handle_ack_configure(struct wl_client *client,
 		return;
 	}
 
-	// First find the ack'ed configure
-	bool found = false;
-	struct wlr_xdg_surface_configure *configure, *tmp;
-	wl_list_for_each(configure, &surface->configure_list, link) {
-		if (configure->serial == serial) {
-			found = true;
-			break;
-		}
-	}
-	if (!found) {
-		wl_resource_post_error(surface->client->resource,
-			XDG_WM_BASE_ERROR_INVALID_SURFACE_STATE,
-			"wrong configure serial: %u", serial);
-		return;
-	}
-	// Then remove old configures from the list
-	wl_list_for_each_safe(configure, tmp, &surface->configure_list, link) {
-		if (configure->serial == serial) {
-			break;
-		}
-		wlr_signal_emit_safe(&surface->events.ack_configure, configure);
-		xdg_surface_configure_destroy(configure);
-	}
-
-	switch (surface->role) {
-	case WLR_XDG_SURFACE_ROLE_NONE:
-		assert(0 && "not reached");
-		break;
-	case WLR_XDG_SURFACE_ROLE_TOPLEVEL:
-		handle_xdg_toplevel_ack_configure(surface->toplevel,
-				configure->toplevel_configure);
-		break;
-	case WLR_XDG_SURFACE_ROLE_POPUP:
-		break;
-	}
-
-	surface->configured = true;
-	surface->pending.configure_serial = serial;
-
-	wlr_signal_emit_safe(&surface->events.ack_configure, configure);
-	xdg_surface_configure_destroy(configure);
-}
-
-static void surface_send_configure(void *user_data) {
-	struct wlr_xdg_surface *surface = user_data;
-
-	surface->configure_idle = NULL;
-
-	struct wlr_xdg_surface_configure *configure =
-		calloc(1, sizeof(struct wlr_xdg_surface_configure));
-	if (configure == NULL) {
-		wl_client_post_no_memory(surface->client->client);
-		return;
-	}
-
-	wl_list_insert(surface->configure_list.prev, &configure->link);
-	configure->serial = surface->scheduled_serial;
-	configure->surface = surface;
-
-	switch (surface->role) {
-	case WLR_XDG_SURFACE_ROLE_NONE:
-		assert(0 && "not reached");
-		break;
-	case WLR_XDG_SURFACE_ROLE_TOPLEVEL:
-		configure->toplevel_configure =
-			send_xdg_toplevel_configure(surface->toplevel);
-		break;
-	case WLR_XDG_SURFACE_ROLE_POPUP:
-		xdg_popup_send_configure(surface->popup->resource,
-			surface->popup->geometry.x,
-			surface->popup->geometry.y,
-			surface->popup->geometry.width,
-			surface->popup->geometry.height);
-		break;
-	}
-
-	wlr_signal_emit_safe(&surface->events.configure, configure);
-
-	xdg_surface_send_configure(surface->resource, configure->serial);
-}
-
-uint32_t wlr_xdg_surface_schedule_configure(struct wlr_xdg_surface *surface) {
-	struct wl_display *display = wl_client_get_display(surface->client->client);
-	struct wl_event_loop *loop = wl_display_get_event_loop(display);
-
-	if (surface->configure_idle == NULL) {
-		surface->scheduled_serial = wl_display_next_serial(display);
-		surface->configure_idle = wl_event_loop_add_idle(loop,
-			surface_send_configure, surface);
-		if (surface->configure_idle == NULL) {
-			wl_client_post_no_memory(surface->client->client);
-		}
-	}
-	return surface->scheduled_serial;
+	wlr_configurable_ack_configure(&surface->configurable, serial);
 }
 
 static void xdg_surface_handle_get_popup(struct wl_client *client,
@@ -370,7 +291,6 @@ struct wlr_xdg_surface *create_xdg_surface(
 		return NULL;
 	}
 
-	wl_list_init(&surface->configure_list);
 	wl_list_init(&surface->popups);
 
 	wl_signal_init(&surface->events.destroy);
@@ -388,6 +308,10 @@ struct wlr_xdg_surface *create_xdg_surface(
 	wl_signal_add(&surface->surface->events.commit,
 		&surface->surface_commit);
 	surface->surface_commit.notify = xdg_surface_handle_surface_commit;
+
+	wlr_configurable_init(&surface->configurable,
+		&xdg_surface_configurable_impl,
+		surface->resource, XDG_WM_BASE_ERROR_INVALID_SURFACE_STATE);
 
 	wlr_log(WLR_DEBUG, "new xdg_surface %p (res %p)", surface,
 		surface->resource);
@@ -411,15 +335,11 @@ void reset_xdg_surface(struct wlr_xdg_surface *surface) {
 
 	switch (surface->role) {
 	case WLR_XDG_SURFACE_ROLE_TOPLEVEL:
-		wl_resource_set_user_data(surface->toplevel->resource, NULL);
-		free(surface->toplevel);
+		destroy_xdg_toplevel(surface->toplevel);
 		surface->toplevel = NULL;
 		break;
 	case WLR_XDG_SURFACE_ROLE_POPUP:
-		wl_list_remove(&surface->popup->link);
-
-		wl_resource_set_user_data(surface->popup->resource, NULL);
-		free(surface->popup);
+		destroy_xdg_popup(surface->popup);
 		surface->popup = NULL;
 		break;
 	case WLR_XDG_SURFACE_ROLE_NONE:

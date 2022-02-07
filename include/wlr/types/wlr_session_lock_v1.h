@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_configurable.h>
 
 struct wlr_session_lock_manager_v1 {
 	struct wl_global *global;
@@ -48,10 +49,8 @@ struct wlr_session_lock_surface_v1_state {
 };
 
 struct wlr_session_lock_surface_v1_configure {
-	struct wl_list link; // wlr_session_lock_surface_v1::configure_list
-	uint32_t serial;
-
 	uint32_t width, height;
+	struct wlr_addon addon; // wlr_configure.addons
 };
 
 struct wlr_session_lock_surface_v1 {
@@ -63,7 +62,11 @@ struct wlr_session_lock_surface_v1 {
 
 	bool configured, mapped;
 
-	struct wl_list configure_list; // wlr_session_lock_surface_v1_configure::link
+	struct wlr_configurable configurable;
+	struct {
+		uint32_t width;
+		uint32_t height;
+	} scheduled;
 
 	struct wlr_session_lock_surface_v1_state current;
 	struct wlr_session_lock_surface_v1_state pending;

@@ -7,27 +7,26 @@
 #include "types/wlr_xdg_shell.h"
 #include "util/signal.h"
 
-void handle_xdg_toplevel_ack_configure(
-		struct wlr_xdg_toplevel *toplevel,
-		struct wlr_xdg_toplevel_configure *configure) {
-	toplevel->pending.maximized = configure->maximized;
-	toplevel->pending.fullscreen = configure->fullscreen;
-	toplevel->pending.resizing = configure->resizing;
-	toplevel->pending.activated = configure->activated;
-	toplevel->pending.tiled = configure->tiled;
-
-	toplevel->pending.width = configure->width;
-	toplevel->pending.height = configure->height;
+static void xdg_toplevel_configure_addon_destroy(struct wlr_addon *addon) {
+	struct wlr_xdg_toplevel_configure *configure =
+		wl_container_of(addon, configure, addon);
+	free(configure);
 }
 
-struct wlr_xdg_toplevel_configure *send_xdg_toplevel_configure(
-		struct wlr_xdg_toplevel *toplevel) {
-	struct wlr_xdg_toplevel_configure *configure =
-		calloc(1, sizeof(*configure));
+static const struct wlr_addon_interface xdg_toplevel_configure_addon_impl = {
+	.name = "wlr_xdg_toplevel_configure",
+	.destroy = xdg_toplevel_configure_addon_destroy,
+};
+
+static void toplevel_handle_surface_configure(
+		struct wl_listener *listener, void *data) {
+	struct wlr_xdg_toplevel *toplevel =
+		wl_container_of(listener, toplevel, surface_configure);
+	struct wlr_configure *wlr_configure = data;
+
+	struct wlr_xdg_toplevel_configure *configure = calloc(1, sizeof(*configure));
 	if (configure == NULL) {
-		wlr_log(WLR_ERROR, "Allocation failed");
 		wl_resource_post_no_memory(toplevel->resource);
-		return NULL;
 	}
 	*configure = toplevel->scheduled;
 
@@ -109,13 +108,39 @@ struct wlr_xdg_toplevel_configure *send_xdg_toplevel_configure(
 	xdg_toplevel_send_configure(toplevel->resource, width, height, &states);
 
 	wl_array_release(&states);
-	return configure;
+
+	wlr_addon_init(&configure->addon, &wlr_configure->addons,
+		toplevel, &xdg_toplevel_configure_addon_impl);
+	return;
 
 error_out:
 	wl_array_release(&states);
 	free(configure);
 	wl_resource_post_no_memory(toplevel->resource);
-	return NULL;
+}
+
+static void toplevel_handle_surface_ack_configure(
+		struct wl_listener *listener, void *data) {
+	struct wlr_xdg_toplevel *toplevel =
+		wl_container_of(listener, toplevel, surface_ack_configure);
+	struct wlr_configure *wlr_configure = data;
+
+	struct wlr_addon *addon = wlr_addon_find(&wlr_configure->addons,
+		toplevel, &xdg_toplevel_configure_addon_impl);
+	if (addon == NULL) {
+		return;
+	}
+	struct wlr_xdg_toplevel_configure *configure =
+		wl_container_of(addon, configure, addon);
+
+	toplevel->pending.maximized = configure->maximized;
+	toplevel->pending.fullscreen = configure->fullscreen;
+	toplevel->pending.resizing = configure->resizing;
+	toplevel->pending.activated = configure->activated;
+	toplevel->pending.tiled = configure->tiled;
+
+	toplevel->pending.width = configure->width;
+	toplevel->pending.height = configure->height;
 }
 
 void handle_xdg_toplevel_committed(struct wlr_xdg_toplevel *toplevel) {
@@ -150,7 +175,7 @@ void wlr_xdg_toplevel_set_parent(struct wlr_xdg_toplevel *toplevel,
 	if (toplevel->parent) {
 		wl_list_remove(&toplevel->parent_unmap.link);
 	}
-	
+
 	toplevel->parent = parent;
 	if (parent) {
 		toplevel->parent_unmap.notify = handle_parent_unmap;
@@ -471,6 +496,15 @@ void create_xdg_toplevel(struct wlr_xdg_surface *surface,
 		&xdg_toplevel_implementation, surface->toplevel,
 		xdg_toplevel_handle_resource_destroy);
 
+	surface->toplevel->surface_configure.notify =
+		toplevel_handle_surface_configure;
+	wl_signal_add(&surface->events.configure,
+		&surface->toplevel->surface_configure);
+	surface->toplevel->surface_ack_configure.notify =
+		toplevel_handle_surface_ack_configure;
+	wl_signal_add(&surface->events.ack_configure,
+		&surface->toplevel->surface_ack_configure);
+
 	surface->role = WLR_XDG_SURFACE_ROLE_TOPLEVEL;
 }
 
@@ -491,6 +525,13 @@ void unmap_xdg_toplevel(struct wlr_xdg_toplevel *toplevel) {
 	toplevel->requested.fullscreen = false;
 	toplevel->requested.maximized = false;
 	toplevel->requested.minimized = false;
+}
+
+void destroy_xdg_toplevel(struct wlr_xdg_toplevel *toplevel) {
+	wl_list_remove(&toplevel->surface_configure.link);
+	wl_list_remove(&toplevel->surface_ack_configure.link);
+	wl_resource_set_user_data(toplevel->resource, NULL);
+	free(toplevel);
 }
 
 void wlr_xdg_toplevel_send_close(struct wlr_xdg_toplevel *toplevel) {

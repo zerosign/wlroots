@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_configurable.h>
 #include "wlr-layer-shell-unstable-v1-protocol.h"
 
 /**
@@ -69,10 +70,9 @@ struct wlr_layer_surface_v1_state {
 };
 
 struct wlr_layer_surface_v1_configure {
-	struct wl_list link; // wlr_layer_surface_v1::configure_list
-	uint32_t serial;
-
 	uint32_t width, height;
+
+	struct wlr_addon addon; // wlr_configure.addons
 };
 
 struct wlr_layer_surface_v1 {
@@ -85,7 +85,12 @@ struct wlr_layer_surface_v1 {
 	char *namespace;
 
 	bool added, configured, mapped;
-	struct wl_list configure_list;
+
+	struct wlr_configurable configurable;
+	struct {
+		uint32_t width;
+		uint32_t height;
+	} scheduled;
 
 	struct wlr_layer_surface_v1_state current, pending;
 

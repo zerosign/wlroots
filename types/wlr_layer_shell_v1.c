@@ -13,6 +13,17 @@
 
 #define LAYER_SHELL_VERSION 4
 
+static void layer_surface_configure_addon_destroy(struct wlr_addon *addon) {
+	struct wlr_layer_surface_v1_configure *configure =
+		wl_container_of(addon, configure, addon);
+	free(configure);
+}
+
+static const struct wlr_addon_interface layer_surface_configure_addon_impl = {
+	.name = "wlr_layer_surface_v1_configure",
+	.destroy = layer_surface_configure_addon_destroy,
+};
+
 static void resource_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
 	wl_resource_destroy(resource);
@@ -47,53 +58,59 @@ struct wlr_layer_surface_v1 *wlr_layer_surface_v1_from_wlr_surface(
 	return (struct wlr_layer_surface_v1 *)surface->role_data;
 }
 
-static void layer_surface_configure_destroy(
-		struct wlr_layer_surface_v1_configure *configure) {
+static void layer_surface_configurable_configure(
+		struct wlr_configurable *configurable,
+		struct wlr_configure *wlr_configure) {
+	struct wlr_layer_surface_v1 *surface =
+		wl_container_of(configurable, surface, configurable);
+
+	struct wlr_layer_surface_v1_configure *configure =
+		calloc(1, sizeof(*configure));
 	if (configure == NULL) {
+		wl_client_post_no_memory(wl_resource_get_client(surface->resource));
 		return;
 	}
-	wl_list_remove(&configure->link);
-	free(configure);
+	configure->width = surface->scheduled.width;
+	configure->height = surface->scheduled.height;
+
+	zwlr_layer_surface_v1_send_configure(surface->resource,
+		wlr_configure->serial, configure->width, configure->height);
+	wlr_addon_init(&configure->addon, &wlr_configure->addons,
+		surface, &layer_surface_configure_addon_impl);
 }
+
+static void layer_surface_configurable_ack_configure(
+		struct wlr_configurable *configurable,
+		struct wlr_configure *wlr_configure) {
+	struct wlr_layer_surface_v1 *surface =
+		wl_container_of(configurable, surface, configurable);
+
+	struct wlr_addon *addon = wlr_addon_find(&wlr_configure->addons,
+		surface, &layer_surface_configure_addon_impl);
+	if (addon == NULL) {
+		return;
+	}
+	struct wlr_layer_surface_v1_configure *configure =
+		wl_container_of(addon, configure, addon);
+
+	surface->configured = true;
+	surface->pending.configure_serial = wlr_configure->serial;
+	surface->pending.actual_width = configure->width;
+	surface->pending.actual_height = configure->height;
+}
+
+static const struct wlr_configurable_interface layer_surface_configurable_impl = {
+	.configure = layer_surface_configurable_configure,
+	.ack_configure = layer_surface_configurable_ack_configure,
+};
 
 static void layer_surface_handle_ack_configure(struct wl_client *client,
 		struct wl_resource *resource, uint32_t serial) {
 	struct wlr_layer_surface_v1 *surface = layer_surface_from_resource(resource);
-
 	if (!surface) {
 		return;
 	}
-
-	// First find the ack'ed configure
-	bool found = false;
-	struct wlr_layer_surface_v1_configure *configure, *tmp;
-	wl_list_for_each(configure, &surface->configure_list, link) {
-		if (configure->serial == serial) {
-			found = true;
-			break;
-		}
-	}
-	if (!found) {
-		wl_resource_post_error(resource,
-			ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SURFACE_STATE,
-			"wrong configure serial: %" PRIu32, serial);
-		return;
-	}
-	// Then remove old configures from the list
-	wl_list_for_each_safe(configure, tmp, &surface->configure_list, link) {
-		if (configure->serial == serial) {
-			break;
-		}
-		layer_surface_configure_destroy(configure);
-	}
-
-	surface->pending.configure_serial = configure->serial;
-	surface->pending.actual_width = configure->width;
-	surface->pending.actual_height = configure->height;
-
-	surface->configured = true;
-
-	layer_surface_configure_destroy(configure);
+	wlr_configurable_ack_configure(&surface->configurable, serial);
 }
 
 static void layer_surface_handle_set_size(struct wl_client *client,
@@ -266,10 +283,7 @@ static void layer_surface_unmap(struct wlr_layer_surface_v1 *surface) {
 		wlr_xdg_popup_destroy(popup);
 	}
 
-	struct wlr_layer_surface_v1_configure *configure, *tmp;
-	wl_list_for_each_safe(configure, tmp, &surface->configure_list, link) {
-		layer_surface_configure_destroy(configure);
-	}
+	wlr_configurable_finish(&surface->configurable);
 
 	surface->configured = surface->mapped = false;
 }
@@ -281,6 +295,7 @@ static void layer_surface_destroy(struct wlr_layer_surface_v1 *surface) {
 	wlr_signal_emit_safe(&surface->events.destroy, surface);
 	wl_resource_set_user_data(surface->resource, NULL);
 	surface->surface->role_data = NULL;
+	wlr_configurable_finish(&surface->configurable);
 	wl_list_remove(&surface->surface_destroy.link);
 	free(surface->namespace);
 	free(surface);
@@ -296,22 +311,9 @@ static void layer_surface_resource_destroy(struct wl_resource *resource) {
 
 uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
 		uint32_t width, uint32_t height) {
-	struct wl_display *display =
-		wl_client_get_display(wl_resource_get_client(surface->resource));
-	struct wlr_layer_surface_v1_configure *configure =
-		calloc(1, sizeof(struct wlr_layer_surface_v1_configure));
-	if (configure == NULL) {
-		wl_client_post_no_memory(wl_resource_get_client(surface->resource));
-		return surface->pending.configure_serial;
-	}
-	wl_list_insert(surface->configure_list.prev, &configure->link);
-	configure->width = width;
-	configure->height = height;
-	configure->serial = wl_display_next_serial(display);
-	zwlr_layer_surface_v1_send_configure(surface->resource,
-			configure->serial, configure->width,
-			configure->height);
-	return configure->serial;
+	surface->scheduled.width = width;
+	surface->scheduled.height = height;
+	return wlr_configurable_schedule_configure(&surface->configurable);
 }
 
 void wlr_layer_surface_v1_destroy(struct wlr_layer_surface_v1 *surface) {
@@ -455,7 +457,10 @@ static void layer_shell_handle_get_layer_surface(struct wl_client *wl_client,
 		return;
 	}
 
-	wl_list_init(&surface->configure_list);
+	wlr_configurable_init(&surface->configurable,
+		&layer_surface_configurable_impl, surface->resource,
+		ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SURFACE_STATE);
+
 	wl_list_init(&surface->popups);
 
 	wl_signal_init(&surface->events.destroy);

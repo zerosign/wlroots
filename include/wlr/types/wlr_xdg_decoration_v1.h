@@ -3,6 +3,7 @@
 
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/util/addon.h>
 
 enum wlr_xdg_toplevel_decoration_v1_mode {
 	WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_NONE = 0,
@@ -25,9 +26,8 @@ struct wlr_xdg_decoration_manager_v1 {
 };
 
 struct wlr_xdg_toplevel_decoration_v1_configure {
-	struct wl_list link; // wlr_xdg_toplevel_decoration::configure_list
-	struct wlr_xdg_surface_configure *surface_configure;
 	enum wlr_xdg_toplevel_decoration_v1_mode mode;
+	struct wlr_addon addon; // wlr_configure.addons
 };
 
 struct wlr_xdg_toplevel_decoration_v1_state {
@@ -46,8 +46,6 @@ struct wlr_xdg_toplevel_decoration_v1 {
 	enum wlr_xdg_toplevel_decoration_v1_mode requested_mode;
 
 	bool added;
-
-	struct wl_list configure_list; // wlr_xdg_toplevel_decoration_v1_configure::link
 
 	struct {
 		struct wl_signal destroy;
