@@ -11,6 +11,17 @@
 static const struct zxdg_toplevel_decoration_v1_interface
 	toplevel_decoration_impl;
 
+static void xdg_toplevel_decoration_v1_configure_addon_destroy(struct wlr_addon *addon) {
+	struct wlr_xdg_toplevel_decoration_v1_configure *configure =
+		wl_container_of(addon, configure, addon);
+	free(configure);
+}
+
+static const struct wlr_addon_interface xdg_toplevel_decoration_v1_configure_addon_impl = {
+	.name = "wlr_xdg_toplevel_decoration_v1_configure",
+	.destroy = xdg_toplevel_decoration_v1_configure_addon_destroy,
+};
+
 static struct wlr_xdg_toplevel_decoration_v1 *toplevel_decoration_from_resource(
 		struct wl_resource *resource) {
 	assert(wl_resource_instance_of(resource,
@@ -67,10 +78,6 @@ static void toplevel_decoration_handle_resource_destroy(
 	wl_list_remove(&decoration->surface_destroy.link);
 	wl_list_remove(&decoration->surface_configure.link);
 	wl_list_remove(&decoration->surface_ack_configure.link);
-	struct wlr_xdg_toplevel_decoration_v1_configure *configure, *tmp;
-	wl_list_for_each_safe(configure, tmp, &decoration->configure_list, link) {
-		free(configure);
-	}
 	wl_list_remove(&decoration->link);
 	free(decoration);
 }
@@ -86,7 +93,7 @@ static void toplevel_decoration_handle_surface_configure(
 		struct wl_listener *listener, void *data) {
 	struct wlr_xdg_toplevel_decoration_v1 *decoration =
 		wl_container_of(listener, decoration, surface_configure);
-	struct wlr_xdg_surface_configure *surface_configure = data;
+	struct wlr_configure *wlr_configure = data;
 
 	if (decoration->pending.mode == decoration->scheduled_mode) {
 		return;
@@ -95,47 +102,33 @@ static void toplevel_decoration_handle_surface_configure(
 	struct wlr_xdg_toplevel_decoration_v1_configure *configure =
 		calloc(1, sizeof(struct wlr_xdg_toplevel_decoration_v1_configure));
 	if (configure == NULL) {
+		wl_resource_post_no_memory(decoration->resource);
 		return;
 	}
-	configure->surface_configure = surface_configure;
-	configure->mode = decoration->scheduled_mode;
-	wl_list_insert(decoration->configure_list.prev, &configure->link);
 
+	configure->mode = decoration->scheduled_mode;
 	zxdg_toplevel_decoration_v1_send_configure(decoration->resource,
 		configure->mode);
+
+	wlr_addon_init(&configure->addon, &wlr_configure->addons,
+		decoration, &xdg_toplevel_decoration_v1_configure_addon_impl);
 }
 
 static void toplevel_decoration_handle_surface_ack_configure(
 		struct wl_listener *listener, void *data) {
 	struct wlr_xdg_toplevel_decoration_v1 *decoration =
 		wl_container_of(listener, decoration, surface_ack_configure);
-	struct wlr_xdg_surface_configure *surface_configure = data;
+	struct wlr_configure *wlr_configure = data;
 
-	// First find the ack'ed configure
-	bool found = false;
-	struct wlr_xdg_toplevel_decoration_v1_configure *configure, *tmp;
-	wl_list_for_each(configure, &decoration->configure_list, link) {
-		if (configure->surface_configure == surface_configure) {
-			found = true;
-			break;
-		}
-	}
-	if (!found) {
+	struct wlr_addon *addon = wlr_addon_find(&wlr_configure->addons,
+		decoration, &xdg_toplevel_decoration_v1_configure_addon_impl);
+	if (addon == NULL) {
 		return;
 	}
-	// Then remove old configures from the list
-	wl_list_for_each_safe(configure, tmp, &decoration->configure_list, link) {
-		if (configure->surface_configure == surface_configure) {
-			break;
-		}
-		wl_list_remove(&configure->link);
-		free(configure);
-	}
+	struct wlr_xdg_toplevel_decoration_v1_configure *configure =
+		wl_container_of(addon, configure, addon);
 
 	decoration->pending.mode = configure->mode;
-
-	wl_list_remove(&configure->link);
-	free(configure);
 }
 
 static void toplevel_decoration_handle_surface_commit(
@@ -207,7 +200,6 @@ static void decoration_manager_handle_get_toplevel_decoration(
 	wlr_log(WLR_DEBUG, "new xdg_toplevel_decoration %p (res %p)", decoration,
 		decoration->resource);
 
-	wl_list_init(&decoration->configure_list);
 	wl_signal_init(&decoration->events.destroy);
 	wl_signal_init(&decoration->events.request_mode);
 
