@@ -11,6 +11,17 @@
 
 #define SESSION_LOCK_VERSION 1
 
+static void session_lock_surface_configure_addon_destroy(struct wlr_addon *addon) {
+	struct wlr_session_lock_surface_v1_configure *configure =
+		wl_container_of(addon, configure, addon);
+	free(configure);
+}
+
+static const struct wlr_addon_interface session_lock_surface_configure_addon_impl = {
+	.name = "wlr_session_lock_surface_v1_configure",
+	.destroy = session_lock_surface_configure_addon_destroy,
+};
+
 static void resource_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
 	wl_resource_destroy(resource);
@@ -56,29 +67,59 @@ struct wlr_session_lock_surface_v1 *wlr_session_lock_surface_v1_from_wlr_surface
 	return (struct wlr_session_lock_surface_v1 *)surface->role_data;
 }
 
+static void session_lock_surface_configurable_configure(
+		struct wlr_configurable *configurable,
+		struct wlr_configure *wlr_configure) {
+	struct wlr_session_lock_surface_v1 *lock_surface =
+		wl_container_of(configurable, lock_surface, configurable);
+
+	struct wlr_session_lock_surface_v1_configure *configure =
+		calloc(1, sizeof(*configure));
+	if (configure == NULL) {
+		wl_client_post_no_memory(
+			wl_resource_get_client(lock_surface->resource));
+		return;
+	}
+	configure->width = lock_surface->scheduled.width;
+	configure->height = lock_surface->scheduled.height;
+
+	ext_session_lock_surface_v1_send_configure(lock_surface->resource,
+		wlr_configure->serial, configure->width, configure->height);
+	wlr_addon_init(&configure->addon, &wlr_configure->addons,
+		lock_surface, &session_lock_surface_configure_addon_impl);
+}
+
+static void session_lock_surface_configurable_ack_configure(
+		struct wlr_configurable *configurable,
+		struct wlr_configure *wlr_configure) {
+	struct wlr_session_lock_surface_v1 *lock_surface =
+		wl_container_of(configurable, lock_surface, configurable);
+
+	struct wlr_addon *addon = wlr_addon_find(&wlr_configure->addons,
+		lock_surface, &session_lock_surface_configure_addon_impl);
+	if (addon == NULL) {
+		return;
+	}
+	struct wlr_session_lock_surface_v1_configure *configure =
+		wl_container_of(addon, configure, addon);
+
+	lock_surface->configured = true;
+	lock_surface->pending.configure_serial = wlr_configure->serial;
+	lock_surface->pending.width = configure->width;
+	lock_surface->pending.height = configure->height;
+}
+
+static const struct wlr_configurable_interface session_lock_surface_configurable_impl = {
+	.configure = session_lock_surface_configurable_configure,
+	.ack_configure = session_lock_surface_configurable_ack_configure,
+};
+
 uint32_t wlr_session_lock_surface_v1_configure(
 		struct wlr_session_lock_surface_v1 *lock_surface,
 		uint32_t width, uint32_t height) {
-	struct wlr_session_lock_surface_v1_configure *configure =
-		calloc(1, sizeof(struct wlr_session_lock_surface_v1_configure));
-	if (configure == NULL) {
-		wl_resource_post_no_memory(lock_surface->resource);
-		return lock_surface->pending.configure_serial;
-	}
-
-	struct wl_display *display =
-		wl_client_get_display(wl_resource_get_client(lock_surface->resource));
-
-	configure->width = width;
-	configure->height = height;
-	configure->serial = wl_display_next_serial(display);
-
-	wl_list_insert(lock_surface->configure_list.prev, &configure->link);
-
-	ext_session_lock_surface_v1_send_configure(lock_surface->resource,
-		configure->serial, configure->width, configure->height);
-
-	return configure->serial;
+	lock_surface->scheduled.width = width;
+	lock_surface->scheduled.height = height;
+	return wlr_configurable_schedule_configure(&lock_surface->configurable);
 }
 
 static void lock_surface_handle_ack_configure(struct wl_client *client,
@@ -88,42 +129,8 @@ static void lock_surface_handle_ack_configure(struct wl_client *client,
 	if (lock_surface == NULL) {
 		return;
 	}
-
-	// First find the ack'ed configure
-	bool found = false;
-	struct wlr_session_lock_surface_v1_configure *configure, *tmp;
-	wl_list_for_each(configure, &lock_surface->configure_list, link) {
-		if (configure->serial == serial) {
-			found = true;
-			break;
-		}
-	}
-	if (!found) {
-		wl_resource_post_error(resource,
-			EXT_SESSION_LOCK_SURFACE_V1_ERROR_INVALID_SERIAL,
-			"ack_configure serial %" PRIu32
-			" does not match any configure serial", serial);
-		return;
-	}
-	// Then remove old configures from the list
-	wl_list_for_each_safe(configure, tmp, &lock_surface->configure_list, link) {
-		if (configure->serial == serial) {
-			break;
-		}
-		wl_list_remove(&configure->link);
-		free(configure);
-	}
-
-	lock_surface->pending.configure_serial = configure->serial;
-	lock_surface->pending.width = configure->width;
-	lock_surface->pending.height = configure->height;
-
-	lock_surface->configured = true;
-
-	wl_list_remove(&configure->link);
-	free(configure);
+	wlr_configurable_ack_configure(&lock_surface->configurable, serial);
 }
-
 
 static const struct ext_session_lock_surface_v1_interface lock_surface_implementation = {
 	.destroy = resource_handle_destroy,
@@ -189,11 +196,7 @@ static void lock_surface_destroy(
 
 	wl_list_remove(&lock_surface->link);
 
-	struct wlr_session_lock_surface_v1_configure *configure, *tmp;
-	wl_list_for_each_safe(configure, tmp, &lock_surface->configure_list, link) {
-		wl_list_remove(&configure->link);
-		free(configure);
-	}
+	wlr_configurable_finish(&lock_surface->configurable);
 
 	assert(wl_list_empty(&lock_surface->events.map.listener_list));
 	assert(wl_list_empty(&lock_surface->events.destroy.listener_list));
@@ -301,7 +304,9 @@ static void lock_handle_get_lock_surface(struct wl_client *client,
 	lock_surface->output = output;
 	lock_surface->surface = surface;
 
-	wl_list_init(&lock_surface->configure_list);
+	wlr_configurable_init(&lock_surface->configurable,
+		&session_lock_surface_configurable_impl, lock_surface->resource,
+		EXT_SESSION_LOCK_SURFACE_V1_ERROR_INVALID_SERIAL);
 
 	wl_signal_init(&lock_surface->events.map);
 	wl_signal_init(&lock_surface->events.destroy);
