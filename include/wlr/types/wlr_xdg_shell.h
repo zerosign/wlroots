@@ -113,6 +113,8 @@ struct wlr_xdg_toplevel_configure {
 	bool maximized, fullscreen, resizing, activated;
 	uint32_t tiled; // enum wlr_edges
 	uint32_t width, height;
+
+	struct wlr_addon addon; // wlr_configure.addons
 };
 
 struct wlr_xdg_toplevel_requested {
@@ -141,6 +143,9 @@ struct wlr_xdg_toplevel {
 
 	char *title;
 	char *app_id;
+
+	struct wl_listener surface_configure;
+	struct wl_listener surface_ack_configure;
 
 	struct {
 		struct wl_signal request_maximize;

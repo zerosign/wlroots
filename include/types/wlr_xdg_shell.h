@@ -39,9 +39,5 @@ void create_xdg_toplevel(struct wlr_xdg_surface *surface,
 void unmap_xdg_toplevel(struct wlr_xdg_toplevel *toplevel);
 void destroy_xdg_toplevel(struct wlr_xdg_toplevel *toplevel);
 void handle_xdg_toplevel_committed(struct wlr_xdg_toplevel *toplevel);
-struct wlr_xdg_toplevel_configure *send_xdg_toplevel_configure(
-	struct wlr_xdg_toplevel *toplevel);
-void handle_xdg_toplevel_ack_configure(struct wlr_xdg_toplevel *toplevel,
-	struct wlr_xdg_toplevel_configure *configure);
 
 #endif
