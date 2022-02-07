@@ -11,6 +11,7 @@
 
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_configurable.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/box.h>
 #include "xdg-shell-protocol.h"
@@ -154,14 +155,6 @@ struct wlr_xdg_toplevel {
 	} events;
 };
 
-struct wlr_xdg_surface_configure {
-	struct wlr_xdg_surface *surface;
-	struct wl_list link; // wlr_xdg_surface::configure_list
-	uint32_t serial;
-
-	struct wlr_xdg_toplevel_configure *toplevel_configure;
-};
-
 struct wlr_xdg_surface_state {
 	uint32_t configure_serial;
 	struct wlr_box geometry;
@@ -192,9 +185,8 @@ struct wlr_xdg_surface {
 	struct wl_list popups; // wlr_xdg_popup::link
 
 	bool added, configured, mapped;
-	struct wl_event_source *configure_idle;
-	uint32_t scheduled_serial;
-	struct wl_list configure_list;
+
+	struct wlr_configurable configurable;
 
 	struct wlr_xdg_surface_state current, pending;
 
@@ -223,8 +215,8 @@ struct wlr_xdg_surface {
 		struct wl_signal unmap;
 
 		// for protocol extensions
-		struct wl_signal configure; // wlr_xdg_surface_configure
-		struct wl_signal ack_configure; // wlr_xdg_surface_configure
+		struct wl_signal configure; // wlr_configure
+		struct wl_signal ack_configure; // wlr_configure
 	} events;
 
 	void *data;
