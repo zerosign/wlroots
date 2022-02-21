@@ -678,7 +678,8 @@ static bool surface_copy_wl_shm(struct wlr_zext_screencopy_surface_v1 *surface,
 	}
 
 	if (surface->surface_options & ZEXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS
-			&& src_buffer != output->cursor_front_buffer) {
+			&& src_buffer != output->cursor_front_buffer
+			&& output->cursor_front_buffer != NULL) {
 		surface_composite_cursor_buffer(surface, dst_buffer, dst_data,
 				format, dst_stride);
 	}
