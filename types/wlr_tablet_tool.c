@@ -5,7 +5,10 @@
 #include <wlr/types/wlr_tablet_tool.h>
 
 void wlr_tablet_init(struct wlr_tablet *tablet,
-		const struct wlr_tablet_impl *impl) {
+		const struct wlr_tablet_impl *impl, const char *name) {
+	wlr_input_device_init(&tablet->base, WLR_INPUT_DEVICE_TABLET_TOOL, name);
+	tablet->base.tablet = tablet;
+
 	tablet->impl = impl;
 	wl_signal_init(&tablet->events.axis);
 	wl_signal_init(&tablet->events.proximity);
@@ -25,6 +28,7 @@ void wlr_tablet_destroy(struct wlr_tablet *tablet) {
 	}
 	wl_array_release(&tablet->paths);
 
+	wlr_input_device_finish(&tablet->base);
 	if (tablet->impl && tablet->impl->destroy) {
 		tablet->impl->destroy(tablet);
 	} else {

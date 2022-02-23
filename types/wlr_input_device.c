@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-server-core.h>
-#include <wlr/interfaces/wlr_input_device.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/interfaces/wlr_switch.h>
@@ -14,24 +13,30 @@
 #include "util/signal.h"
 
 void wlr_input_device_init(struct wlr_input_device *dev,
-		enum wlr_input_device_type type,
-		const struct wlr_input_device_impl *impl,
-		const char *name, int vendor, int product) {
+		enum wlr_input_device_type type, const char *name) {
 	dev->type = type;
-	dev->impl = impl;
 	dev->name = strdup(name);
-	dev->vendor = vendor;
-	dev->product = product;
+	dev->vendor = 0;
+	dev->product = 0;
 
 	wl_signal_init(&dev->events.destroy);
+}
+
+void wlr_input_device_finish(struct wlr_input_device *wlr_device) {
+	if (!wlr_device) {
+		return;
+	}
+
+	wlr_signal_emit_safe(&wlr_device->events.destroy, wlr_device);
+
+	free(wlr_device->name);
+	free(wlr_device->output_name);
 }
 
 void wlr_input_device_destroy(struct wlr_input_device *dev) {
 	if (!dev) {
 		return;
 	}
-
-	wlr_signal_emit_safe(&dev->events.destroy, dev);
 
 	if (dev->_device) {
 		switch (dev->type) {
@@ -53,17 +58,9 @@ void wlr_input_device_destroy(struct wlr_input_device *dev) {
 		case WLR_INPUT_DEVICE_TABLET_PAD:
 			wlr_tablet_pad_destroy(dev->tablet_pad);
 			break;
-		default:
-			wlr_log(WLR_DEBUG, "Warning: leaking memory %p %p %d",
-					dev->_device, dev, dev->type);
-			break;
 		}
-	}
-	free(dev->name);
-	free(dev->output_name);
-	if (dev->impl && dev->impl->destroy) {
-		dev->impl->destroy(dev);
 	} else {
+		wlr_input_device_finish(dev);
 		free(dev);
 	}
 }

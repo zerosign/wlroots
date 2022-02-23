@@ -24,7 +24,6 @@
 
 #include <wlr/backend/interface.h>
 #include <wlr/backend/x11.h>
-#include <wlr/interfaces/wlr_input_device.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/util/log.h>
@@ -165,7 +164,7 @@ static bool backend_start(struct wlr_backend *backend) {
 
 	wlr_log(WLR_INFO, "Starting X11 backend");
 
-	wlr_signal_emit_safe(&x11->backend.events.new_input, &x11->keyboard_dev);
+	wlr_signal_emit_safe(&x11->backend.events.new_input, &x11->keyboard.base);
 
 	for (size_t i = 0; i < x11->requested_outputs; ++i) {
 		wlr_x11_output_create(&x11->backend);
@@ -186,7 +185,7 @@ static void backend_destroy(struct wlr_backend *backend) {
 		wlr_output_destroy(&output->wlr_output);
 	}
 
-	wlr_input_device_destroy(&x11->keyboard_dev);
+	wlr_keyboard_destroy(&x11->keyboard);
 
 	wlr_backend_finish(backend);
 
@@ -354,6 +353,7 @@ static bool query_formats(struct wlr_x11_backend *x11) {
 			}
 
 			if (x11->have_dri3) {
+				// X11 always supports implicit modifiers
 				wlr_drm_format_set_add(&x11->dri3_formats, format->drm,
 					DRM_FORMAT_MOD_INVALID);
 				if (!query_dri3_modifiers(x11, format)) {
@@ -572,9 +572,9 @@ struct wlr_backend *wlr_x11_backend_create(struct wl_display *display,
 		goto error_event;
 	}
 
-	x11->depth = get_depth(x11->screen, 32);
+	x11->depth = get_depth(x11->screen, 24);
 	if (!x11->depth) {
-		wlr_log(WLR_ERROR, "Failed to get 32-bit depth for X11 screen");
+		wlr_log(WLR_ERROR, "Failed to get 24-bit depth for X11 screen");
 		goto error_event;
 	}
 
@@ -637,10 +637,7 @@ struct wlr_backend *wlr_x11_backend_create(struct wl_display *display,
 	}
 #endif
 
-	wlr_input_device_init(&x11->keyboard_dev, WLR_INPUT_DEVICE_KEYBOARD,
-		&input_device_impl, "X11 keyboard", 0, 0);
-	wlr_keyboard_init(&x11->keyboard, &keyboard_impl);
-	x11->keyboard_dev.keyboard = &x11->keyboard;
+	wlr_keyboard_init(&x11->keyboard, &x11_keyboard_impl, "x11-keyboard");
 
 	x11->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &x11->display_destroy);

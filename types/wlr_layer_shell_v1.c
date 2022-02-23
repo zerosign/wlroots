@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output.h>
-#include <wlr/types/wlr_surface.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include "util/signal.h"
@@ -103,7 +103,14 @@ static void layer_surface_handle_set_size(struct wl_client *client,
 	if (!surface) {
 		return;
 	}
-	surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_DESIRED_SIZE;
+
+	if (surface->current.desired_width == width
+			&& surface->current.desired_height == height) {
+		surface->pending.committed &= ~WLR_LAYER_SURFACE_V1_STATE_DESIRED_SIZE;
+	} else {
+		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_DESIRED_SIZE;
+	}
+
 	surface->pending.desired_width = width;
 	surface->pending.desired_height = height;
 }
@@ -125,7 +132,13 @@ static void layer_surface_handle_set_anchor(struct wl_client *client,
 	if (!surface) {
 		return;
 	}
-	surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_ANCHOR;
+
+	if (surface->current.anchor == anchor) {
+		surface->pending.committed &= ~WLR_LAYER_SURFACE_V1_STATE_ANCHOR;
+	} else {
+		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_ANCHOR;
+	}
+
 	surface->pending.anchor = anchor;
 }
 
@@ -136,7 +149,13 @@ static void layer_surface_handle_set_exclusive_zone(struct wl_client *client,
 	if (!surface) {
 		return;
 	}
-	surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_ZONE;
+
+	if (surface->current.exclusive_zone == zone) {
+		surface->pending.committed &= ~WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_ZONE;
+	} else {
+		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_ZONE;
+	}
+
 	surface->pending.exclusive_zone = zone;
 }
 
@@ -148,7 +167,16 @@ static void layer_surface_handle_set_margin(
 	if (!surface) {
 		return;
 	}
-	surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_MARGIN;
+
+	if (surface->current.margin.top == top
+			&& surface->current.margin.right == right
+			&& surface->current.margin.bottom == bottom
+			&& surface->current.margin.left == left) {
+		surface->pending.committed &= ~WLR_LAYER_SURFACE_V1_STATE_MARGIN;
+	} else {
+		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_MARGIN;
+	}
+
 	surface->pending.margin.top = top;
 	surface->pending.margin.right = right;
 	surface->pending.margin.bottom = bottom;
@@ -183,14 +211,12 @@ static void layer_surface_handle_get_popup(struct wl_client *client,
 		struct wl_resource *popup_resource) {
 	struct wlr_layer_surface_v1 *parent =
 		layer_surface_from_resource(layer_resource);
-	struct wlr_xdg_surface *popup_surface =
-		wlr_xdg_surface_from_popup_resource(popup_resource);
+	struct wlr_xdg_popup *popup =
+		wlr_xdg_popup_from_resource(popup_resource);
 
 	if (!parent) {
 		return;
 	}
-	assert(popup_surface->role == WLR_XDG_SURFACE_ROLE_POPUP);
-	struct wlr_xdg_popup *popup = popup_surface->popup;
 	popup->parent = parent->surface;
 	wl_list_insert(&parent->popups, &popup->link);
 	wlr_signal_emit_safe(&parent->events.new_popup, popup);
@@ -209,7 +235,13 @@ static void layer_surface_set_layer(struct wl_client *client,
 				"Invalid layer %" PRIu32, layer);
 		return;
 	}
-	surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_LAYER;
+
+	if (surface->current.layer == layer) {
+		surface->pending.committed &= ~WLR_LAYER_SURFACE_V1_STATE_LAYER;
+	} else {
+		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_LAYER;
+	}
+
 	surface->pending.layer = layer;
 }
 
@@ -231,7 +263,7 @@ static void layer_surface_unmap(struct wlr_layer_surface_v1 *surface) {
 
 	struct wlr_xdg_popup *popup, *popup_tmp;
 	wl_list_for_each_safe(popup, popup_tmp, &surface->popups, link) {
-		wlr_xdg_popup_destroy(popup->base);
+		wlr_xdg_popup_destroy(popup);
 	}
 
 	struct wlr_layer_surface_v1_configure *configure, *tmp;
@@ -341,15 +373,15 @@ static void layer_surface_role_commit(struct wlr_surface *wlr_surface) {
 	}
 }
 
-static void layer_surface_role_precommit(struct wlr_surface *wlr_surface) {
+static void layer_surface_role_precommit(struct wlr_surface *wlr_surface,
+		const struct wlr_surface_state *state) {
 	struct wlr_layer_surface_v1 *surface =
 		wlr_layer_surface_v1_from_wlr_surface(wlr_surface);
 	if (surface == NULL) {
 		return;
 	}
 
-	if (wlr_surface->pending.committed & WLR_SURFACE_STATE_BUFFER &&
-			wlr_surface->pending.buffer == NULL) {
+	if (state->committed & WLR_SURFACE_STATE_BUFFER && state->buffer == NULL) {
 		// This is a NULL commit
 		if (surface->configured && surface->mapped) {
 			layer_surface_unmap(surface);

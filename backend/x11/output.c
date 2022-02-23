@@ -76,8 +76,8 @@ static void output_destroy(struct wlr_output *wlr_output) {
 
 	pixman_region32_fini(&output->exposed);
 
-	wlr_input_device_destroy(&output->pointer_dev);
-	wlr_input_device_destroy(&output->touch_dev);
+	wlr_pointer_destroy(&output->pointer);
+	wlr_touch_destroy(&output->touch);
 
 	struct wlr_x11_buffer *buffer, *buffer_tmp;
 	wl_list_for_each_safe(buffer, buffer_tmp, &output->buffers, link) {
@@ -137,10 +137,6 @@ static xcb_pixmap_t import_dmabuf(struct wlr_x11_output *output,
 	if (dmabuf->format != x11->x11_format->drm) {
 		// The pixmap's depth must match the window's depth, otherwise Present
 		// will throw a Match error
-		return XCB_PIXMAP_NONE;
-	}
-
-	if (dmabuf->flags != 0) {
 		return XCB_PIXMAP_NONE;
 	}
 
@@ -380,7 +376,7 @@ static void update_x11_output_cursor(struct wlr_x11_output *output,
 static bool output_cursor_to_picture(struct wlr_x11_output *output,
 		struct wlr_buffer *buffer) {
 	struct wlr_x11_backend *x11 = output->x11;
-	struct wlr_renderer *renderer = wlr_backend_get_renderer(&x11->backend);
+	struct wlr_renderer *renderer = output->wlr_output.renderer;
 
 	if (output->cursor.pic != XCB_NONE) {
 		xcb_render_free_picture(x11->xcb, output->cursor.pic);
@@ -516,13 +512,15 @@ struct wlr_output *wlr_x11_output_create(struct wlr_backend *backend) {
 
 	wlr_output_update_custom_mode(wlr_output, 1024, 768, 0);
 
-	snprintf(wlr_output->name, sizeof(wlr_output->name), "X11-%zd",
-		++x11->last_output_num);
+	char name[64];
+	snprintf(name, sizeof(name), "X11-%zu", ++x11->last_output_num);
+	wlr_output_set_name(wlr_output, name);
+
 	parse_xcb_setup(wlr_output, x11->xcb);
 
 	char description[128];
 	snprintf(description, sizeof(description),
-		"X11 output %zd", x11->last_output_num);
+		"X11 output %zu", x11->last_output_num);
 	wlr_output_set_description(wlr_output, description);
 
 	// The X11 protocol requires us to set a colormap and border pixel if the
@@ -575,22 +573,16 @@ struct wlr_output *wlr_x11_output_create(struct wlr_backend *backend) {
 
 	wlr_output_update_enabled(wlr_output, true);
 
-	wlr_input_device_init(&output->pointer_dev, WLR_INPUT_DEVICE_POINTER,
-		&input_device_impl, "X11 pointer", 0, 0);
-	wlr_pointer_init(&output->pointer, &pointer_impl);
-	output->pointer_dev.pointer = &output->pointer;
-	output->pointer_dev.output_name = strdup(wlr_output->name);
+	wlr_pointer_init(&output->pointer, &x11_pointer_impl, "x11-pointer");
+	output->pointer.base.output_name = strdup(wlr_output->name);
 
-	wlr_input_device_init(&output->touch_dev, WLR_INPUT_DEVICE_TOUCH,
-		&input_device_impl, "X11 touch", 0, 0);
-	wlr_touch_init(&output->touch, &touch_impl);
-	output->touch_dev.touch = &output->touch;
-	output->touch_dev.output_name = strdup(wlr_output->name);
+	wlr_touch_init(&output->touch, &x11_touch_impl, "x11-touch");
+	output->touch.base.output_name = strdup(wlr_output->name);
 	wl_list_init(&output->touchpoints);
 
 	wlr_signal_emit_safe(&x11->backend.events.new_output, wlr_output);
-	wlr_signal_emit_safe(&x11->backend.events.new_input, &output->pointer_dev);
-	wlr_signal_emit_safe(&x11->backend.events.new_input, &output->touch_dev);
+	wlr_signal_emit_safe(&x11->backend.events.new_input, &output->pointer.base);
+	wlr_signal_emit_safe(&x11->backend.events.new_input, &output->touch.base);
 
 	// Start the rendering loop by requesting the compositor to render a frame
 	wlr_output_schedule_frame(wlr_output);

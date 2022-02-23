@@ -16,7 +16,9 @@
 struct wlr_switch_impl;
 
 struct wlr_switch {
-	struct wlr_switch_impl *impl;
+	struct wlr_input_device base;
+
+	const struct wlr_switch_impl *impl;
 
 	struct {
 		struct wl_signal toggle;

@@ -133,11 +133,14 @@ static void handle_dev_change(struct wl_listener *listener, void *data) {
 		return;
 	}
 
-	// TODO: add and handle lease uevents
 	switch (change->type) {
-	case WLR_DEVICE_HOTPLUG:;
+	case WLR_DEVICE_HOTPLUG:
 		wlr_log(WLR_DEBUG, "Received hotplug event for %s", drm->name);
 		scan_drm_connectors(drm, &change->hotplug);
+		break;
+	case WLR_DEVICE_LEASE:
+		wlr_log(WLR_DEBUG, "Received lease event for %s", drm->name);
+		scan_drm_leases(drm);
 		break;
 	default:
 		wlr_log(WLR_DEBUG, "Received unknown change event for %s", drm->name);
@@ -232,10 +235,6 @@ struct wlr_backend *wlr_drm_backend_create(struct wl_display *display,
 	}
 
 	if (drm->parent) {
-		// Ensure we use the same renderer as the parent backend
-		drm->backend.renderer = wlr_backend_get_renderer(&drm->parent->backend);
-		assert(drm->backend.renderer != NULL);
-
 		if (!init_drm_renderer(drm, &drm->mgpu_renderer)) {
 			wlr_log(WLR_ERROR, "Failed to initialize renderer");
 			goto error_resources;

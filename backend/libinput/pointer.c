@@ -2,11 +2,12 @@
 #include <libinput.h>
 #include <stdlib.h>
 #include <wlr/backend/session.h>
-#include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/util/log.h>
 #include "backend/libinput.h"
 #include "util/signal.h"
+
+const struct wlr_pointer_impl libinput_pointer_impl = {0};
 
 struct wlr_pointer *create_libinput_pointer(
 		struct libinput_device *libinput_dev) {
@@ -16,7 +17,10 @@ struct wlr_pointer *create_libinput_pointer(
 		wlr_log(WLR_ERROR, "Unable to allocate wlr_pointer");
 		return NULL;
 	}
-	wlr_pointer_init(wlr_pointer, NULL);
+	const char *name = libinput_device_get_name(libinput_dev);
+	wlr_pointer_init(wlr_pointer, &libinput_pointer_impl, name);
+	wlr_pointer->base.vendor = libinput_device_get_id_vendor(libinput_dev);
+	wlr_pointer->base.product = libinput_device_get_id_product(libinput_dev);
 	return wlr_pointer;
 }
 

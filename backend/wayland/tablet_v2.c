@@ -10,7 +10,6 @@
 #include <wlr/interfaces/wlr_tablet_pad.h>
 #include <wlr/interfaces/wlr_tablet_tool.h>
 #include <wlr/types/wlr_input_device.h>
-#include <wlr/interfaces/wlr_input_device.h>
 
 #include "util/signal.h"
 #include "util/time.h"
@@ -402,7 +401,7 @@ static void handle_tablet_pad_removed(void *data,
 	/* This doesn't free anything, but emits the destroy signal */
 	wlr_input_device_destroy(&dev->wlr_input_device);
 	/* This is a bit ugly, but we need to remove it from our list */
-	wl_list_remove(&dev->wlr_input_device.link);
+	wl_list_remove(&dev->link);
 
 	struct wlr_wl_tablet_pad_group *group, *it;
 	wl_list_for_each_safe(group, it, &tablet_pad->groups, group.link) {
@@ -425,6 +424,8 @@ static const struct zwp_tablet_pad_v2_listener tablet_pad_listener = {
 	.leave = handle_tablet_pad_leave,
 	.removed = handle_tablet_pad_removed,
 };
+
+const struct wlr_tablet_pad_impl tablet_pad_impl = {0};
 
 static void handle_pad_added(void *data,
 		struct zwp_tablet_seat_v2 *zwp_tablet_seat_v2,
@@ -453,7 +454,7 @@ static void handle_pad_added(void *data,
 		zwp_tablet_pad_v2_destroy(id);
 		return;
 	}
-	wlr_tablet_pad_init(wlr_dev->tablet_pad, NULL);
+	wlr_tablet_pad_init(wlr_dev->tablet_pad, &tablet_pad_impl, wlr_dev->name);
 	zwp_tablet_pad_v2_add_listener(id, &tablet_pad_listener, dev);
 }
 
@@ -873,7 +874,7 @@ static void handle_tablet_removed(void *data,
 	/* This doesn't free anything, but emits the destroy signal */
 	wlr_input_device_destroy(&dev->wlr_input_device);
 	/* This is a bit ugly, but we need to remove it from our list */
-	wl_list_remove(&dev->wlr_input_device.link);
+	wl_list_remove(&dev->link);
 
 	zwp_tablet_v2_destroy(dev->resource);
 	free(dev);
@@ -886,6 +887,8 @@ static const struct zwp_tablet_v2_listener tablet_listener = {
 	.done = handle_tablet_done,
 	.removed = handle_tablet_removed,
 };
+
+const struct wlr_tablet_impl tablet_impl = {0};
 
 static void handle_tab_added(void *data,
 		struct zwp_tablet_seat_v2 *zwp_tablet_seat_v2,
@@ -909,7 +912,7 @@ static void handle_tab_added(void *data,
 		return;
 	}
 	zwp_tablet_v2_set_user_data(id, wlr_dev->tablet);
-	wlr_tablet_init(wlr_dev->tablet, NULL);
+	wlr_tablet_init(wlr_dev->tablet, &tablet_impl, wlr_dev->name);
 	zwp_tablet_v2_add_listener(id, &tablet_listener, dev);
 }
 
