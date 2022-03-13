@@ -11,6 +11,7 @@
 #include <wlr/backend/session.h>
 #include <wlr/config.h>
 #include <wlr/util/log.h>
+#include <xf86drm.h>
 #include <xf86drmMode.h>
 #include "backend/session/session.h"
 #include "backend/session/dev.h"
@@ -303,5 +304,57 @@ ssize_t wlr_session_find_gpus(struct wlr_session *session,
 	return dev_find_gpus(session, ret_len, ret);
 #endif
 
-	return -1;
+	int cnt = drmGetDevices2(0, NULL, 0);
+	if (cnt <= 0) {
+		return cnt == 0 ? 0 : -1;
+	}
+
+	drmDevicePtr *devs = calloc(cnt, sizeof(*devs));
+	if (!devs) {
+		wlr_log_errno(WLR_ERROR, "Allocation failed");
+		return -1;
+	}
+
+	cnt = drmGetDevices2(0, devs, cnt);
+	if (cnt <= 0) {
+		free(devs);
+		return cnt == 0 ? 0 : -1;
+	}
+
+	ssize_t total = 0;
+	size_t max = (size_t)cnt > ret_len ? ret_len : (size_t)cnt;
+
+	for (size_t i = 0; i < max; i++) {
+		if (!(devs[i]->available_nodes & (1 << DRM_NODE_PRIMARY))) {
+			continue;
+		}
+
+		// TODO
+		bool is_boot_vga = false;
+
+		// TODO https://todo.sr.ht/~kennylevinsen/seatd/1
+		const char *seat = "seat0";
+		if (session->seat[0] != '\0' && strcmp(session->seat, seat) != 0) {
+			continue;
+		}
+
+		const char *devnode = devs[i]->nodes[DRM_NODE_PRIMARY];
+		struct wlr_device *wlr_dev = session_open_if_kms(session, devnode);
+		if (!wlr_dev) {
+			continue;
+		}
+
+		ret[total] = wlr_dev;
+		if (is_boot_vga) {
+			struct wlr_device *tmp = ret[0];
+			ret[0] = ret[total];
+			ret[total] = tmp;
+		}
+
+		total++;
+	}
+
+	drmFreeDevices(devs, cnt);
+	free(devs);
+	return total;
 }
