@@ -6,6 +6,7 @@
 #include <wlr/backend/session.h>
 #include <wlr/util/log.h>
 #include "backend/libinput.h"
+#include "backend/session/dev_udev.h"
 #include "util/signal.h"
 
 static struct wlr_libinput_backend *get_libinput_backend_from_backend(
@@ -87,7 +88,7 @@ static bool backend_start(struct wlr_backend *wlr_backend) {
 	wlr_log(WLR_DEBUG, "Starting libinput backend");
 
 	backend->libinput_context = libinput_udev_create_context(&libinput_impl,
-		backend, backend->session->udev);
+		backend, backend->session->dev->udev);
 	if (!backend->libinput_context) {
 		wlr_log(WLR_ERROR, "Failed to create libinput context");
 		return false;

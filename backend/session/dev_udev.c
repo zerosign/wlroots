@@ -15,6 +15,7 @@
 #include <xf86drm.h>
 #include "backend/session/session.h"
 #include "backend/session/dev.h"
+#include "backend/session/dev_udev.h"
 #include "util/signal.h"
 
 #define WAIT_GPU_TIMEOUT 10000 // ms
@@ -64,7 +65,7 @@ static void read_udev_change_event(struct wlr_device_change_event *event,
 static int handle_udev_event(int fd, uint32_t mask, void *data) {
 	struct wlr_session *session = data;
 
-	struct udev_device *udev_dev = udev_monitor_receive_device(session->mon);
+	struct udev_device *udev_dev = udev_monitor_receive_device(session->dev->mon);
 	if (!udev_dev) {
 		return 1;
 	}
@@ -121,37 +122,46 @@ out:
 }
 
 int dev_init(struct wlr_session *session, struct wl_display *disp) {
-	session->udev = udev_new();
-	if (!session->udev) {
-		wlr_log_errno(WLR_ERROR, "Failed to create udev context");
+	struct dev *dev = calloc(1, sizeof(*dev));
+	if (!dev) {
+		wlr_log_errno(WLR_ERROR, "Allocation failed");
 		return -1;
 	}
 
-	session->mon = udev_monitor_new_from_netlink(session->udev, "udev");
-	if (!session->mon) {
+	dev->udev = udev_new();
+	if (!dev->udev) {
+		wlr_log_errno(WLR_ERROR, "Failed to create udev context");
+		goto error_dev;
+	}
+
+	dev->mon = udev_monitor_new_from_netlink(dev->udev, "udev");
+	if (!dev->mon) {
 		wlr_log_errno(WLR_ERROR, "Failed to create udev monitor");
 		goto error_udev;
 	}
 
-	udev_monitor_filter_add_match_subsystem_devtype(session->mon, "drm", NULL);
-	udev_monitor_enable_receiving(session->mon);
+	udev_monitor_filter_add_match_subsystem_devtype(dev->mon, "drm", NULL);
+	udev_monitor_enable_receiving(dev->mon);
 
 	struct wl_event_loop *event_loop = wl_display_get_event_loop(disp);
-	int fd = udev_monitor_get_fd(session->mon);
+	int fd = udev_monitor_get_fd(dev->mon);
 
-	session->udev_event = wl_event_loop_add_fd(event_loop, fd,
+	dev->udev_event = wl_event_loop_add_fd(event_loop, fd,
 		WL_EVENT_READABLE, handle_udev_event, session);
-	if (!session->udev_event) {
+	if (!dev->udev_event) {
 		wlr_log_errno(WLR_ERROR, "Failed to create udev event source");
 		goto error_mon;
 	}
 
+	session->dev = dev;
 	return 0;
 
 error_mon:
-	udev_monitor_unref(session->mon);
+	udev_monitor_unref(dev->mon);
 error_udev:
-	udev_unref(session->udev);
+	udev_unref(dev->udev);
+error_dev:
+	free(dev);
 	return -1;
 }
 
@@ -160,9 +170,10 @@ void dev_finish(struct wlr_session *session) {
 		return;
 	}
 
-	wl_event_source_remove(session->udev_event);
-	udev_monitor_unref(session->mon);
-	udev_unref(session->udev);
+	wl_event_source_remove(session->dev->udev_event);
+	udev_monitor_unref(session->dev->mon);
+	udev_unref(session->dev->udev);
+	free(session->dev);
 }
 
 static struct udev_enumerate *enumerate_drm_cards(struct udev *udev) {
@@ -206,7 +217,7 @@ static void find_gpus_handle_add(struct wl_listener *listener, void *data) {
  */
 ssize_t dev_find_gpus(struct wlr_session *session,
 		size_t ret_len, struct wlr_device **ret) {
-	struct udev_enumerate *en = enumerate_drm_cards(session->udev);
+	struct udev_enumerate *en = enumerate_drm_cards(session->dev->udev);
 	if (!en) {
 		return -1;
 	}
@@ -241,7 +252,7 @@ ssize_t dev_find_gpus(struct wlr_session *session,
 
 		wl_list_remove(&handler.listener.link);
 
-		en = enumerate_drm_cards(session->udev);
+		en = enumerate_drm_cards(session->dev->udev);
 		if (!en) {
 			return -1;
 		}
@@ -258,7 +269,7 @@ ssize_t dev_find_gpus(struct wlr_session *session,
 		bool is_boot_vga = false;
 
 		const char *path = udev_list_entry_get_name(entry);
-		struct udev_device *dev = udev_device_new_from_syspath(session->udev, path);
+		struct udev_device *dev = udev_device_new_from_syspath(session->dev->udev, path);
 		if (!dev) {
 			continue;
 		}
