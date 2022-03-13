@@ -3,11 +3,15 @@
 #include <assert.h>
 #include <libinput.h>
 #include <stdlib.h>
-#include <libudev.h>
 #include <wlr/interfaces/wlr_tablet_tool.h>
 #include <wlr/util/log.h>
+#include <wlr/config.h>
 #include "backend/libinput.h"
 #include "util/signal.h"
+
+#if WLR_HAS_UDEV
+#include <libudev.h>
+#endif
 
 struct tablet_tool {
 	struct wlr_tablet_tool wlr_tool;
@@ -29,9 +33,11 @@ void init_device_tablet(struct wlr_libinput_input_device *dev) {
 	libinput_device_get_size(dev->handle, &wlr_tablet->width_mm,
 		&wlr_tablet->height_mm);
 
+#if WLR_HAS_UDEV
 	struct udev_device *udev = libinput_device_get_udev_device(dev->handle);
 	char **dst = wl_array_add(&wlr_tablet->paths, sizeof(char *));
 	*dst = strdup(udev_device_get_syspath(udev));
+#endif
 
 	wl_list_init(&dev->tablet_tools);
 }

@@ -144,10 +144,12 @@ struct wlr_session *wlr_session_create(struct wl_display *disp) {
 		goto error_open;
 	}
 
+#if WLR_HAS_UDEV
 	if (dev_init(session, disp) == -1) {
 		wlr_log(WLR_ERROR, "Failed to initialize dev backend");
 		goto error_session;
 	}
+#endif
 
 	session->display = disp;
 
@@ -156,8 +158,10 @@ struct wlr_session *wlr_session_create(struct wl_display *disp) {
 
 	return session;
 
+#if WLR_HAS_UDEV
 error_session:
 	libseat_session_finish(session);
+#endif
 error_open:
 	free(session);
 	return NULL;
@@ -171,7 +175,9 @@ void wlr_session_destroy(struct wlr_session *session) {
 	wlr_signal_emit_safe(&session->events.destroy, session);
 	wl_list_remove(&session->display_destroy.link);
 
+#if WLR_HAS_UDEV
 	dev_finish(session);
+#endif
 
 	struct wlr_device *dev, *tmp_dev;
 	wl_list_for_each_safe(dev, tmp_dev, &session->devices, link) {
@@ -293,5 +299,9 @@ ssize_t wlr_session_find_gpus(struct wlr_session *session,
 		return explicit_find_gpus(session, ret_len, ret, explicit);
 	}
 
+#if WLR_HAS_UDEV
 	return dev_find_gpus(session, ret_len, ret);
+#endif
+
+	return -1;
 }

@@ -92,6 +92,7 @@ features = {
 	'xwayland': false,
 	'gles2-renderer': false,
 	'vulkan-renderer': false,
+	'udev': false,
 }
 internal_features = {
 	'xcb-errors': false,
@@ -127,7 +128,6 @@ drm = dependency('libdrm',
 )
 gbm = dependency('gbm', version: '>=17.1.0')
 xkbcommon = dependency('xkbcommon')
-udev = dependency('libudev')
 pixman = dependency('pixman-1')
 math = cc.find_library('m')
 rt = cc.find_library('rt')
@@ -138,7 +138,6 @@ wlr_deps = [
 	drm,
 	gbm,
 	xkbcommon,
-	udev,
 	pixman,
 	math,
 	rt,

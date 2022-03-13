@@ -5,9 +5,15 @@
 #include <wlr/backend/interface.h>
 #include <wlr/backend/session.h>
 #include <wlr/util/log.h>
+#include <wlr/config.h>
 #include "backend/libinput.h"
-#include "backend/session/dev_udev.h"
 #include "util/signal.h"
+
+#if WLR_HAS_UDEV
+#include "backend/session/dev_udev.h"
+#endif
+
+#define NETLINK_BITMASK 4
 
 static struct wlr_libinput_backend *get_libinput_backend_from_backend(
 		struct wlr_backend *wlr_backend) {
@@ -87,15 +93,29 @@ static bool backend_start(struct wlr_backend *wlr_backend) {
 		get_libinput_backend_from_backend(wlr_backend);
 	wlr_log(WLR_DEBUG, "Starting libinput backend");
 
+#if WLR_HAS_UDEV
 	backend->libinput_context = libinput_udev_create_context(&libinput_impl,
 		backend, backend->session->dev->udev);
+#elif defined(__linux__)
+	backend->libinput_context = libinput_netlink_create_context(&libinput_impl,
+		backend, NETLINK_BITMASK);
+#else
+#error Unsupported platform
+#endif
 	if (!backend->libinput_context) {
 		wlr_log(WLR_ERROR, "Failed to create libinput context");
 		return false;
 	}
 
+#if WLR_HAS_UDEV
 	if (libinput_udev_assign_seat(backend->libinput_context,
 			backend->session->seat) != 0) {
+#elif defined(__linux__)
+	if (libinput_netlink_assign_seat(backend->libinput_context,
+			backend->session->seat) != 0) {
+#else
+#error Unsupported platform
+#endif
 		wlr_log(WLR_ERROR, "Failed to assign libinput seat");
 		return false;
 	}

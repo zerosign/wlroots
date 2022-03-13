@@ -11,4 +11,6 @@
 
 #mesondefine WLR_HAS_XWAYLAND
 
+#mesondefine WLR_HAS_UDEV
+
 #endif
