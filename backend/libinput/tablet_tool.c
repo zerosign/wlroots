@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <libinput.h>
 #include <stdlib.h>
+#include <libudev.h>
 #include <wlr/interfaces/wlr_tablet_tool.h>
 #include <wlr/util/log.h>
 #include "backend/libinput.h"
