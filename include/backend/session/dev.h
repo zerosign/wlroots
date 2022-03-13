@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <sys/types.h>
 #include <wlr/backend/session.h>
 #include <wayland-server-core.h>
@@ -10,4 +11,6 @@ void dev_finish(struct wlr_session *session);
 
 ssize_t dev_find_gpus(struct wlr_session *session, size_t ret_len,
 		struct wlr_device **ret);
+
+bool is_drm_card(const char *devname);
 #endif

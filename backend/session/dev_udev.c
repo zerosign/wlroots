@@ -20,19 +20,6 @@
 
 #define WAIT_GPU_TIMEOUT 10000 // ms
 
-static bool is_drm_card(const char *sysname) {
-	const char prefix[] = DRM_PRIMARY_MINOR_NAME;
-	if (strncmp(sysname, prefix, strlen(prefix)) != 0) {
-		return false;
-	}
-	for (size_t i = strlen(prefix); sysname[i] != '\0'; i++) {
-		if (sysname[i] < '0' || sysname[i] > '9') {
-			return false;
-		}
-	}
-	return true;
-}
-
 static void read_udev_change_event(struct wlr_device_change_event *event,
 		struct udev_device *udev_dev) {
 	const char *hotplug = udev_device_get_property_value(udev_dev, "HOTPLUG");

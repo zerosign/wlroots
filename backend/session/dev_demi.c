@@ -18,21 +18,6 @@
 #include "backend/session/dev_demi.h"
 #include "util/signal.h"
 
-static bool is_drm_card(const char *devname) {
-	const char prefix[] = DRM_PRIMARY_MINOR_NAME;
-	const char *name = strrchr(devname);
-	name = name ? name + 1 : devname;
-	if (strncmp(name, prefix, strlen(prefix)) != 0) {
-		return false;
-	}
-	for (size_t i = strlen(prefix); name[i] != '\0'; i++) {
-		if (name[i] < '0' || name[i] > '9') {
-			return false;
-		}
-	}
-	return true;
-}
-
 static int handle_event(int fd, uint32_t mask, void *data) {
 	struct wlr_session *session = data;
 
