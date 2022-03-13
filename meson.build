@@ -93,6 +93,7 @@ features = {
 	'gles2-renderer': false,
 	'vulkan-renderer': false,
 	'udev': false,
+	'demi': false,
 }
 internal_features = {
 	'xcb-errors': false,

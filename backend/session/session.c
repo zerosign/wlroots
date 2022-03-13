@@ -145,7 +145,7 @@ struct wlr_session *wlr_session_create(struct wl_display *disp) {
 		goto error_open;
 	}
 
-#if WLR_HAS_UDEV
+#if WLR_HAS_UDEV || WLR_HAS_DEMI
 	if (dev_init(session, disp) == -1) {
 		wlr_log(WLR_ERROR, "Failed to initialize dev backend");
 		goto error_session;
@@ -159,7 +159,7 @@ struct wlr_session *wlr_session_create(struct wl_display *disp) {
 
 	return session;
 
-#if WLR_HAS_UDEV
+#if WLR_HAS_UDEV || WLR_HAS_DEMI
 error_session:
 	libseat_session_finish(session);
 #endif
@@ -176,7 +176,7 @@ void wlr_session_destroy(struct wlr_session *session) {
 	wlr_signal_emit_safe(&session->events.destroy, session);
 	wl_list_remove(&session->display_destroy.link);
 
-#if WLR_HAS_UDEV
+#if WLR_HAS_UDEV || WLR_HAS_DEMI
 	dev_finish(session);
 #endif
 

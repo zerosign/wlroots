@@ -96,6 +96,8 @@ static bool backend_start(struct wlr_backend *wlr_backend) {
 #if WLR_HAS_UDEV
 	backend->libinput_context = libinput_udev_create_context(&libinput_impl,
 		backend, backend->session->dev->udev);
+#elif WLR_HAS_DEMI
+	backend->libinput_context = libinput_create_context(&libinput_impl, backend);
 #elif defined(__linux__)
 	backend->libinput_context = libinput_netlink_create_context(&libinput_impl,
 		backend, NETLINK_BITMASK);
@@ -110,6 +112,8 @@ static bool backend_start(struct wlr_backend *wlr_backend) {
 #if WLR_HAS_UDEV
 	if (libinput_udev_assign_seat(backend->libinput_context,
 			backend->session->seat) != 0) {
+#elif WLR_HAS_DEMI
+	if (libinput_assign_seat(backend->libinput_context, backend->session->seat) != 0) {
 #elif defined(__linux__)
 	if (libinput_netlink_assign_seat(backend->libinput_context,
 			backend->session->seat) != 0) {
