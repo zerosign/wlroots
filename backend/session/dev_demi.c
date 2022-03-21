@@ -59,16 +59,18 @@ static int handle_event(int fd, uint32_t mask, void *data) {
 		wlr_signal_emit_safe(&session->events.add_drm_card, &event);
 	} else if (event_type == DEMI_CHANGE || event_type == DEMI_DETACH) {
 		struct stat st;
-		// FIXME stat will fail on DEMI_DETACH
-		if (stat(devnode, &st) == -1) {
-			// FIXME fallback to comparing devnode
-			return 1;
-		}
+		bool has_devnum = stat(devnode, &st) == 0;
 
 		struct wlr_device *dev;
 		wl_list_for_each(dev, &session->devices, link) {
-			if (dev->dev != st.st_rdev) {
-				continue;
+			if (has_devnum) {
+				if (dev->dev != st.st_rdev) {
+					continue;
+				}
+			} else {
+				if (strcmp(dev->devnode, devnode) != 0) {
+					continue;
+				}
 			}
 
 			if (event_type == DEMI_CHANGE) {
