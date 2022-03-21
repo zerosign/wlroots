@@ -12,6 +12,7 @@ struct wlr_device {
 	int fd;
 	int device_id;
 	dev_t dev;
+	char *devnode;
 	struct wl_list link;
 
 	struct {

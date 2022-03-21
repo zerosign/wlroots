@@ -210,6 +210,12 @@ struct wlr_device *wlr_session_open_file(struct wlr_session *session,
 		goto error;
 	}
 
+	dev->devnode = strdup(path);
+	if (!dev->devnode) {
+		wlr_log_errno(WLR_ERROR, "Allocation failed");
+		goto error;
+	}
+
 	dev->fd = fd;
 	dev->dev = st.st_rdev;
 	dev->device_id = device_id;
@@ -233,6 +239,7 @@ void wlr_session_close_file(struct wlr_session *session,
 	}
 	close(dev->fd);
 	wl_list_remove(&dev->link);
+	free(dev->devnode);
 	free(dev);
 }
 
