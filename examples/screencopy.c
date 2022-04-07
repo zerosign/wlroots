@@ -126,7 +126,7 @@ static void commit_buffer(struct zext_screencopy_surface_v1 *surface) {
 			buffer.height);
 
 	zext_screencopy_surface_v1_commit(surface,
-			ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_IMMEDIATE);
+			ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_SCHEDULE_FRAME);
 }
 
 static void surface_handle_buffer_info(void *data,

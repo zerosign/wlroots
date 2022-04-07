@@ -44,7 +44,6 @@
     </description>
 
     <enum name="options" bitfield="true">
-      <entry name="none" value="0"/>
       <entry name="render_cursors" value="1"/>
     </enum>
 
@@ -96,8 +95,7 @@
     </enum>
 
     <enum name="options" bitfield="true">
-      <entry name="none" value="0"/>
-      <entry name="immediate" value="1"/>
+      <entry name="schedule_frame" value="1"/>
     </enum>
 
     <enum name="buffer_type">
@@ -198,8 +196,8 @@
         The frame will be copied to the surface on next output commit. A ready
         event is generated when the buffer is ready.
 
-        If the "immediate" flag is set, the compositor must present a frame to
-        the client as soon as possible.
+        If the "schedule_frame" flag is set, the compositor must schedule a new
+        frame to be committed.
       </description>
       <arg name="options" type="uint" enum="options"/>
     </request>
@@ -296,8 +294,7 @@
         each component being an unsigned 32-bit value. Whole seconds are in
         tv_sec which is a 64-bit value combined from tv_sec_hi and tv_sec_lo,
         and the additional fractional part in tv_nsec as nanoseconds. Hence,
-        for valid timestamps tv_nsec must be in [0, 999999999]. The seconds part
-        may have an arbitrary offset at start.
+        for valid timestamps tv_nsec must be in [0, 999999999].
       </description>
       <arg name="tv_sec_hi" type="uint"
            summary="high 32 bits of the seconds part of the timestamp"/>
