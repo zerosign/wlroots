@@ -106,8 +106,7 @@ static void dmabuf_created(void *data,
 	zext_screencopy_surface_v1_attach_buffer(surface, buffer.wl_buffer);
 	zext_screencopy_surface_v1_damage_buffer(surface, 0, 0, buffer.width,
 			buffer.height);
-	zext_screencopy_surface_v1_commit(surface,
-			ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_SCHEDULE_FRAME);
+	zext_screencopy_surface_v1_commit(surface, 0);
 }
 
 static void dmabuf_failed(void *data,

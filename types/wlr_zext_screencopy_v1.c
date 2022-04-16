@@ -284,7 +284,7 @@ static void surface_commit(struct wl_client *client,
 			&surface->staged_cursor_buffer.damage);
 	pixman_region32_clear(&surface->staged_cursor_buffer.damage);
 
-	if (options & ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_SCHEDULE_FRAME ||
+	if (!(options & ZEXT_SCREENCOPY_SURFACE_V1_OPTIONS_ON_DAMAGE) ||
 			pixman_region32_not_empty(&surface->frame_damage) ||
 			pixman_region32_not_empty(&surface->cursor_damage)) {
 		wlr_output_schedule_frame(output);

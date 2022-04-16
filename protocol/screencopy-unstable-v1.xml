@@ -95,7 +95,7 @@
     </enum>
 
     <enum name="options" bitfield="true">
-      <entry name="schedule_frame" value="1"/>
+      <entry name="on_damage" value="1"/>
     </enum>
 
     <enum name="buffer_type">
@@ -196,8 +196,8 @@
         The frame will be copied to the surface on next output commit. A ready
         event is generated when the buffer is ready.
 
-        If the "schedule_frame" flag is set, the compositor must schedule a new
-        frame to be committed.
+        If the "on_damage" flag is set, the compositor should skip sending new
+        frames to the client until there is damage.
       </description>
       <arg name="options" type="uint" enum="options"/>
     </request>
@@ -280,7 +280,7 @@
       <description summary="commit failed">
         This event indicates that the attempted frame copy has failed.
 
-        After receiving this event, the client should destroy the object.
+        After receiving this event, the client must destroy the object.
       </description>
       <arg name="reason" type="uint" enum="failure_reason"/>
     </event>
