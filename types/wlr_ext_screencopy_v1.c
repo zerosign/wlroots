@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <drm_fourcc.h>
 #include <limits.h>
+#include <string.h>
 
 #include "ext-screencopy-v1-protocol.h"
 
@@ -182,7 +183,12 @@ static void surface_attach_cursor_buffer(struct wl_client *client,
 		return;
 	}
 
-	// TODO: Do something with "seat_name"
+	// TODO: Support more seats
+	if (strcmp(seat_name, "default") != 0) {
+		ext_screencopy_surface_v1_send_failed(surface->resource,
+				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_SEAT);
+		return;
+	}
 
 	if (surface->staged_cursor_buffer.resource) {
 		wl_list_remove(&surface->staged_cursor_buffer.destroy.link);
@@ -218,7 +224,12 @@ static void surface_damage_cursor_buffer(struct wl_client *client,
 		return;
 	}
 
-	// TODO: Do something with "seat_name"
+	// TODO: Support more seats
+	if (strcmp(seat_name, "default") != 0) {
+		ext_screencopy_surface_v1_send_failed(surface->resource,
+				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_SEAT);
+		return;
+	}
 
 	pixman_region32_union_rect(&surface->staged_cursor_buffer.damage,
 			&surface->staged_cursor_buffer.damage, 0, 0,
