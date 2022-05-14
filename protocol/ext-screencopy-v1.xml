@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<protocol name="screencopy_unstable_v1">
+<protocol name="ext_screencopy_v1">
   <copyright>
     Copyright © 2021-2022 Andri Yngvason
 
@@ -37,7 +37,7 @@
     interface version number is reset.
   </description>
 
-  <interface name="zext_screencopy_manager_v1" version="1">
+  <interface name="ext_screencopy_manager_v1" version="1">
     <description summary="manager to inform clients and begin capturing">
       This object is a manager which offers requests to start capturing from a
       source.
@@ -55,13 +55,13 @@
         the main surface. Otherwise, the compositor should try to leave them
         out, if possible.
       </description>
-      <arg name="surface" type="new_id" interface="zext_screencopy_surface_v1"/>
+      <arg name="surface" type="new_id" interface="ext_screencopy_surface_v1"/>
       <arg name="output" type="object" interface="wl_output"/>
       <arg name="options" type="uint" enum="options"/>
     </request>
   </interface>
 
-  <interface name="zext_screencopy_surface_v1" version="1">
+  <interface name="ext_screencopy_surface_v1" version="1">
     <description summary="a frame ready for copy">
       This object represents a surface that's being captured.
 

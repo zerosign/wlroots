@@ -6,8 +6,8 @@
 #error "Add -DWLR_USE_UNSTABLE to enable unstable wlroots features"
 #endif
 
-#ifndef WLR_TYPES_WLR_ZEXT_SCREENCOPY_V1_H
-#define WLR_TYPES_WLR_ZEXT_SCREENCOPY_V1_H
+#ifndef WLR_TYPES_WLR_EXT_SCREENCOPY_V1_H
+#define WLR_TYPES_WLR_EXT_SCREENCOPY_V1_H
 
 #include <wayland-server-core.h>
 #include <pixman.h>
@@ -15,7 +15,7 @@
 
 struct wlr_buffer;
 
-struct wlr_zext_screencopy_manager_v1 {
+struct wlr_ext_screencopy_manager_v1 {
 	struct wl_global *global;
 
 	struct wl_listener display_destroy;
@@ -27,21 +27,21 @@ struct wlr_zext_screencopy_manager_v1 {
 	void *data;
 };
 
-enum wlr_zext_screencopy_surface_v1_state {
-	WLR_ZEXT_SCREENCOPY_SURFACE_V1_STATE_WAITING_FOR_BUFFER_FORMATS = 0,
-	WLR_ZEXT_SCREENCOPY_SURFACE_V1_STATE_READY,
+enum wlr_ext_screencopy_surface_v1_state {
+	WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_WAITING_FOR_BUFFER_FORMATS = 0,
+	WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_READY,
 };
 
-struct wlr_zext_screencopy_surface_v1_buffer {
+struct wlr_ext_screencopy_surface_v1_buffer {
 	struct wl_resource *resource;
 	struct pixman_region32 damage;
 	struct wl_listener destroy;
 };
 
-struct wlr_zext_screencopy_surface_v1 {
+struct wlr_ext_screencopy_surface_v1 {
 	struct wl_resource *resource;
 
-	enum wlr_zext_screencopy_surface_v1_state state;
+	enum wlr_ext_screencopy_surface_v1_state state;
 
 	struct wlr_buffer *buffer;
 
@@ -63,11 +63,11 @@ struct wlr_zext_screencopy_surface_v1 {
 
 	uint32_t surface_options;
 
-	struct wlr_zext_screencopy_surface_v1_buffer staged_buffer;
-	struct wlr_zext_screencopy_surface_v1_buffer current_buffer;
+	struct wlr_ext_screencopy_surface_v1_buffer staged_buffer;
+	struct wlr_ext_screencopy_surface_v1_buffer current_buffer;
 
-	struct wlr_zext_screencopy_surface_v1_buffer staged_cursor_buffer;
-	struct wlr_zext_screencopy_surface_v1_buffer current_cursor_buffer;
+	struct wlr_ext_screencopy_surface_v1_buffer staged_cursor_buffer;
+	struct wlr_ext_screencopy_surface_v1_buffer current_cursor_buffer;
 
 	bool committed;
 
@@ -86,7 +86,7 @@ struct wlr_zext_screencopy_surface_v1 {
 	void *data;
 };
 
-struct wlr_zext_screencopy_manager_v1 *wlr_zext_screencopy_manager_v1_create(
+struct wlr_ext_screencopy_manager_v1 *wlr_ext_screencopy_manager_v1_create(
 		struct wl_display *display);
 
 #endif

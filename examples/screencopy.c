@@ -38,7 +38,7 @@
 #include <assert.h>
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client-protocol.h>
-#include "screencopy-unstable-v1-client-protocol.h"
+#include "ext-screencopy-v1-client-protocol.h"
 
 struct format {
 	enum wl_shm_format wl_format;
@@ -46,7 +46,7 @@ struct format {
 };
 
 static struct wl_shm *shm = NULL;
-static struct zext_screencopy_manager_v1 *screencopy_manager = NULL;
+static struct ext_screencopy_manager_v1 *screencopy_manager = NULL;
 static struct wl_output *output = NULL;
 
 static struct {
@@ -115,25 +115,25 @@ static struct wl_buffer *create_shm_buffer(enum wl_shm_format fmt,
 	return buffer;
 }
 
-static void commit_buffer(struct zext_screencopy_surface_v1 *surface) {
+static void commit_buffer(struct ext_screencopy_surface_v1 *surface) {
 	if (buffer.wl_buffer == NULL) {
 		fprintf(stderr, "no supported buffer format reported\n");
 		exit(EXIT_FAILURE);
 	}
 
-	zext_screencopy_surface_v1_attach_buffer(surface, buffer.wl_buffer);
-	zext_screencopy_surface_v1_damage_buffer(surface, 0, 0, buffer.width,
+	ext_screencopy_surface_v1_attach_buffer(surface, buffer.wl_buffer);
+	ext_screencopy_surface_v1_damage_buffer(surface, 0, 0, buffer.width,
 			buffer.height);
 
-	zext_screencopy_surface_v1_commit(surface, 0);
+	ext_screencopy_surface_v1_commit(surface, 0);
 }
 
 static void surface_handle_buffer_info(void *data,
-		struct zext_screencopy_surface_v1 *surface,
-		enum zext_screencopy_surface_v1_buffer_type type,
+		struct ext_screencopy_surface_v1 *surface,
+		enum ext_screencopy_surface_v1_buffer_type type,
 		uint32_t format, uint32_t width, uint32_t height,
 		uint32_t stride) {
-	if (type != ZEXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_WL_SHM) {
+	if (type != EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_WL_SHM) {
 		return;
 	}
 
@@ -153,20 +153,20 @@ static void surface_handle_buffer_info(void *data,
 }
 
 static void surface_handle_cursor_buffer_info(void *data,
-		struct zext_screencopy_surface_v1 *surface, const char *name,
-		enum zext_screencopy_surface_v1_buffer_type type,
+		struct ext_screencopy_surface_v1 *surface, const char *name,
+		enum ext_screencopy_surface_v1_buffer_type type,
 		uint32_t format, uint32_t width, uint32_t height,
 		uint32_t stride) {
 }
 
 static void surface_handle_init_done(void *data,
-		struct zext_screencopy_surface_v1 *surface) {
+		struct ext_screencopy_surface_v1 *surface) {
 	commit_buffer(surface);
 	return;
 }
 
 static void surface_handle_transform(void *data,
-		struct zext_screencopy_surface_v1 *surface,
+		struct ext_screencopy_surface_v1 *surface,
 		int32_t transform) {
 	if (transform == WL_OUTPUT_TRANSFORM_FLIPPED_180) {
 		buffer.y_invert = true;
@@ -174,34 +174,34 @@ static void surface_handle_transform(void *data,
 }
 
 static void surface_handle_ready(void *data,
-		struct zext_screencopy_surface_v1 *surface) {
+		struct ext_screencopy_surface_v1 *surface) {
 	buffer_copy_done = true;
 }
 
 static void surface_handle_failed(void *data,
-		struct zext_screencopy_surface_v1 *surface,
-		enum zext_screencopy_surface_v1_failure_reason reason) {
+		struct ext_screencopy_surface_v1 *surface,
+		enum ext_screencopy_surface_v1_failure_reason reason) {
 	fprintf(stderr, "failed to copy frame\n");
 	exit(EXIT_FAILURE);
 }
 
 static void surface_handle_damage(void *data,
-		struct zext_screencopy_surface_v1 *surface,
+		struct ext_screencopy_surface_v1 *surface,
 		uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
 }
 
 static void surface_handle_cursor_info(void *data,
-		struct zext_screencopy_surface_v1 *surface, const char *name,
+		struct ext_screencopy_surface_v1 *surface, const char *name,
 		int has_damage, int32_t pos_x, int32_t pos_y, int32_t width,
 		int32_t height, int32_t hotspot_x, int32_t hotspot_y) {
 }
 
 static void surface_handle_commit_time(void *data,
-		struct zext_screencopy_surface_v1 *surface,
+		struct ext_screencopy_surface_v1 *surface,
 		uint32_t sec_hi, uint32_t sec_lo, uint32_t nsec) {
 }
 
-static const struct zext_screencopy_surface_v1_listener frame_listener = {
+static const struct ext_screencopy_surface_v1_listener frame_listener = {
 	.buffer_info = surface_handle_buffer_info,
 	.cursor_buffer_info = surface_handle_cursor_buffer_info,
 	.init_done = surface_handle_init_done,
@@ -220,9 +220,9 @@ static void handle_global(void *data, struct wl_registry *registry,
 	} else if (strcmp(interface, wl_shm_interface.name) == 0) {
 		shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
 	} else if (strcmp(interface,
-			zext_screencopy_manager_v1_interface.name) == 0) {
+			ext_screencopy_manager_v1_interface.name) == 0) {
 		screencopy_manager = wl_registry_bind(registry, name,
-			&zext_screencopy_manager_v1_interface, 1);
+			&ext_screencopy_manager_v1_interface, 1);
 	}
 }
 
@@ -305,7 +305,7 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	if (screencopy_manager == NULL) {
-		fprintf(stderr, "compositor doesn't support wlr-screencopy-unstable-v1\n");
+		fprintf(stderr, "compositor doesn't support ext-screencopy-v1\n");
 		return EXIT_FAILURE;
 	}
 	if (output == NULL) {
@@ -313,11 +313,11 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	struct zext_screencopy_surface_v1 *surface =
-		zext_screencopy_manager_v1_capture_output(screencopy_manager,
+	struct ext_screencopy_surface_v1 *surface =
+		ext_screencopy_manager_v1_capture_output(screencopy_manager,
 				output,
-				ZEXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS);
-	zext_screencopy_surface_v1_add_listener(surface, &frame_listener, NULL);
+				EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS);
+	ext_screencopy_surface_v1_add_listener(surface, &frame_listener, NULL);
 
 	while (!buffer_copy_done && wl_display_dispatch(display) != -1) {
 		// This space is intentionally left blank

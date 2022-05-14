@@ -138,13 +138,13 @@ clients = {
 	'screencopy': {
 		'src': 'screencopy.c',
 		'dep': [libpng, rt],
-		'proto': ['screencopy-unstable-v1'],
+		'proto': ['ext-screencopy-v1'],
 	},
 	'screencopy-dmabuf': {
 		'src': 'screencopy-dmabuf.c',
 		'dep': [libpng, rt, gbm, drm],
 		'proto': [
-			'screencopy-unstable-v1',
+			'ext-screencopy-v1',
 			'linux-dmabuf-unstable-v1',
 		],
 	},
