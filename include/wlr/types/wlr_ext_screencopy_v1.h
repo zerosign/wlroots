@@ -9,6 +9,8 @@
 #ifndef WLR_TYPES_WLR_EXT_SCREENCOPY_V1_H
 #define WLR_TYPES_WLR_EXT_SCREENCOPY_V1_H
 
+#include <wlr/util/box.h>
+
 #include <wayland-server-core.h>
 #include <pixman.h>
 #include <stdbool.h>
@@ -57,9 +59,7 @@ struct wlr_ext_screencopy_surface_v1 {
 	int cursor_height;
 	bool have_cursor;
 
-	struct {
-		int x, y, width, height, hotspot_x, hotspot_y;
-	} last_cursor;
+        struct wlr_box last_cursor_box;
 
 	uint32_t surface_options;
 

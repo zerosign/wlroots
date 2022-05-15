@@ -7,6 +7,7 @@
 #include <wlr/render/interface.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+#include <wlr/util/region.h>
 
 #include "util/signal.h"
 #include "render/wlr_renderer.h"
@@ -553,7 +554,25 @@ static void surface_send_transform(struct wlr_ext_screencopy_surface_v1 *surface
 	ext_screencopy_surface_v1_send_transform(surface->resource, transform);
 }
 
-// TODO: Handle output transforms and such?
+static void get_cursor_buffer_coordinates(struct wlr_box *box,
+		const struct wlr_output_cursor *cursor,
+		struct wlr_output *output) {
+	memset(box, 0, sizeof(*box));
+
+	box->x = cursor->x;
+	box->y = cursor->y;
+
+	int width, height;
+	wlr_output_transformed_resolution(output, &width, &height);
+
+	enum wl_output_transform transform =
+		wlr_output_transform_invert(output->transform);
+	wlr_box_transform(box, box, transform, width, height);
+
+	box->x -= cursor->hotspot_x;
+	box->y -= cursor->hotspot_y;
+}
+
 static bool surface_composite_cursor_buffer(
 		struct wlr_ext_screencopy_surface_v1 *surface,
 		struct wlr_buffer *buffer, void *data, uint32_t drm_format,
@@ -599,12 +618,15 @@ static bool surface_composite_cursor_buffer(
 		goto fail;
 	}
 
+	struct wlr_box cursor_box;
+	get_cursor_buffer_coordinates(&cursor_box, cursor, output);
+
 	pixman_image_composite32(PIXMAN_OP_OVER, src_image, NULL, dst_image,
 			0, 0, // src x,y
 			0, 0, // mask x,y
-			(int)cursor->x - cursor->hotspot_x, // dst x
-			(int)cursor->y - cursor->hotspot_y, // dst y
-			cursor->width, cursor->height);
+			cursor_box.x, // dst x
+			cursor_box.y, // dst y
+			cursor_buffer->width, cursor_buffer->height);
 
 fail:
 	pixman_image_unref(src_image);
@@ -736,14 +758,11 @@ static bool blit_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 
 	if (cursor_buffer) {
 		struct wlr_output_cursor *cursor = output->hardware_cursor;
+		struct wlr_box cursor_box;
 
-		// TODO: Transforms, scaling, and more
-		struct wlr_box cursor_box = {
-			.x = (int)cursor->x - cursor->hotspot_x,
-			.y = (int)cursor->y - cursor->hotspot_y,
-			.width = cursor_buffer->width,
-			.height = cursor_buffer->height,
-		};
+		get_cursor_buffer_coordinates(&cursor_box, cursor, output);
+		cursor_box.width = cursor_buffer->width;
+		cursor_box.height = cursor_buffer->height;
 
 		float identity_matrix[9];
 		wlr_matrix_identity(identity_matrix);
@@ -751,7 +770,6 @@ static bool blit_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		float cursor_matrix[9];
 		wlr_matrix_project_box(cursor_matrix, &cursor_box,
 				WL_OUTPUT_TRANSFORM_NORMAL, 0, identity_matrix);
-
 
 		wlr_render_texture_with_matrix(renderer, cursor_tex,
 				cursor_matrix, 1.0);
@@ -981,21 +999,32 @@ static void surface_handle_output_commit(struct wl_listener *listener,
 	}
 }
 
-static void surface_save_cursor_coords(
+static void surface_add_cursor_damage(
 		struct wlr_ext_screencopy_surface_v1 *surface)
 {
 	struct wlr_output *output = surface->output;
 	struct wlr_output_cursor *cursor = output->hardware_cursor;
-	if (!cursor) {
-		return;
+
+	struct wlr_box box = { 0 };
+	if (cursor) {
+		get_cursor_buffer_coordinates(&box, cursor, output);
+		box.width = cursor->width;
+		box.height = cursor->height;
 	}
 
-	surface->last_cursor.x = cursor->x;
-	surface->last_cursor.y = cursor->y;
-	surface->last_cursor.width = cursor->width;
-	surface->last_cursor.height = cursor->height;
-	surface->last_cursor.hotspot_x = cursor->hotspot_x;
-	surface->last_cursor.hotspot_y = cursor->hotspot_y;
+	if (surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS) {
+		const struct wlr_box *last = &surface->last_cursor_box;
+
+		struct pixman_region32 *region = &surface->frame_damage;
+		pixman_region32_init_rect(region, box.x, box.y, box.width,
+				box.height);
+		pixman_region32_union_rect(region, region, last->x, last->y,
+				last->width, last->height);
+		pixman_region32_intersect_rect(region, region, 0, 0,
+			output->width, output->height);
+	}
+
+	surface->last_cursor_box = box;
 }
 
 static void surface_handle_output_set_cursor(struct wl_listener *listener,
@@ -1007,40 +1036,16 @@ static void surface_handle_output_set_cursor(struct wl_listener *listener,
 			&surface->cursor_damage, 0, 0,
 			surface->cursor_width, surface->cursor_height);
 
+	surface_add_cursor_damage(surface);
 	wlr_output_schedule_frame(surface->output);
-
-	surface_save_cursor_coords(surface);
 }
 
 static void surface_handle_output_move_cursor(struct wl_listener *listener,
 		void *data) {
 	struct wlr_ext_screencopy_surface_v1 *surface =
 		wl_container_of(listener, surface, output_move_cursor);
-	struct wlr_output *output = surface->output;
-	struct wlr_output_cursor *cursor = output->hardware_cursor;
 
-	if ((surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS)
-			&& cursor) {
-		struct pixman_region32 *region = &surface->frame_damage;
-
-		int x = (int)cursor->x - cursor->hotspot_x;
-		int y = (int)cursor->y - cursor->hotspot_y;
-		int last_x = (int)surface->last_cursor.x
-			- surface->last_cursor.hotspot_x;
-		int last_y = (int)surface->last_cursor.y
-			- surface->last_cursor.hotspot_y;
-
-		pixman_region32_union_rect(region, region, x, y, cursor->width,
-				cursor->height);
-		pixman_region32_union_rect(region, region, last_x, last_y,
-				surface->last_cursor.width,
-				surface->last_cursor.height);
-		pixman_region32_intersect_rect(region, region, 0, 0,
-			output->width, output->height);
-	}
-
-	surface_save_cursor_coords(surface);
-
+	surface_add_cursor_damage(surface);
 	wlr_output_schedule_frame(surface->output);
 }
 
