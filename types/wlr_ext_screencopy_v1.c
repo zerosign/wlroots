@@ -723,77 +723,45 @@ static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
 	return ok;
 }
 
-static bool blit_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
-		struct wlr_buffer *dst_buffer, struct wlr_buffer *src_buffer,
-		struct wlr_buffer *cursor_buffer, struct wlr_box *clip_box) {
-	struct wlr_output *output = surface->output;
-	struct wlr_renderer *renderer = output->renderer;
-
-	struct wlr_texture *src_tex =
-		wlr_texture_from_buffer(renderer, src_buffer);
-	if (!src_tex) {
+static bool blit_dmabuf(struct wlr_renderer *renderer,
+		struct wlr_buffer *buffer, int x, int y,
+		struct wlr_box *clip_box, bool clear) {
+	struct wlr_texture *tex = wlr_texture_from_buffer(renderer, buffer);
+	if (!tex) {
 		return false;
 	}
 
-	struct wlr_texture *cursor_tex = NULL;
-	if (cursor_buffer) {
-		cursor_tex = wlr_texture_from_buffer(renderer, cursor_buffer);
-		if (!cursor_tex) {
-			return false;
-		}
-	}
+	struct wlr_box box = {
+		.x = x,
+		.y = y,
+		.width = buffer->width,
+		.height = buffer->height,
+	};
 
-	if (!wlr_renderer_begin_with_buffer(renderer, dst_buffer)) {
-		goto error_renderer_begin;
-	}
+	float id[9];
+	wlr_matrix_identity(id);
 
-	float main_matrix[9];
-	wlr_matrix_identity(main_matrix);
-	wlr_matrix_translate(main_matrix, -1.0, 1.0);
-	wlr_matrix_scale(main_matrix, src_buffer->width, src_buffer->height);
+	float proj[9];
+	wlr_matrix_project_box(proj, &box, WL_OUTPUT_TRANSFORM_NORMAL, 0, id);
 
 	wlr_renderer_scissor(renderer, clip_box);
-	wlr_renderer_clear(renderer,  (float[]){ 0.0, 0.0, 0.0, 0.0 });
-	wlr_render_texture_with_matrix(renderer, src_tex, main_matrix, 1.0f);
+	if (clear) {
+		wlr_renderer_clear(renderer,  (float[]){ 0.0, 0.0, 0.0, 0.0 });
+	}
+	wlr_render_texture_with_matrix(renderer, tex, proj, 1.0f);
 	wlr_renderer_scissor(renderer, NULL);
 
-	if (cursor_buffer) {
-		struct wlr_output_cursor *cursor = output->hardware_cursor;
-		struct wlr_box cursor_box;
-
-		get_cursor_buffer_coordinates(&cursor_box, cursor, output);
-		cursor_box.x -= cursor->hotspot_x;
-		cursor_box.y -= cursor->hotspot_y;
-		cursor_box.width = cursor_buffer->width;
-		cursor_box.height = cursor_buffer->height;
-
-		float identity_matrix[9];
-		wlr_matrix_identity(identity_matrix);
-
-		float cursor_matrix[9];
-		wlr_matrix_project_box(cursor_matrix, &cursor_box,
-				WL_OUTPUT_TRANSFORM_NORMAL, 0, identity_matrix);
-
-		wlr_render_texture_with_matrix(renderer, cursor_tex,
-				cursor_matrix, 1.0);
-	}
-
-	wlr_renderer_end(renderer);
-
-	wlr_texture_destroy(cursor_tex);
-	wlr_texture_destroy(src_tex);
+	wlr_texture_destroy(tex);
 	return true;
-
-error_renderer_begin:
-	wlr_texture_destroy(src_tex);
-	return false;
 }
 
 static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		struct wlr_buffer *dst_buffer, struct wlr_dmabuf_attributes *attr,
 		struct wlr_buffer *src_buffer, uint32_t format,
 		struct pixman_region32 *damage) {
+	bool r = false;
 	struct wlr_output *output = surface->output;
+	struct wlr_renderer *renderer = output->renderer;
 
 	if (dst_buffer->width < src_buffer->width ||
 			dst_buffer->height < src_buffer->height) {
@@ -812,16 +780,36 @@ static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		.height = extents->y2 - extents->y1,
 	};
 
+	if (!wlr_renderer_begin_with_buffer(renderer, dst_buffer)) {
+		return false;
+	}
+
+	if (!blit_dmabuf(renderer, src_buffer, 0, 0, &clip_box, true)) {
+		goto failure;
+	}
+
 	struct wlr_buffer *cursor_buffer =
 		surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS ?
 		output->cursor_front_buffer : NULL;
 
-	if (src_buffer == cursor_buffer) {
-		cursor_buffer = NULL;
+	if (cursor_buffer && src_buffer != cursor_buffer) {
+		struct wlr_output_cursor *cursor = output->hardware_cursor;
+		struct wlr_box box;
+
+		get_cursor_buffer_coordinates(&box, cursor, output);
+		box.x -= cursor->hotspot_x;
+		box.y -= cursor->hotspot_y;
+
+		if (!blit_dmabuf(renderer, cursor_buffer, box.x, box.y, NULL,
+					false)) {
+			goto failure;
+		}
 	}
 
-	return blit_dmabuf(surface, dst_buffer, src_buffer, cursor_buffer,
-			&clip_box);
+	r = true;
+failure:
+	wlr_renderer_end(renderer);
+	return r;
 }
 
 static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
