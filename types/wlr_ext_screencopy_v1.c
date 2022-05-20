@@ -572,6 +572,24 @@ static void surface_send_transform(struct wlr_ext_screencopy_surface_v1 *surface
 	ext_screencopy_surface_v1_send_transform(surface->resource, transform);
 }
 
+static void surface_add_cursor_damage(
+		struct wlr_ext_screencopy_surface_v1 *surface,
+		const struct wlr_box *box)
+{
+	struct wlr_output *output = surface->output;
+	const struct wlr_box *last = &surface->last_cursor_box;
+
+	struct pixman_region32 *region = &surface->frame_damage;
+	pixman_region32_union_rect(region, region, box->x, box->y,
+			box->width, box->height);
+	pixman_region32_union_rect(region, region, last->x, last->y,
+			last->width, last->height);
+	pixman_region32_intersect_rect(region, region, 0, 0,
+		output->width, output->height);
+
+	surface->last_cursor_box = *box;
+}
+
 static bool surface_composite_cursor_buffer(
 		struct wlr_ext_screencopy_surface_v1 *surface,
 		struct wlr_buffer *buffer, void *data, uint32_t drm_format,
@@ -621,6 +639,8 @@ static bool surface_composite_cursor_buffer(
 	get_cursor_buffer_coordinates(&cursor_box, cursor, output);
 	cursor_box.x -= cursor->hotspot_x;
 	cursor_box.y -= cursor->hotspot_y;
+	cursor_box.width = cursor_buffer->width;
+	cursor_box.height = cursor_buffer->height;
 
 	pixman_image_composite32(PIXMAN_OP_OVER, src_image, NULL, dst_image,
 			0, 0, // src x,y
@@ -629,6 +649,7 @@ static bool surface_composite_cursor_buffer(
 			cursor_box.y, // dst y
 			cursor_buffer->width, cursor_buffer->height);
 
+	surface_add_cursor_damage(surface, &cursor_box);
 fail:
 	pixman_image_unref(src_image);
 	free(scratch_buffer);
@@ -870,11 +891,15 @@ static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		get_cursor_buffer_coordinates(&box, cursor, output);
 		box.x -= cursor->hotspot_x;
 		box.y -= cursor->hotspot_y;
+		box.width = cursor_buffer->width;
+		box.height = cursor_buffer->height;
 
 		if (!blit_dmabuf(renderer, cursor_buffer, box.x, box.y, NULL,
 					false, transform)) {
 			goto failure;
 		}
+
+		surface_add_cursor_damage(surface, &box);
 	}
 
 	r = true;
@@ -1069,36 +1094,6 @@ static void surface_handle_output_commit(struct wl_listener *listener,
 	}
 }
 
-static void surface_add_cursor_damage(
-		struct wlr_ext_screencopy_surface_v1 *surface)
-{
-	struct wlr_output *output = surface->output;
-	struct wlr_output_cursor *cursor = output->hardware_cursor;
-
-	struct wlr_box box = { 0 };
-	if (cursor) {
-		get_cursor_buffer_coordinates(&box, cursor, output);
-		box.x -= cursor->hotspot_x;
-		box.y -= cursor->hotspot_y;
-		box.width = cursor->width;
-		box.height = cursor->height;
-	}
-
-	if (surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS) {
-		const struct wlr_box *last = &surface->last_cursor_box;
-
-		struct pixman_region32 *region = &surface->frame_damage;
-		pixman_region32_init_rect(region, box.x, box.y, box.width,
-				box.height);
-		pixman_region32_union_rect(region, region, last->x, last->y,
-				last->width, last->height);
-		pixman_region32_intersect_rect(region, region, 0, 0,
-			output->width, output->height);
-	}
-
-	surface->last_cursor_box = box;
-}
-
 static void surface_handle_output_set_cursor(struct wl_listener *listener,
 		void *data) {
 	struct wlr_ext_screencopy_surface_v1 *surface =
@@ -1108,7 +1103,6 @@ static void surface_handle_output_set_cursor(struct wl_listener *listener,
 			&surface->cursor_damage, 0, 0,
 			surface->cursor_width, surface->cursor_height);
 
-	surface_add_cursor_damage(surface);
 	wlr_output_schedule_frame(surface->output);
 }
 
@@ -1117,7 +1111,6 @@ static void surface_handle_output_move_cursor(struct wl_listener *listener,
 	struct wlr_ext_screencopy_surface_v1 *surface =
 		wl_container_of(listener, surface, output_move_cursor);
 
-	surface_add_cursor_damage(surface);
 	wlr_output_schedule_frame(surface->output);
 }
 
