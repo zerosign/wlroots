@@ -637,10 +637,53 @@ fail:
 	return ok;
 }
 
+static void transform_resolution(int *width, int *height,
+		enum wl_output_transform transform) {
+	if (transform % 2 != 0) {
+		int tmp = *width;
+		*width = *height;
+		*height = tmp;
+	}
+}
+
+static void output_transform_to_matrix(float mat[static 9],
+		enum wl_output_transform transform, int width, int height) {
+	wlr_matrix_identity(mat);
+
+	if (transform == WL_OUTPUT_TRANSFORM_NORMAL) {
+		return;
+	}
+
+	wlr_matrix_translate(mat, width / 2.0, height / 2.0);
+
+	wlr_matrix_transform(mat, transform);
+	transform_resolution(&width, &height, transform);
+
+	wlr_matrix_translate(mat, -width / 2.0, -height / 2.0);
+}
+
+// Copied from pixman renderer:
+static void matrix_to_pixman_transform(struct pixman_transform *transform,
+		const float mat[static 9]) {
+	struct pixman_f_transform ftr;
+	ftr.m[0][0] = mat[0];
+	ftr.m[0][1] = mat[1];
+	ftr.m[0][2] = mat[2];
+	ftr.m[1][0] = mat[3];
+	ftr.m[1][1] = mat[4];
+	ftr.m[1][2] = mat[5];
+	ftr.m[2][0] = mat[6];
+	ftr.m[2][1] = mat[7];
+	ftr.m[2][2] = mat[8];
+
+	pixman_transform_from_pixman_f_transform(transform, &ftr);
+}
+
 static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
 		struct wlr_buffer *dst_buffer, struct wlr_shm_attributes *attr,
 		struct wlr_buffer *src_buffer, uint32_t wl_shm_format,
-		struct pixman_region32 *damage) {
+		struct pixman_region32 *damage,
+		enum wl_output_transform transform) {
 	struct wlr_output *output = surface->output;
 	struct wlr_renderer *renderer = output->renderer;
 
@@ -675,7 +718,8 @@ static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
 	int32_t y_offset = extents->y1;
 	int32_t damage_height = extents->y2 - extents->y1;
 
-	bool use_scratch_buffer = dst_buffer->width != src_buffer->width;
+	bool use_scratch_buffer
+		= dst_buffer->width != src_buffer->width || transform;
 	if (use_scratch_buffer) {
 		stride = width * 4; // TODO: This assumes things
 		data = malloc(height * stride);
@@ -695,20 +739,44 @@ static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
 	//    add vertical flip to transform
 
 	if (use_scratch_buffer) {
-		memset(dst_data, 0, y_offset * dst_stride);
+		memset(dst_data, 0, dst_buffer->height * dst_stride);
 
-		for (size_t y = 0; y < (size_t)damage_height; ++y) {
-			memcpy(dst_data + (y + y_offset) * dst_stride,
-					data + (y + y_offset) * stride, stride);
-			memset(dst_data + (y + y_offset) * dst_stride + stride,
-					0, dst_stride - stride);
-		}
+		pixman_format_code_t px_format;
+		px_format = get_pixman_format_from_drm(format);
+		assert(px_format);
+
+		pixman_image_t *dst_image =
+			pixman_image_create_bits_no_clear(px_format,
+					dst_buffer->width, dst_buffer->height,
+					(uint32_t*)dst_data, dst_stride);
+		assert(dst_image);
+
+		pixman_image_t *src_image =
+			pixman_image_create_bits_no_clear(px_format,
+					src_buffer->width, src_buffer->height,
+					(uint32_t*)data, stride);
+		assert(src_image);
+
+		enum wl_output_transform transform_inv;
+		transform_inv = wlr_output_transform_invert(transform);
+
+		float matrix[9];
+		output_transform_to_matrix(matrix, transform_inv,
+				src_buffer->width, src_buffer->height);
+
+		pixman_transform_t pxform;
+		matrix_to_pixman_transform(&pxform, matrix);
+
+		pixman_image_set_transform(src_image, &pxform);
+
+		pixman_image_composite32(PIXMAN_OP_OVER, src_image, NULL,
+				dst_image,
+				0, 0, // src x,y
+				0, 0, // mask x,y
+				0, 0, // dst x,y
+				src_buffer->width, src_buffer->height);
+
 		free(data);
-
-		// Clear the rest of the destination buffer
-		// TODO: Only do this if the rest is marked damaged
-		memset(dst_data + damage_height * dst_stride, 0,
-				dst_stride * (dst_buffer->height - damage_height));
 	}
 
 	if (surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS
@@ -725,7 +793,8 @@ static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
 
 static bool blit_dmabuf(struct wlr_renderer *renderer,
 		struct wlr_buffer *buffer, int x, int y,
-		struct wlr_box *clip_box, bool clear) {
+		struct wlr_box *clip_box, bool clear,
+		enum wl_output_transform transform) {
 	struct wlr_texture *tex = wlr_texture_from_buffer(renderer, buffer);
 	if (!tex) {
 		return false;
@@ -742,7 +811,7 @@ static bool blit_dmabuf(struct wlr_renderer *renderer,
 	wlr_matrix_identity(id);
 
 	float proj[9];
-	wlr_matrix_project_box(proj, &box, WL_OUTPUT_TRANSFORM_NORMAL, 0, id);
+	wlr_matrix_project_box(proj, &box, transform, 0, id);
 
 	wlr_renderer_scissor(renderer, clip_box);
 	if (clear) {
@@ -758,7 +827,8 @@ static bool blit_dmabuf(struct wlr_renderer *renderer,
 static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		struct wlr_buffer *dst_buffer, struct wlr_dmabuf_attributes *attr,
 		struct wlr_buffer *src_buffer, uint32_t format,
-		struct pixman_region32 *damage) {
+		struct pixman_region32 *damage,
+		enum wl_output_transform transform) {
 	bool r = false;
 	struct wlr_output *output = surface->output;
 	struct wlr_renderer *renderer = output->renderer;
@@ -784,7 +854,8 @@ static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		return false;
 	}
 
-	if (!blit_dmabuf(renderer, src_buffer, 0, 0, &clip_box, true)) {
+	if (!blit_dmabuf(renderer, src_buffer, 0, 0, &clip_box, true,
+				transform)) {
 		goto failure;
 	}
 
@@ -801,7 +872,7 @@ static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 		box.y -= cursor->hotspot_y;
 
 		if (!blit_dmabuf(renderer, cursor_buffer, box.x, box.y, NULL,
-					false)) {
+					false, transform)) {
 			goto failure;
 		}
 	}
@@ -815,7 +886,8 @@ failure:
 static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
 		struct wlr_ext_screencopy_surface_v1_buffer *surface_buffer,
 		struct wlr_buffer *src_buffer, uint32_t wl_shm_format,
-		uint32_t dmabuf_format, struct pixman_region32 *damage) {
+		uint32_t dmabuf_format, struct pixman_region32 *damage,
+		enum wl_output_transform transform) {
 	if (!pixman_region32_not_empty(damage)) {
 		// Nothing to do here...
 		return true;
@@ -830,7 +902,8 @@ static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
 	struct wlr_shm_attributes shm_attr = { 0 };
 	if (wlr_buffer_get_shm(dst_buffer, &shm_attr)) {
 		if (!surface_copy_wl_shm(surface, dst_buffer, &shm_attr,
-					src_buffer, wl_shm_format, damage)) {
+					src_buffer, wl_shm_format, damage,
+					transform)) {
 			goto failure;
 		}
 	}
@@ -838,7 +911,8 @@ static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
 	struct wlr_dmabuf_attributes dmabuf_attr = { 0 };
 	if (wlr_buffer_get_dmabuf(dst_buffer, &dmabuf_attr)) {
 		if (!surface_copy_dmabuf(surface, dst_buffer, &dmabuf_attr,
-					src_buffer, dmabuf_format, damage)) {
+					src_buffer, dmabuf_format, damage,
+					transform)) {
 			goto failure;
 		}
 	}
@@ -917,7 +991,8 @@ static void surface_handle_output_commit_ready(
 
 		bool ok = surface_copy(surface, &surface->current_buffer,
 				event->buffer, surface->wl_shm_format,
-				surface->dmabuf_format, &damage);
+				surface->dmabuf_format, &damage,
+				WL_OUTPUT_TRANSFORM_NORMAL);
 		pixman_region32_fini(&damage);
 		if (!ok) {
 			goto failure;
@@ -931,10 +1006,14 @@ static void surface_handle_output_commit_ready(
 		pixman_region32_union(&damage, &surface->cursor_damage,
 				&surface->current_cursor_buffer.damage);
 
+		enum wl_output_transform transform;
+		transform = wlr_output_transform_invert(output->transform);
+
 		bool ok = surface_copy(surface, &surface->current_cursor_buffer,
 				output->cursor_front_buffer,
 				surface->cursor_wl_shm_format,
-				surface->cursor_dmabuf_format, &damage);
+				surface->cursor_dmabuf_format, &damage,
+				transform);
 		pixman_region32_fini(&damage);
 		if (!ok) {
 			goto failure;
