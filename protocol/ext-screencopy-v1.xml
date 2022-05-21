@@ -91,11 +91,16 @@
       <entry name="invalid_cursor_buffer" value="2"/>
       <entry name="output_missing" value="3"/>
       <entry name="output_disabled" value="4"/>
-      <entry name="unknown_seat" value="5"/>
+      <entry name="unknown_input" value="5"/>
     </enum>
 
     <enum name="options" bitfield="true">
       <entry name="on_damage" value="1"/>
+    </enum>
+
+    <enum name="input_type">
+      <entry name="pointer" value="0"/>
+      <entry name="tablet" value="1"/>
     </enum>
 
     <enum name="buffer_type">
@@ -122,7 +127,8 @@
       <description summary="cursor buffer information">
         Provides information about buffer parameters that need to be used for
         the cursor image. This event is sent for every supported buffer type
-        after the surface is created, and it may be different for each seat.
+        after the surface is created, and it may be different for each
+        seat/input_type pair.
 
         The default seat will be referred to as "default" within this protocol,
         whether it be named so by the compositor or not.
@@ -130,7 +136,8 @@
         The stride parameter is invalid for dmabuf and may be set to 0.
       </description>
       <arg name="seat_name" type="string" summary="seat name"/>
-      <arg name="type" type="uint" enum="buffer_type" summary="buffer type"/>
+      <arg name="input_type" type="uint" enum="input_type" summary="input type"/>
+      <arg name="buffer_type" type="uint" enum="buffer_type" summary="buffer type"/>
       <arg name="format" type="uint" summary="buffer drm format"/>
       <arg name="width" type="uint" summary="minimum buffer width"/>
       <arg name="height" type="uint" summary="minimum buffer height"/>
@@ -170,7 +177,8 @@
 
     <request name="attach_cursor_buffer">
       <description summary="attach cursor buffer to surface">
-        Attach a named cursor buffer to the surface.
+        Attach a cursor buffer to the surface. The cursor for the given seat and
+        input type will be copied to the buffer.
 
         The cursor buffer may exceed the dimensions specified in the
         "cursor_buffer_info" event. The cursor image will be drawn in the top,
@@ -178,6 +186,7 @@
       </description>
       <arg name="buffer" type="object" interface="wl_buffer"/>
       <arg name="seat_name" type="string"/>
+      <arg name="input_type" type="uint" enum="input_type"/>
     </request>
 
     <request name="damage_cursor_buffer">
@@ -187,6 +196,7 @@
         The whole cursor buffer will be considered damaged.
       </description>
       <arg name="seat_name" type="string"/>
+      <arg name="input_type" type="uint" enum="input_type"/>
     </request>
 
     <request name="commit">
@@ -213,6 +223,9 @@
       <description summary="carries the output transform">
         This event is sent before the ready event and holds the output transform
         of the source buffer.
+
+        Note: This only applies to the main buffer, not the cursor buffer. The
+        cursor buffer must always be sent without any rotation.
       </description>
       <arg name="transform" type="int" enum="wl_output.transform"/>
     </event>
@@ -240,6 +253,7 @@
         surface.
       </description>
       <arg name="seat_name" type="string" summary="seat name"/>
+      <arg name="input_type" type="uint" enum="input_type" summary="input type"/>
     </event>
 
     <event name="cursor_leave">
@@ -248,6 +262,7 @@
         is generated for for the given cursor.
       </description>
       <arg name="seat_name" type="string" summary="seat name"/>
+      <arg name="input_type" type="uint" enum="input_type" summary="input type"/>
     </event>
 
     <event name="cursor_info">
@@ -263,10 +278,14 @@
         updated and the "has_damage" argument will be set to 1; otherwise 0.
 
         The given position is the position of the cursor's hotspot and it is
-        relative to the main buffer's top left corner in buffer pixel
-        coordinates.
+        relative to the main buffer's top left corner in transformed buffer
+        pixel coordinates.
+
+        The hotspot coordinates are relative to the cursor buffers upper left
+        corner.
       </description>
       <arg name="seat_name" type="string" summary="seat name"/>
+      <arg name="input_type" type="uint" enum="input_type"/>
       <arg name="has_damage" type="int" summary="buffer has changes"/>
       <arg name="position_x" type="int" summary="position x coordinates"/>
       <arg name="position_y" type="int" summary="position y coordinates"/>

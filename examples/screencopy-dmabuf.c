@@ -172,6 +172,7 @@ static void surface_handle_buffer_info(void *data,
 
 static void surface_handle_cursor_buffer_info(void *data,
 		struct ext_screencopy_surface_v1 *surface, const char* name,
+		enum ext_screencopy_surface_v1_input_type input_type,
 		uint32_t type, uint32_t fourcc, uint32_t width, uint32_t height,
 		uint32_t stride) {
 }
@@ -187,8 +188,9 @@ static void surface_handle_damage(void *data,
 }
 
 static void surface_handle_cursor_info(void *data,
-		struct ext_screencopy_surface_v1 *surface,
-		const char *name, int damaged, int32_t pos_x, int32_t pos_y,
+		struct ext_screencopy_surface_v1 *surface, const char *name,
+		enum ext_screencopy_surface_v1_input_type input_type,
+		int damaged, int32_t pos_x, int32_t pos_y,
 		int32_t width, int32_t height, int32_t hotspot_x,
 		int32_t hotspot_y) {
 }

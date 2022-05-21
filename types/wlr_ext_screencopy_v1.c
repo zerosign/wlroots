@@ -177,17 +177,19 @@ static void surface_attach_buffer(struct wl_client *client,
 static void surface_attach_cursor_buffer(struct wl_client *client,
 		struct wl_resource *surface_resource,
 		struct wl_resource *buffer_resource,
-		const char *seat_name) {
+		const char *seat_name,
+		enum ext_screencopy_surface_v1_input_type input_type) {
 	struct wlr_ext_screencopy_surface_v1 *surface =
 		surface_from_resource(surface_resource);
 	if (!surface) {
 		return;
 	}
 
-	// TODO: Support more seats
-	if (strcmp(seat_name, "default") != 0) {
+	// TODO: Support more seat/input_type pairs
+	if (strcmp(seat_name, "default") != 0 ||
+			input_type != EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER) {
 		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_SEAT);
+				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_INPUT);
 		return;
 	}
 
@@ -218,7 +220,8 @@ static void surface_damage_buffer(struct wl_client *client,
 }
 
 static void surface_damage_cursor_buffer(struct wl_client *client,
-		struct wl_resource *surface_resource, const char *seat_name) {
+		struct wl_resource *surface_resource, const char *seat_name,
+		enum ext_screencopy_surface_v1_input_type input_type) {
 	struct wlr_ext_screencopy_surface_v1 *surface =
 		surface_from_resource(surface_resource);
 	if (!surface) {
@@ -226,9 +229,11 @@ static void surface_damage_cursor_buffer(struct wl_client *client,
 	}
 
 	// TODO: Support more seats
-	if (strcmp(seat_name, "default") != 0) {
+	// TODO: Support more seat/input_type pairs
+	if (strcmp(seat_name, "default") != 0 ||
+			input_type != EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER) {
 		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_SEAT);
+				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_INPUT);
 		return;
 	}
 
@@ -462,6 +467,7 @@ static void surface_advertise_cursor_formats(
 
 		ext_screencopy_surface_v1_send_cursor_buffer_info(
 				surface->resource, "default",
+				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER,
 				EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_WL_SHM,
 				surface->cursor_wl_shm_format,
 				buffer->width, buffer->height,
@@ -471,6 +477,7 @@ static void surface_advertise_cursor_formats(
 	if (surface->cursor_dmabuf_format != DRM_FORMAT_INVALID) {
 		ext_screencopy_surface_v1_send_cursor_buffer_info(
 				surface->resource, "default",
+				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER,
 				EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_DMABUF,
 				surface->cursor_dmabuf_format,
 				buffer->width, buffer->height, 0);
@@ -519,7 +526,8 @@ static void surface_advertise_buffer_formats(
 
 	if (surface_is_cursor_visible(surface)) {
 		ext_screencopy_surface_v1_send_cursor_enter(surface->resource,
-				"default");
+				"default",
+				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
 		surface->have_cursor = true;
 	}
 }
@@ -563,7 +571,8 @@ static void surface_send_cursor_info(
 	get_cursor_buffer_coordinates(&box, cursor, output);
 
 	ext_screencopy_surface_v1_send_cursor_info(surface->resource,
-			"default", have_damage, box.x, box.y, cursor->width,
+			"default", EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER,
+			have_damage, box.x, box.y, cursor->width,
 			cursor->height, cursor->hotspot_x, cursor->hotspot_y);
 }
 
@@ -1000,11 +1009,13 @@ static void surface_handle_output_commit_ready(
 
 	if (surface->have_cursor && !surface_is_cursor_visible(surface)) {
 		ext_screencopy_surface_v1_send_cursor_leave(surface->resource,
-				"default");
+				"default",
+				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
 		surface->have_cursor = false;
 	} else if (!surface->have_cursor && surface_is_cursor_visible(surface)) {
 		ext_screencopy_surface_v1_send_cursor_enter(surface->resource,
-				"default");
+				"default",
+				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
 		surface->have_cursor = true;
 	}
 
