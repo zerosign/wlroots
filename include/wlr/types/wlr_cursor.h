@@ -12,6 +12,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_touch.h>
 
 struct wlr_input_device;
 
@@ -32,6 +33,8 @@ struct wlr_cursor_state;
 struct wlr_cursor {
 	struct wlr_cursor_state *state;
 	double x, y;
+
+	struct wlr_touch touch;
 
 	/**
 	 * The interpretation of these signals is the responsibility of the
@@ -61,12 +64,6 @@ struct wlr_cursor {
 		struct wl_signal pinch_end;
 		struct wl_signal hold_begin;
 		struct wl_signal hold_end;
-
-		struct wl_signal touch_up;
-		struct wl_signal touch_down;
-		struct wl_signal touch_motion;
-		struct wl_signal touch_cancel;
-		struct wl_signal touch_frame;
 
 		struct wl_signal tablet_tool_axis;
 		struct wl_signal tablet_tool_proximity;

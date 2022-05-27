@@ -3,13 +3,13 @@
 #include <math.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
+#include <wlr/interfaces/wlr_touch.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_tablet_tool.h>
-#include <wlr/types/wlr_touch.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include "util/signal.h"
@@ -70,6 +70,10 @@ struct wlr_cursor_state {
 	struct wl_listener layout_destroy;
 };
 
+static const struct wlr_touch_impl touch_impl = {
+	.name = "wlr-cursor",
+};
+
 struct wlr_cursor *wlr_cursor_create(void) {
 	struct wlr_cursor *cur = calloc(1, sizeof(struct wlr_cursor));
 	if (!cur) {
@@ -90,6 +94,8 @@ struct wlr_cursor *wlr_cursor_create(void) {
 	wl_list_init(&cur->state->devices);
 	wl_list_init(&cur->state->output_cursors);
 
+	wlr_touch_init(&cur->touch, &touch_impl, "cursor");
+
 	// pointer signals
 	wl_signal_init(&cur->events.motion);
 	wl_signal_init(&cur->events.motion_absolute);
@@ -104,13 +110,6 @@ struct wlr_cursor *wlr_cursor_create(void) {
 	wl_signal_init(&cur->events.pinch_end);
 	wl_signal_init(&cur->events.hold_begin);
 	wl_signal_init(&cur->events.hold_end);
-
-	// touch signals
-	wl_signal_init(&cur->events.touch_up);
-	wl_signal_init(&cur->events.touch_down);
-	wl_signal_init(&cur->events.touch_motion);
-	wl_signal_init(&cur->events.touch_cancel);
-	wl_signal_init(&cur->events.touch_frame);
 
 	// tablet tool signals
 	wl_signal_init(&cur->events.tablet_tool_tip);
@@ -191,6 +190,8 @@ void wlr_cursor_destroy(struct wlr_cursor *cur) {
 	wl_list_for_each_safe(device, device_tmp, &cur->state->devices, link) {
 		cursor_device_destroy(device);
 	}
+
+	wlr_touch_finish(&cur->touch);
 
 	free(cur->state);
 	free(cur);
@@ -513,7 +514,7 @@ static void handle_touch_up(struct wl_listener *listener, void *data) {
 	struct wlr_touch_up_event *event = data;
 	struct wlr_cursor_device *device;
 	device = wl_container_of(listener, device, touch_up);
-	wlr_signal_emit_safe(&device->cursor->events.touch_up, event);
+	wlr_signal_emit_safe(&device->cursor->touch.events.up, event);
 }
 
 static void handle_touch_down(struct wl_listener *listener, void *data) {
@@ -526,7 +527,7 @@ static void handle_touch_down(struct wl_listener *listener, void *data) {
 	if (output) {
 		apply_output_transform(&event->x, &event->y, output->transform);
 	}
-	wlr_signal_emit_safe(&device->cursor->events.touch_down, event);
+	wlr_signal_emit_safe(&device->cursor->touch.events.down, event);
 }
 
 static void handle_touch_motion(struct wl_listener *listener, void *data) {
@@ -539,20 +540,20 @@ static void handle_touch_motion(struct wl_listener *listener, void *data) {
 	if (output) {
 		apply_output_transform(&event->x, &event->y, output->transform);
 	}
-	wlr_signal_emit_safe(&device->cursor->events.touch_motion, event);
+	wlr_signal_emit_safe(&device->cursor->touch.events.motion, event);
 }
 
 static void handle_touch_cancel(struct wl_listener *listener, void *data) {
 	struct wlr_touch_cancel_event *event = data;
 	struct wlr_cursor_device *device;
 	device = wl_container_of(listener, device, touch_cancel);
-	wlr_signal_emit_safe(&device->cursor->events.touch_cancel, event);
+	wlr_signal_emit_safe(&device->cursor->touch.events.cancel, event);
 }
 
 static void handle_touch_frame(struct wl_listener *listener, void *data) {
 	struct wlr_cursor_device *device =
 		wl_container_of(listener, device, touch_frame);
-	wlr_signal_emit_safe(&device->cursor->events.touch_frame, NULL);
+	wlr_signal_emit_safe(&device->cursor->touch.events.frame, NULL);
 }
 
 static void handle_tablet_tool_tip(struct wl_listener *listener, void *data) {
