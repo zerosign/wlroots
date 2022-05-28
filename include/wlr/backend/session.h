@@ -1,17 +1,18 @@
 #ifndef WLR_BACKEND_SESSION_H
 #define WLR_BACKEND_SESSION_H
 
-#include <libudev.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <wayland-server-core.h>
 
 struct libseat;
+struct dev;
 
 struct wlr_device {
 	int fd;
 	int device_id;
 	dev_t dev;
+	char *devnode;
 	struct wl_list link;
 
 	struct {
@@ -34,9 +35,7 @@ struct wlr_session {
 	unsigned vtnr;
 	char seat[256];
 
-	struct udev *udev;
-	struct udev_monitor *mon;
-	struct wl_event_source *udev_event;
+	struct dev *dev;
 
 	struct libseat *seat_handle;
 	struct wl_event_source *libseat_event;

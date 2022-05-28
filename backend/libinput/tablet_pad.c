@@ -5,8 +5,13 @@
 #include <stdlib.h>
 #include <wlr/interfaces/wlr_tablet_pad.h>
 #include <wlr/util/log.h>
+#include <wlr/config.h>
 #include "backend/libinput.h"
 #include "util/signal.h"
+
+#if WLR_HAS_UDEV
+#include <libudev.h>
+#endif
 
 const struct wlr_tablet_pad_impl libinput_tablet_pad_impl = {
 	.name = "libinput-tablet-pad",
@@ -106,9 +111,11 @@ void init_device_tablet_pad(struct wlr_libinput_input_device *dev) {
 	wlr_tablet_pad->strip_count =
 		libinput_device_tablet_pad_get_num_strips(handle);
 
+#if WLR_HAS_UDEV
 	struct udev_device *udev = libinput_device_get_udev_device(handle);
 	char **dst = wl_array_add(&wlr_tablet_pad->paths, sizeof(char *));
 	*dst = strdup(udev_device_get_syspath(udev));
+#endif
 
 	int groups = libinput_device_tablet_pad_get_num_mode_groups(handle);
 	for (int i = 0; i < groups; ++i) {
