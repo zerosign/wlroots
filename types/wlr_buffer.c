@@ -111,9 +111,6 @@ bool wlr_resource_is_buffer(struct wl_resource *resource) {
 
 static struct wlr_shm_client_buffer *shm_client_buffer_get_or_create(
 	struct wl_resource *resource);
-static bool buffer_is_shm_client_buffer(struct wlr_buffer *buffer);
-static struct wlr_shm_client_buffer *shm_client_buffer_from_buffer(
-	struct wlr_buffer *buffer);
 
 /* struct wlr_buffer_resource_interface */
 static struct wl_array buffer_resource_interfaces = {0};
@@ -217,11 +214,11 @@ bool buffer_is_opaque(struct wlr_buffer *buffer) {
 
 static const struct wlr_buffer_impl shm_client_buffer_impl;
 
-static bool buffer_is_shm_client_buffer(struct wlr_buffer *buffer) {
+bool buffer_is_shm_client_buffer(struct wlr_buffer *buffer) {
 	return buffer->impl == &shm_client_buffer_impl;
 }
 
-static struct wlr_shm_client_buffer *shm_client_buffer_from_buffer(
+struct wlr_shm_client_buffer *shm_client_buffer_from_buffer(
 		struct wlr_buffer *buffer) {
 	assert(buffer_is_shm_client_buffer(buffer));
 	return (struct wlr_shm_client_buffer *)buffer;
