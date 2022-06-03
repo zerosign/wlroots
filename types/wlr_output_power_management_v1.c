@@ -196,7 +196,7 @@ static void output_power_manager_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_output_power_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_global_destroy(manager->global);
 	free(manager);
 }

@@ -47,7 +47,7 @@ static void pointer_constraint_destroy(struct wlr_pointer_constraint_v1 *constra
 
 	wlr_log(WLR_DEBUG, "destroying constraint %p", constraint);
 
-	wlr_signal_emit_safe(&constraint->events.destroy, constraint);
+	wlr_signal_emit_safe(&constraint->events.destroy, NULL);
 
 	wl_resource_set_user_data(constraint->resource, NULL);
 	wl_list_remove(&constraint->link);

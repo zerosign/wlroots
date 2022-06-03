@@ -20,7 +20,7 @@ void wlr_primary_selection_source_destroy(
 		return;
 	}
 
-	wlr_signal_emit_safe(&source->events.destroy, source);
+	wlr_signal_emit_safe(&source->events.destroy, NULL);
 
 	char **p;
 	wl_array_for_each(p, &source->mime_types) {
@@ -72,7 +72,7 @@ static void seat_handle_primary_selection_source_destroy(
 		wl_container_of(listener, seat, primary_selection_source_destroy);
 	wl_list_remove(&seat->primary_selection_source_destroy.link);
 	seat->primary_selection_source = NULL;
-	wlr_signal_emit_safe(&seat->events.set_primary_selection, seat);
+	wlr_signal_emit_safe(&seat->events.set_primary_selection, NULL);
 }
 
 void wlr_seat_set_primary_selection(struct wlr_seat *seat,
@@ -98,5 +98,5 @@ void wlr_seat_set_primary_selection(struct wlr_seat *seat,
 			&seat->primary_selection_source_destroy);
 	}
 
-	wlr_signal_emit_safe(&seat->events.set_primary_selection, seat);
+	wlr_signal_emit_safe(&seat->events.set_primary_selection, NULL);
 }

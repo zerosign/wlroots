@@ -187,7 +187,7 @@ void wlr_output_update_enabled(struct wlr_output *output, bool enabled) {
 	}
 
 	output->enabled = enabled;
-	wlr_signal_emit_safe(&output->events.enable, output);
+	wlr_signal_emit_safe(&output->events.enable, NULL);
 }
 
 static void output_update_matrix(struct wlr_output *output) {
@@ -290,7 +290,7 @@ void wlr_output_update_custom_mode(struct wlr_output *output, int32_t width,
 	}
 	wlr_output_schedule_done(output);
 
-	wlr_signal_emit_safe(&output->events.mode, output);
+	wlr_signal_emit_safe(&output->events.mode, NULL);
 }
 
 void wlr_output_set_transform(struct wlr_output *output,
@@ -373,7 +373,7 @@ void wlr_output_set_description(struct wlr_output *output, const char *desc) {
 	}
 	wlr_output_schedule_done(output);
 
-	wlr_signal_emit_safe(&output->events.description, output);
+	wlr_signal_emit_safe(&output->events.description, NULL);
 }
 
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
@@ -456,7 +456,7 @@ void wlr_output_destroy(struct wlr_output *output) {
 	wlr_output_destroy_global(output);
 	output_clear_back_buffer(output);
 
-	wlr_signal_emit_safe(&output->events.destroy, output);
+	wlr_signal_emit_safe(&output->events.destroy, NULL);
 	wlr_addon_set_finish(&output->addons);
 
 	// The backend is responsible for free-ing the list of modes
@@ -854,7 +854,7 @@ void wlr_output_attach_buffer(struct wlr_output *output,
 void wlr_output_send_frame(struct wlr_output *output) {
 	output->frame_pending = false;
 	if (output->enabled) {
-		wlr_signal_emit_safe(&output->events.frame, output);
+		wlr_signal_emit_safe(&output->events.frame, NULL);
 	}
 }
 
@@ -932,7 +932,7 @@ void wlr_output_update_needs_frame(struct wlr_output *output) {
 		return;
 	}
 	output->needs_frame = true;
-	wlr_signal_emit_safe(&output->events.needs_frame, output);
+	wlr_signal_emit_safe(&output->events.needs_frame, NULL);
 }
 
 void wlr_output_damage_whole(struct wlr_output *output) {

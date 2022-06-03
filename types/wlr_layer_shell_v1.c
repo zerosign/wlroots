@@ -263,7 +263,7 @@ static const struct zwlr_layer_surface_v1_interface layer_surface_implementation
 
 static void layer_surface_unmap(struct wlr_layer_surface_v1 *surface) {
 	// TODO: probably need to ungrab before this event
-	wlr_signal_emit_safe(&surface->events.unmap, surface);
+	wlr_signal_emit_safe(&surface->events.unmap, NULL);
 
 	struct wlr_xdg_popup *popup, *popup_tmp;
 	wl_list_for_each_safe(popup, popup_tmp, &surface->popups, link) {
@@ -282,7 +282,7 @@ static void layer_surface_destroy(struct wlr_layer_surface_v1 *surface) {
 	if (surface->configured && surface->mapped) {
 		layer_surface_unmap(surface);
 	}
-	wlr_signal_emit_safe(&surface->events.destroy, surface);
+	wlr_signal_emit_safe(&surface->events.destroy, NULL);
 	wl_resource_set_user_data(surface->resource, NULL);
 	surface->surface->role_data = NULL;
 	wl_list_remove(&surface->surface_destroy.link);
@@ -373,7 +373,7 @@ static void layer_surface_role_commit(struct wlr_surface *wlr_surface) {
 	if (surface->configured && wlr_surface_has_buffer(surface->surface) &&
 			!surface->mapped) {
 		surface->mapped = true;
-		wlr_signal_emit_safe(&surface->events.map, surface);
+		wlr_signal_emit_safe(&surface->events.map, NULL);
 	}
 }
 
@@ -500,7 +500,7 @@ static void layer_shell_bind(struct wl_client *wl_client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_layer_shell_v1 *layer_shell =
 		wl_container_of(listener, layer_shell, display_destroy);
-	wlr_signal_emit_safe(&layer_shell->events.destroy, layer_shell);
+	wlr_signal_emit_safe(&layer_shell->events.destroy, NULL);
 	wl_list_remove(&layer_shell->display_destroy.link);
 	wl_global_destroy(layer_shell->global);
 	free(layer_shell);

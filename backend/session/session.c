@@ -298,7 +298,7 @@ void wlr_session_destroy(struct wlr_session *session) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&session->events.destroy, session);
+	wlr_signal_emit_safe(&session->events.destroy, NULL);
 	wl_list_remove(&session->display_destroy.link);
 
 	wl_event_source_remove(session->udev_event);

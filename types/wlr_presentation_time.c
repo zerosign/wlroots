@@ -173,7 +173,7 @@ static void presentation_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_presentation *presentation =
 		wl_container_of(listener, presentation, display_destroy);
-	wlr_signal_emit_safe(&presentation->events.destroy, presentation);
+	wlr_signal_emit_safe(&presentation->events.destroy, NULL);
 	wl_list_remove(&presentation->display_destroy.link);
 	wl_global_destroy(presentation->global);
 	free(presentation);

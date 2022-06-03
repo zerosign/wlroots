@@ -67,7 +67,7 @@ static void seat_client_handle_resource_destroy(
 		return;
 	}
 
-	wlr_signal_emit_safe(&client->events.destroy, client);
+	wlr_signal_emit_safe(&client->events.destroy, NULL);
 
 	if (client == client->seat->pointer_state.focused_client) {
 		client->seat->pointer_state.focused_client = NULL;
@@ -181,7 +181,7 @@ void wlr_seat_destroy(struct wlr_seat *seat) {
 		wlr_seat_touch_point_clear_focus(seat, 0, point->touch_id);
 	}
 
-	wlr_signal_emit_safe(&seat->events.destroy, seat);
+	wlr_signal_emit_safe(&seat->events.destroy, NULL);
 
 	wl_list_remove(&seat->display_destroy.link);
 

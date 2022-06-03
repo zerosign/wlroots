@@ -108,7 +108,7 @@ static void touch_point_clear_focus(struct wlr_touch_point *point) {
 }
 
 static void touch_point_destroy(struct wlr_touch_point *point) {
-	wlr_signal_emit_safe(&point->events.destroy, point);
+	wlr_signal_emit_safe(&point->events.destroy, NULL);
 
 	touch_point_clear_focus(point);
 	wl_list_remove(&point->surface_destroy.link);

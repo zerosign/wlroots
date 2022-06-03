@@ -37,7 +37,7 @@ struct wlr_output_layout *wlr_output_layout_create(void) {
 
 static void output_layout_output_destroy(
 		struct wlr_output_layout_output *l_output) {
-	wlr_signal_emit_safe(&l_output->events.destroy, l_output);
+	wlr_signal_emit_safe(&l_output->events.destroy, NULL);
 	wlr_output_destroy_global(l_output->output);
 	wl_list_remove(&l_output->state->mode.link);
 	wl_list_remove(&l_output->state->commit.link);
@@ -52,7 +52,7 @@ void wlr_output_layout_destroy(struct wlr_output_layout *layout) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&layout->events.destroy, layout);
+	wlr_signal_emit_safe(&layout->events.destroy, NULL);
 
 	struct wlr_output_layout_output *l_output, *temp;
 	wl_list_for_each_safe(l_output, temp, &layout->outputs, link) {
@@ -115,7 +115,7 @@ static void output_layout_reconfigure(struct wlr_output_layout *layout) {
 		max_x += output_box.width;
 	}
 
-	wlr_signal_emit_safe(&layout->events.change, layout);
+	wlr_signal_emit_safe(&layout->events.change, NULL);
 }
 
 static void output_update_global(struct wlr_output *output) {

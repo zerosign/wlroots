@@ -85,7 +85,7 @@ void wlr_keyboard_notify_modifiers(struct wlr_keyboard *keyboard,
 
 	bool updated = keyboard_modifier_update(keyboard);
 	if (updated) {
-		wlr_signal_emit_safe(&keyboard->events.modifiers, keyboard);
+		wlr_signal_emit_safe(&keyboard->events.modifiers, NULL);
 	}
 
 	keyboard_led_update(keyboard);
@@ -108,7 +108,7 @@ void wlr_keyboard_notify_key(struct wlr_keyboard *keyboard,
 
 	bool updated = keyboard_modifier_update(keyboard);
 	if (updated) {
-		wlr_signal_emit_safe(&keyboard->events.modifiers, keyboard);
+		wlr_signal_emit_safe(&keyboard->events.modifiers, NULL);
 	}
 
 	keyboard_led_update(keyboard);
@@ -261,7 +261,7 @@ void wlr_keyboard_set_repeat_info(struct wlr_keyboard *kb, int32_t rate,
 	}
 	kb->repeat_info.rate = rate;
 	kb->repeat_info.delay = delay;
-	wlr_signal_emit_safe(&kb->events.repeat_info, kb);
+	wlr_signal_emit_safe(&kb->events.repeat_info, NULL);
 }
 
 uint32_t wlr_keyboard_get_modifiers(struct wlr_keyboard *kb) {

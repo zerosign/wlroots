@@ -37,7 +37,7 @@ static void subsurface_destroy(struct wlr_subsurface *subsurface) {
 
 	subsurface_unmap(subsurface);
 
-	wlr_signal_emit_safe(&subsurface->events.destroy, subsurface);
+	wlr_signal_emit_safe(&subsurface->events.destroy, NULL);
 
 	wl_list_remove(&subsurface->surface_destroy.link);
 	wl_list_remove(&subsurface->surface_client_commit.link);
@@ -229,7 +229,7 @@ static void subsurface_consider_map(struct wlr_subsurface *subsurface,
 	}
 
 	// Now we can map the subsurface
-	wlr_signal_emit_safe(&subsurface->events.map, subsurface);
+	wlr_signal_emit_safe(&subsurface->events.map, NULL);
 	subsurface->mapped = true;
 
 	// Try mapping all children too
@@ -249,7 +249,7 @@ static void subsurface_unmap(struct wlr_subsurface *subsurface) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&subsurface->events.unmap, subsurface);
+	wlr_signal_emit_safe(&subsurface->events.unmap, NULL);
 	subsurface->mapped = false;
 
 	// Unmap all children

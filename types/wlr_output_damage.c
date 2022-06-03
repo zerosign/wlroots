@@ -41,7 +41,7 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&output_damage->events.frame, output_damage);
+	wlr_signal_emit_safe(&output_damage->events.frame, NULL);
 }
 
 static void output_handle_precommit(struct wl_listener *listener, void *data) {
@@ -128,7 +128,7 @@ void wlr_output_damage_destroy(struct wlr_output_damage *output_damage) {
 	if (output_damage == NULL) {
 		return;
 	}
-	wlr_signal_emit_safe(&output_damage->events.destroy, output_damage);
+	wlr_signal_emit_safe(&output_damage->events.destroy, NULL);
 	wl_list_remove(&output_damage->output_destroy.link);
 	wl_list_remove(&output_damage->output_mode.link);
 	wl_list_remove(&output_damage->output_needs_frame.link);

@@ -38,7 +38,7 @@ void handle_pointer_motion(struct libinput_event *event,
 	wlr_event.unaccel_dx = libinput_event_pointer_get_dx_unaccelerated(pevent);
 	wlr_event.unaccel_dy = libinput_event_pointer_get_dy_unaccelerated(pevent);
 	wlr_signal_emit_safe(&pointer->events.motion, &wlr_event);
-	wlr_signal_emit_safe(&pointer->events.frame, pointer);
+	wlr_signal_emit_safe(&pointer->events.frame, NULL);
 }
 
 void handle_pointer_motion_abs(struct libinput_event *event,
@@ -52,7 +52,7 @@ void handle_pointer_motion_abs(struct libinput_event *event,
 	wlr_event.x = libinput_event_pointer_get_absolute_x_transformed(pevent, 1);
 	wlr_event.y = libinput_event_pointer_get_absolute_y_transformed(pevent, 1);
 	wlr_signal_emit_safe(&pointer->events.motion_absolute, &wlr_event);
-	wlr_signal_emit_safe(&pointer->events.frame, pointer);
+	wlr_signal_emit_safe(&pointer->events.frame, NULL);
 }
 
 void handle_pointer_button(struct libinput_event *event,
@@ -73,7 +73,7 @@ void handle_pointer_button(struct libinput_event *event,
 		break;
 	}
 	wlr_signal_emit_safe(&pointer->events.button, &wlr_event);
-	wlr_signal_emit_safe(&pointer->events.frame, pointer);
+	wlr_signal_emit_safe(&pointer->events.frame, NULL);
 }
 
 void handle_pointer_axis(struct libinput_event *event,
@@ -119,7 +119,7 @@ void handle_pointer_axis(struct libinput_event *event,
 			wlr_signal_emit_safe(&pointer->events.axis, &wlr_event);
 		}
 	}
-	wlr_signal_emit_safe(&pointer->events.frame, pointer);
+	wlr_signal_emit_safe(&pointer->events.frame, NULL);
 }
 
 void handle_pointer_swipe_begin(struct libinput_event *event,

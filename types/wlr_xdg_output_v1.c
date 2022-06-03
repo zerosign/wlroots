@@ -231,7 +231,7 @@ static void manager_destroy(struct wlr_xdg_output_manager_v1 *manager) {
 	wl_list_for_each_safe(output, tmp, &manager->outputs, link) {
 		output_destroy(output);
 	}
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_list_remove(&manager->layout_add.link);
 	wl_list_remove(&manager->layout_change.link);

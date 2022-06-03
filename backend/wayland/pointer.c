@@ -142,8 +142,7 @@ static void pointer_handle_frame(void *data, struct wl_pointer *wl_pointer) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&pointer->wlr_pointer.events.frame,
-		&pointer->wlr_pointer);
+	wlr_signal_emit_safe(&pointer->wlr_pointer.events.frame, NULL);
 }
 
 static void pointer_handle_axis_source(void *data,
