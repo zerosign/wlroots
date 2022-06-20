@@ -44,10 +44,4 @@ bool wlr_texture_update_from_buffer(struct wlr_texture *texture,
  */
 void wlr_texture_destroy(struct wlr_texture *texture);
 
-/**
- * Create a new texture from a buffer.
- */
-struct wlr_texture *wlr_texture_from_buffer(struct wlr_renderer *renderer,
-	struct wlr_buffer *buffer);
-
 #endif

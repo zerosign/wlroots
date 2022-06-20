@@ -1003,7 +1003,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.destroy = vulkan_destroy,
 	.get_drm_fd = vulkan_get_drm_fd,
 	.get_render_buffer_caps = vulkan_get_render_buffer_caps,
-	.texture_from_buffer = vulkan_texture_from_buffer,
 };
 
 // Initializes the VkDescriptorSetLayout and VkPipelineLayout needed

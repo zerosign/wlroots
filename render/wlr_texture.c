@@ -32,14 +32,6 @@ void wlr_texture_destroy(struct wlr_texture *texture) {
 	}
 }
 
-struct wlr_texture *wlr_texture_from_buffer(struct wlr_renderer *renderer,
-		struct wlr_buffer *buffer) {
-	if (!renderer->impl->texture_from_buffer) {
-		return NULL;
-	}
-	return renderer->impl->texture_from_buffer(renderer, buffer);
-}
-
 bool wlr_texture_update_from_buffer(struct wlr_texture *texture,
 		struct wlr_buffer *buffer, pixman_region32_t *damage) {
 	if (!texture->impl->update_from_buffer) {

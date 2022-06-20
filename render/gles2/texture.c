@@ -196,12 +196,10 @@ static struct wlr_gles2_texture *gles2_texture_create(
 	return texture;
 }
 
-static struct wlr_texture *gles2_texture_from_pixels(
-		struct wlr_renderer *wlr_renderer,
+static struct wlr_gles2_texture *gles2_texture_from_pixels(
+		struct wlr_gles2_renderer *renderer,
 		uint32_t drm_format, uint32_t stride, uint32_t width,
 		uint32_t height, const void *data) {
-	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
-
 	const struct wlr_gles2_pixel_format *fmt =
 		get_gles2_format_from_drm(drm_format);
 	if (fmt == NULL) {
@@ -253,7 +251,7 @@ static struct wlr_texture *gles2_texture_from_pixels(
 
 	wlr_egl_restore_context(&prev_ctx);
 
-	return &texture->wlr_texture;
+	return texture;
 }
 
 static struct wlr_texture *gles2_texture_from_dmabuf(
@@ -325,7 +323,7 @@ static const struct wlr_addon_interface texture_addon_impl = {
 	.destroy = texture_handle_buffer_destroy,
 };
 
-static struct wlr_texture *gles2_texture_from_dmabuf_buffer(
+static struct wlr_gles2_texture *gles2_texture_from_dmabuf_buffer(
 		struct wlr_gles2_renderer *renderer, struct wlr_buffer *buffer,
 		struct wlr_dmabuf_attributes *dmabuf) {
 	struct wlr_addon *addon =
@@ -335,16 +333,16 @@ static struct wlr_texture *gles2_texture_from_dmabuf_buffer(
 			wl_container_of(addon, texture, buffer_addon);
 		if (!gles2_texture_invalidate(texture)) {
 			wlr_log(WLR_ERROR, "Failed to invalidate texture");
-			return false;
+			return NULL;
 		}
 		wlr_buffer_lock(texture->buffer);
-		return &texture->wlr_texture;
+		return texture;
 	}
 
 	struct wlr_texture *wlr_texture =
 		gles2_texture_from_dmabuf(&renderer->wlr_renderer, dmabuf);
 	if (wlr_texture == NULL) {
-		return false;
+		return NULL;
 	}
 
 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
@@ -352,37 +350,16 @@ static struct wlr_texture *gles2_texture_from_dmabuf_buffer(
 	wlr_addon_init(&texture->buffer_addon, &buffer->addons,
 		renderer, &texture_addon_impl);
 
-	return &texture->wlr_texture;
-}
-
-struct wlr_texture *gles2_texture_from_buffer(struct wlr_renderer *wlr_renderer,
-		struct wlr_buffer *buffer) {
-	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
-
-	void *data;
-	uint32_t format;
-	size_t stride;
-	struct wlr_dmabuf_attributes dmabuf;
-	if (wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
-		return gles2_texture_from_dmabuf_buffer(renderer, buffer, &dmabuf);
-	} else if (wlr_buffer_begin_data_ptr_access(buffer,
-			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
-		struct wlr_texture *tex = gles2_texture_from_pixels(wlr_renderer,
-			format, stride, buffer->width, buffer->height, data);
-		wlr_buffer_end_data_ptr_access(buffer);
-		return tex;
-	} else {
-		return NULL;
-	}
+	return texture;
 }
 
 struct wlr_gles2_texture *gles2_raster_upload(struct wlr_gles2_renderer *renderer,
 		struct wlr_raster *wlr_raster) {
-	struct wlr_texture *texture;
-	wl_list_for_each(texture, &wlr_raster->sources, link) {
-		if (wlr_texture_is_gles2(texture)) {
+	struct wlr_texture *raster_texture;
+	wl_list_for_each(raster_texture, &wlr_raster->sources, link) {
+		if (wlr_texture_is_gles2(raster_texture)) {
 			struct wlr_gles2_texture *gles2_tex =
-				(struct wlr_gles2_texture *)texture;
+				(struct wlr_gles2_texture *)raster_texture;
 			if (gles2_tex->renderer != renderer) {
 				continue;
 			}
@@ -390,19 +367,33 @@ struct wlr_gles2_texture *gles2_raster_upload(struct wlr_gles2_renderer *rendere
 		}
 	}
 
+	struct wlr_buffer *buffer = wlr_raster->buffer;
 	if (!wlr_raster->buffer) {
 		// we could possibly do a blit with another texture from another renderer,
 		// but this is unsupported currently.
 		return NULL;
 	}
 
-	texture = gles2_texture_from_buffer(&renderer->wlr_renderer, wlr_raster->buffer);
-	if (!texture) {
-		return NULL;
+	struct wlr_gles2_texture *texture = NULL;
+
+	void *data;
+	uint32_t format;
+	size_t stride;
+	struct wlr_dmabuf_attributes dmabuf;
+	if (wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
+		texture = gles2_texture_from_dmabuf_buffer(renderer, buffer, &dmabuf);
+	} else if (wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+		texture = gles2_texture_from_pixels(renderer,
+			format, stride, buffer->width, buffer->height, data);
+		wlr_buffer_end_data_ptr_access(buffer);
 	}
 
-	wlr_raster_attach(wlr_raster, texture);
-	return (struct wlr_gles2_texture *)texture;
+	if (texture) {
+		wlr_raster_attach(wlr_raster, &texture->wlr_texture);
+	}
+
+	return texture;
 }
 
 void wlr_gles2_texture_get_attribs(struct wlr_texture *wlr_texture,

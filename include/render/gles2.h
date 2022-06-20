@@ -128,8 +128,6 @@ struct wlr_gles2_texture *gles2_raster_upload(struct wlr_gles2_renderer *rendere
 
 struct wlr_texture *gles2_texture_from_wl_drm(struct wlr_renderer *wlr_renderer,
 	struct wl_resource *data);
-struct wlr_texture *gles2_texture_from_buffer(struct wlr_renderer *wlr_renderer,
-	struct wlr_buffer *buffer);
 void gles2_texture_destroy(struct wlr_gles2_texture *texture);
 
 void push_gles2_debug_(struct wlr_gles2_renderer *renderer,

@@ -73,15 +73,32 @@ static struct wlr_pixman_texture *pixman_texture_create(
 	return texture;
 }
 
-static struct wlr_texture *pixman_texture_from_buffer(
-		struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer) {
-	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
+static struct wlr_pixman_texture *raster_upload(
+		struct wlr_pixman_renderer *renderer, struct wlr_raster *wlr_raster) {
+	struct wlr_texture *raster_texture;
+	wl_list_for_each(raster_texture, &wlr_raster->sources, link) {
+		if (wlr_texture_is_pixman(raster_texture)) {
+			struct wlr_pixman_texture *pixman_tex =
+				(struct wlr_pixman_texture *)raster_texture;
+			if (pixman_tex->renderer != renderer) {
+				continue;
+			}
+			return pixman_tex;
+		}
+	}
+
+	struct wlr_buffer *buffer = wlr_raster->buffer;
+	if (!buffer) {
+		// we could possibly do a blit with another texture from another renderer,
+		// but this is unsupported currently.
+		return NULL;
+	}
 
 	void *data = NULL;
 	uint32_t drm_format;
 	size_t stride;
-	if (!wlr_buffer_begin_data_ptr_access(buffer, WLR_BUFFER_DATA_PTR_ACCESS_READ,
-			&data, &drm_format, &stride)) {
+	if (!wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &drm_format, &stride)) {
 		return NULL;
 	}
 	wlr_buffer_end_data_ptr_access(buffer);
@@ -103,36 +120,8 @@ static struct wlr_texture *pixman_texture_from_buffer(
 
 	texture->buffer = wlr_buffer_lock(buffer);
 
-	return &texture->wlr_texture;
-}
-
-static struct wlr_pixman_texture *raster_upload(
-		struct wlr_pixman_renderer *renderer, struct wlr_raster *wlr_raster) {
-	struct wlr_texture *texture;
-	wl_list_for_each(texture, &wlr_raster->sources, link) {
-		if (wlr_texture_is_pixman(texture)) {
-			struct wlr_pixman_texture *pixman_tex =
-				(struct wlr_pixman_texture *)texture;
-			if (pixman_tex->renderer != renderer) {
-				continue;
-			}
-			return pixman_tex;
-		}
-	}
-
-	if (!wlr_raster->buffer) {
-		// we could possibly do a blit with another texture from another renderer,
-		// but this is unsupported currently.
-		return NULL;
-	}
-
-	texture = pixman_texture_from_buffer(&renderer->wlr_renderer, wlr_raster->buffer);
-	if (!texture) {
-		return NULL;
-	}
-
-	wlr_raster_attach(wlr_raster, texture);
-	return (struct wlr_pixman_texture *)texture;
+	wlr_raster_attach(wlr_raster, &texture->wlr_texture);
+	return texture;
 }
 
 static void texture_destroy(struct wlr_texture *wlr_texture) {
@@ -531,7 +520,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.render_quad_with_matrix = pixman_render_quad_with_matrix,
 	.get_shm_texture_formats = pixman_get_shm_texture_formats,
 	.get_render_formats = pixman_get_render_formats,
-	.texture_from_buffer = pixman_texture_from_buffer,
 	.bind_buffer = pixman_bind_buffer,
 	.destroy = pixman_destroy,
 	.preferred_read_format = pixman_preferred_read_format,
