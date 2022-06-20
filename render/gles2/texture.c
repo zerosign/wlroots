@@ -44,9 +44,10 @@ static bool check_stride(const struct wlr_pixel_format_info *fmt,
 	return true;
 }
 
-static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
-		struct wlr_buffer *buffer, pixman_region32_t *damage) {
+static bool gles2_texture_update_from_raster(struct wlr_texture *wlr_texture,
+		struct wlr_raster *raster, pixman_region32_t *damage) {
 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
+	struct wlr_buffer *buffer = raster->buffer;
 
 	if (texture->target != GL_TEXTURE_2D || texture->image != EGL_NO_IMAGE_KHR) {
 		return false;
@@ -178,7 +179,7 @@ static void gles2_texture_unref(struct wlr_texture *wlr_texture) {
 }
 
 static const struct wlr_texture_impl texture_impl = {
-	.update_from_buffer = gles2_texture_update_from_buffer,
+	.update_from_raster = gles2_texture_update_from_raster,
 	.destroy = gles2_texture_unref,
 };
 

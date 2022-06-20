@@ -14,7 +14,6 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_raster.h>
 
-struct wlr_buffer;
 struct wlr_renderer;
 struct wlr_texture_impl;
 
@@ -27,17 +26,17 @@ struct wlr_texture {
 };
 
 /**
-  * Update a texture with a struct wlr_buffer's contents.
+  * Update a texture with a struct wlr_raster's contents.
   *
-  * The update might be rejected (in case the texture is immutable, the buffer
-  * has an unsupported type/format, etc), so callers must be prepared to fall
-  * back to re-creating the texture from scratch via wlr_texture_from_buffer().
+  * The update might be rejected (in case the texture is immutable, the raster
+  * doesn't have a compatible source, unsupported type/format, etc), so callers
+  * must be prepared to fall back.
   *
   * The damage can be used by the renderer as an optimization: only the supplied
   * region needs to be updated.
   */
-bool wlr_texture_update_from_buffer(struct wlr_texture *texture,
-	struct wlr_buffer *buffer, pixman_region32_t *damage);
+bool wlr_texture_update_from_raster(struct wlr_texture *texture,
+	struct wlr_raster *raster, pixman_region32_t *damage);
 
 /**
  * Destroys the texture.

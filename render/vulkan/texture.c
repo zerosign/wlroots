@@ -136,9 +136,10 @@ static bool write_pixels(struct wlr_texture *wlr_texture,
 	return true;
 }
 
-static bool vulkan_texture_update_from_buffer(struct wlr_texture *wlr_texture,
-		struct wlr_buffer *buffer, pixman_region32_t *damage) {
+static bool vulkan_texture_update_from_raster(struct wlr_texture *wlr_texture,
+		struct wlr_raster *raster, pixman_region32_t *damage) {
 	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
+	struct wlr_buffer *buffer = raster->buffer;
 
 	void *data;
 	uint32_t format;
@@ -224,7 +225,7 @@ static void vulkan_texture_unref(struct wlr_texture *wlr_texture) {
 }
 
 static const struct wlr_texture_impl texture_impl = {
-	.update_from_buffer = vulkan_texture_update_from_buffer,
+	.update_from_raster = vulkan_texture_update_from_raster,
 	.destroy = vulkan_texture_unref,
 };
 

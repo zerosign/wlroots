@@ -32,19 +32,18 @@ void wlr_texture_destroy(struct wlr_texture *texture) {
 	}
 }
 
-bool wlr_texture_update_from_buffer(struct wlr_texture *texture,
-		struct wlr_buffer *buffer, pixman_region32_t *damage) {
-	if (!texture->impl->update_from_buffer) {
+bool wlr_texture_update_from_raster(struct wlr_texture *texture,
+		struct wlr_raster *raster, pixman_region32_t *damage) {
+	if (!texture->impl->update_from_raster) {
 		return false;
 	}
-	if (texture->width != (uint32_t)buffer->width ||
-			texture->height != (uint32_t)buffer->height) {
+	if (texture->width != raster->width || texture->height != raster->height) {
 		return false;
 	}
 	const pixman_box32_t *extents = pixman_region32_extents(damage);
-	if (extents->x1 < 0 || extents->y1 < 0 || extents->x2 > buffer->width ||
-			extents->y2 > buffer->height) {
+	if (extents->x1 < 0 || extents->y1 < 0 || extents->x2 > (int32_t)raster->width ||
+			extents->y2 > (int32_t)raster->height) {
 		return false;
 	}
-	return texture->impl->update_from_buffer(texture, buffer, damage);
+	return texture->impl->update_from_raster(texture, raster, damage);
 }
