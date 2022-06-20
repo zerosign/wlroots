@@ -12,7 +12,6 @@
 #include <pixman.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
-#include <wlr/render/dmabuf.h>
 #include <wlr/types/wlr_raster.h>
 
 struct wlr_buffer;
@@ -34,12 +33,6 @@ struct wlr_texture {
 struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
 	uint32_t fmt, uint32_t stride, uint32_t width, uint32_t height,
 	const void *data);
-
-/**
- * Create a new texture from a DMA-BUF. The returned texture is immutable.
- */
-struct wlr_texture *wlr_texture_from_dmabuf(struct wlr_renderer *renderer,
-	struct wlr_dmabuf_attributes *attribs);
 
 /**
   * Update a texture with a struct wlr_buffer's contents.

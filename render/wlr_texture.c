@@ -56,23 +56,6 @@ struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
 	return texture;
 }
 
-struct wlr_texture *wlr_texture_from_dmabuf(struct wlr_renderer *renderer,
-		struct wlr_dmabuf_attributes *attribs) {
-	struct wlr_dmabuf_buffer *buffer = dmabuf_buffer_create(attribs);
-	if (buffer == NULL) {
-		return NULL;
-	}
-
-	struct wlr_texture *texture =
-		wlr_texture_from_buffer(renderer, &buffer->base);
-
-	// By this point, the renderer should have locked the buffer if it still
-	// needs to access it in the future.
-	dmabuf_buffer_drop(buffer);
-
-	return texture;
-}
-
 struct wlr_texture *wlr_texture_from_buffer(struct wlr_renderer *renderer,
 		struct wlr_buffer *buffer) {
 	if (!renderer->impl->texture_from_buffer) {
