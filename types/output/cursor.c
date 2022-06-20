@@ -94,9 +94,6 @@ static void output_cursor_render(struct wlr_output_cursor *cursor,
 	assert(renderer);
 
 	struct wlr_texture *texture = cursor->texture;
-	if (cursor->surface != NULL) {
-		texture = wlr_surface_get_texture(cursor->surface);
-	}
 	if (texture == NULL) {
 		return;
 	}
@@ -236,7 +233,6 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 	enum wl_output_transform transform = WL_OUTPUT_TRANSFORM_NORMAL;
 	struct wlr_texture *texture = cursor->texture;
 	if (cursor->surface != NULL) {
-		texture = wlr_surface_get_texture(cursor->surface);
 		scale = cursor->surface->current.scale;
 		transform = cursor->surface->current.transform;
 	}
@@ -337,11 +333,8 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 		return false;
 	}
 
+	// TODO: try using the surface buffer directly
 	struct wlr_texture *texture = cursor->texture;
-	if (cursor->surface != NULL) {
-		// TODO: try using the surface buffer directly
-		texture = wlr_surface_get_texture(cursor->surface);
-	}
 
 	// If the cursor was hidden or was a software cursor, the hardware
 	// cursor position is outdated
@@ -444,6 +437,17 @@ static void output_cursor_commit(struct wlr_output_cursor *cursor,
 
 	struct wlr_surface *surface = cursor->surface;
 	assert(surface != NULL);
+
+	wlr_texture_destroy(cursor->texture);
+	cursor->texture = NULL;
+
+	if (surface->current.buffer) {
+		cursor->texture = wlr_texture_from_buffer(cursor->output->renderer,
+			surface->current.buffer);
+		if (cursor->texture == NULL) {
+			return;
+		}
+	}
 
 	// Some clients commit a cursor surface with a NULL buffer to hide it.
 	cursor->enabled = wlr_surface_has_buffer(surface);

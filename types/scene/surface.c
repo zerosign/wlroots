@@ -66,9 +66,9 @@ static void set_buffer_with_surface_state(struct wlr_scene_buffer *scene_buffer,
 	wlr_scene_buffer_set_dest_size(scene_buffer, state->width, state->height);
 	wlr_scene_buffer_set_transform(scene_buffer, state->transform);
 
-	if (surface->buffer) {
+	if (surface->current.buffer) {
 		wlr_scene_buffer_set_buffer_with_damage(scene_buffer,
-			&surface->buffer->base, &surface->buffer_damage);
+			surface->current.buffer, &surface->buffer_damage);
 	} else {
 		wlr_scene_buffer_set_buffer(scene_buffer, NULL);
 	}

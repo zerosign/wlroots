@@ -333,45 +333,15 @@ static void surface_state_move(struct wlr_surface_state *state,
 static void surface_apply_damage(struct wlr_surface *surface) {
 	if (surface->current.buffer == NULL) {
 		// NULL commit
-		if (surface->buffer != NULL) {
-			wlr_buffer_unlock(&surface->buffer->base);
-		}
-		surface->buffer = NULL;
 		surface->opaque = false;
 		return;
 	}
 
 	surface->opaque = buffer_is_opaque(surface->current.buffer);
-
-	if (surface->buffer != NULL) {
-		if (wlr_client_buffer_apply_damage(surface->buffer,
-				surface->current.buffer, &surface->buffer_damage)) {
-			wlr_buffer_unlock(surface->current.buffer);
-			surface->current.buffer = NULL;
-			return;
-		}
-	}
-
-	struct wlr_client_buffer *buffer = wlr_client_buffer_create(
-			surface->current.buffer, surface->renderer);
-
-	wlr_buffer_unlock(surface->current.buffer);
-	surface->current.buffer = NULL;
-
-	if (buffer == NULL) {
-		wlr_log(WLR_ERROR, "Failed to upload buffer");
-		return;
-	}
-
-	if (surface->buffer != NULL) {
-		wlr_buffer_unlock(&surface->buffer->base);
-	}
-	surface->buffer = buffer;
 }
 
 static void surface_update_opaque_region(struct wlr_surface *surface) {
-	struct wlr_texture *texture = wlr_surface_get_texture(surface);
-	if (texture == NULL) {
+	if (!wlr_surface_has_buffer(surface)) {
 		pixman_region32_clear(&surface->opaque_region);
 		return;
 	}
@@ -660,9 +630,6 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 	pixman_region32_fini(&surface->external_damage);
 	pixman_region32_fini(&surface->opaque_region);
 	pixman_region32_fini(&surface->input_region);
-	if (surface->buffer != NULL) {
-		wlr_buffer_unlock(&surface->buffer->base);
-	}
 	free(surface);
 }
 
@@ -716,15 +683,8 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	return surface;
 }
 
-struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface) {
-	if (surface->buffer == NULL) {
-		return NULL;
-	}
-	return surface->buffer->texture;
-}
-
 bool wlr_surface_has_buffer(struct wlr_surface *surface) {
-	return wlr_surface_get_texture(surface) != NULL;
+	return surface->current.buffer != NULL;
 }
 
 bool wlr_surface_set_role(struct wlr_surface *surface,

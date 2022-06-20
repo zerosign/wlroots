@@ -56,7 +56,8 @@ static void render_surface(struct wlr_surface *surface,
 	struct render_data *rdata = data;
 	struct wlr_output *output = rdata->output;
 
-	struct wlr_texture *texture = wlr_surface_get_texture(surface);
+	struct wlr_texture *texture = wlr_texture_from_buffer(output->renderer,
+		surface->current.buffer);
 	if (texture == NULL) {
 		return;
 	}
@@ -77,6 +78,8 @@ static void render_surface(struct wlr_surface *surface,
 	wlr_render_texture_with_matrix(rdata->renderer, texture, matrix, 1);
 
 	wlr_surface_send_frame_done(surface, rdata->when);
+
+	wlr_texture_destroy(texture);
 }
 
 static void output_handle_frame(struct wl_listener *listener, void *data) {

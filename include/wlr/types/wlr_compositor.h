@@ -90,13 +90,6 @@ struct wlr_surface {
 	struct wl_resource *resource;
 	struct wlr_renderer *renderer;
 	/**
-	 * The surface's buffer, if any. A surface has an attached buffer when it
-	 * commits with a non-null buffer in its pending state. A surface will not
-	 * have a buffer if it has never committed one, has committed a null buffer,
-	 * or something went wrong with uploading the buffer.
-	 */
-	struct wlr_client_buffer *buffer;
-	/**
 	 * The buffer position, in surface-local units.
 	 */
 	int sx, sy;
@@ -198,13 +191,6 @@ bool wlr_surface_set_role(struct wlr_surface *surface,
  * committed a null buffer, or something went wrong with uploading the buffer.
  */
 bool wlr_surface_has_buffer(struct wlr_surface *surface);
-
-/**
- * Get the texture of the buffer currently attached to this surface. Returns
- * NULL if no buffer is currently attached or if something went wrong with
- * uploading the buffer.
- */
-struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface);
 
 /**
  * Get the root of the subsurface tree for this surface. Can return NULL if

@@ -477,12 +477,6 @@ void wlr_scene_buffer_send_frame_done(struct wlr_scene_buffer *scene_buffer,
 
 static struct wlr_texture *scene_buffer_get_texture(
 		struct wlr_scene_buffer *scene_buffer, struct wlr_renderer *renderer) {
-	struct wlr_client_buffer *client_buffer =
-		wlr_client_buffer_get(scene_buffer->buffer);
-	if (client_buffer != NULL) {
-		return client_buffer->texture;
-	}
-
 	if (scene_buffer->texture != NULL) {
 		return scene_buffer->texture;
 	}
