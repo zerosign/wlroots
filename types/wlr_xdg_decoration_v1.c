@@ -31,7 +31,7 @@ static void toplevel_decoration_handle_set_mode(struct wl_client *client,
 
 	decoration->requested_mode =
 		(enum wlr_xdg_toplevel_decoration_v1_mode)mode;
-	wlr_signal_emit_safe(&decoration->events.request_mode, decoration);
+	wlr_signal_emit_safe(&decoration->events.request_mode, NULL);
 }
 
 static void toplevel_decoration_handle_unset_mode(struct wl_client *client,
@@ -40,7 +40,7 @@ static void toplevel_decoration_handle_unset_mode(struct wl_client *client,
 		toplevel_decoration_from_resource(resource);
 
 	decoration->requested_mode = WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_NONE;
-	wlr_signal_emit_safe(&decoration->events.request_mode, decoration);
+	wlr_signal_emit_safe(&decoration->events.request_mode, NULL);
 }
 
 static const struct zxdg_toplevel_decoration_v1_interface
@@ -62,7 +62,7 @@ static void toplevel_decoration_handle_resource_destroy(
 		struct wl_resource *resource) {
 	struct wlr_xdg_toplevel_decoration_v1 *decoration =
 		toplevel_decoration_from_resource(resource);
-	wlr_signal_emit_safe(&decoration->events.destroy, decoration);
+	wlr_signal_emit_safe(&decoration->events.destroy, NULL);
 	wl_list_remove(&decoration->surface_commit.link);
 	wl_list_remove(&decoration->surface_destroy.link);
 	wl_list_remove(&decoration->surface_configure.link);
@@ -260,7 +260,7 @@ static void decoration_manager_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_xdg_decoration_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	free(manager);

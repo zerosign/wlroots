@@ -40,7 +40,7 @@ void wlr_data_source_destroy(struct wlr_data_source *source) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&source->events.destroy, source);
+	wlr_signal_emit_safe(&source->events.destroy, NULL);
 
 	char **p;
 	wl_array_for_each(p, &source->mime_types) {

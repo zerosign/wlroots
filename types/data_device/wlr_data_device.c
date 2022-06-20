@@ -280,7 +280,7 @@ static void data_device_manager_bind(struct wl_client *client,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_data_device_manager *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	free(manager);

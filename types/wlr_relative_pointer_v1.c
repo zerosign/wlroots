@@ -27,7 +27,7 @@ static struct wlr_relative_pointer_manager_v1 *relative_pointer_manager_from_res
 }
 
 static void relative_pointer_destroy(struct wlr_relative_pointer_v1 *relative_pointer) {
-	wlr_signal_emit_safe(&relative_pointer->events.destroy, relative_pointer);
+	wlr_signal_emit_safe(&relative_pointer->events.destroy, NULL);
 
 	wl_list_remove(&relative_pointer->link);
 	wl_list_remove(&relative_pointer->seat_destroy.link);
@@ -140,7 +140,7 @@ static void relative_pointer_manager_v1_bind(struct wl_client *wl_client, void *
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_relative_pointer_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy_listener);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy_listener.link);
 	wl_global_destroy(manager->global);
 	free(manager);

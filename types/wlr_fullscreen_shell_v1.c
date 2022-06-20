@@ -79,7 +79,7 @@ static void shell_bind(struct wl_client *client, void *data, uint32_t version,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_fullscreen_shell_v1 *shell =
 		wl_container_of(listener, shell, display_destroy);
-	wlr_signal_emit_safe(&shell->events.destroy, shell);
+	wlr_signal_emit_safe(&shell->events.destroy, NULL);
 	wl_list_remove(&shell->display_destroy.link);
 	wl_global_destroy(shell->global);
 	free(shell);

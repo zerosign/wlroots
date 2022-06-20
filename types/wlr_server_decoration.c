@@ -29,14 +29,14 @@ static void server_decoration_handle_request_mode(struct wl_client *client,
 		return;
 	}
 	decoration->mode = mode;
-	wlr_signal_emit_safe(&decoration->events.mode, decoration);
+	wlr_signal_emit_safe(&decoration->events.mode, NULL);
 	org_kde_kwin_server_decoration_send_mode(decoration->resource,
 		decoration->mode);
 }
 
 static void server_decoration_destroy(
 		struct wlr_server_decoration *decoration) {
-	wlr_signal_emit_safe(&decoration->events.destroy, decoration);
+	wlr_signal_emit_safe(&decoration->events.destroy, NULL);
 	wl_list_remove(&decoration->surface_destroy_listener.link);
 	wl_resource_set_user_data(decoration->resource, NULL);
 	wl_list_remove(&decoration->link);
@@ -166,7 +166,7 @@ static void server_decoration_manager_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_server_decoration_manager *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	free(manager);

@@ -41,7 +41,7 @@ static void input_method_destroy(struct wlr_input_method_v2 *input_method) {
 			popup_surface, tmp, &input_method->popup_surfaces, link) {
 		popup_surface_destroy(popup_surface);
 	}
-	wlr_signal_emit_safe(&input_method->events.destroy, input_method);
+	wlr_signal_emit_safe(&input_method->events.destroy, NULL);
 	wl_list_remove(wl_resource_get_link(input_method->resource));
 	wl_list_remove(&input_method->seat_client_destroy.link);
 	wlr_input_method_keyboard_grab_v2_destroy(input_method->keyboard_grab);
@@ -76,7 +76,7 @@ static void im_commit(struct wl_client *client, struct wl_resource *resource,
 	input_method->current_serial = serial;
 	struct wlr_input_method_v2_state default_state = {0};
 	input_method->pending = default_state;
-	wlr_signal_emit_safe(&input_method->events.commit, (void*)input_method);
+	wlr_signal_emit_safe(&input_method->events.commit, NULL);
 }
 
 static void im_commit_string(struct wl_client *client,
@@ -141,9 +141,9 @@ static void popup_surface_set_mapped(
 		struct wlr_input_popup_surface_v2 *popup_surface, bool mapped) {
 	if (mapped && !popup_surface->mapped) {
 		popup_surface->mapped = true;
-		wlr_signal_emit_safe(&popup_surface->events.map, popup_surface);
+		wlr_signal_emit_safe(&popup_surface->events.map, NULL);
 	} else if (!mapped && popup_surface->mapped) {
-		wlr_signal_emit_safe(&popup_surface->events.unmap, popup_surface);
+		wlr_signal_emit_safe(&popup_surface->events.unmap, NULL);
 		popup_surface->mapped = false;
 	}
 }
@@ -272,7 +272,7 @@ void wlr_input_method_keyboard_grab_v2_destroy(
 	if (!keyboard_grab) {
 		return;
 	}
-	wlr_signal_emit_safe(&keyboard_grab->events.destroy, keyboard_grab);
+	wlr_signal_emit_safe(&keyboard_grab->events.destroy, NULL);
 	keyboard_grab->input_method->keyboard_grab = NULL;
 	if (keyboard_grab->keyboard) {
 		wl_list_remove(&keyboard_grab->keyboard_keymap.link);
@@ -607,7 +607,7 @@ static void input_method_manager_bind(struct wl_client *wl_client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_input_method_manager_v2 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	free(manager);

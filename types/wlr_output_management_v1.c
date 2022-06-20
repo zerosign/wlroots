@@ -589,7 +589,7 @@ static void manager_handle_display_destroy(struct wl_listener *listener,
 		void *data) {
 	struct wlr_output_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	struct wlr_output_head_v1 *head, *tmp;
 	wl_list_for_each_safe(head, tmp, &manager->heads, link) {

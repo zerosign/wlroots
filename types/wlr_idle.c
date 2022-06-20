@@ -22,7 +22,7 @@ static int idle_notify(void *data) {
 		return 0;
 	}
 	timer->idle_state = true;
-	wlr_signal_emit_safe(&timer->events.idle, timer);
+	wlr_signal_emit_safe(&timer->events.idle, NULL);
 
 	if (timer->resource) {
 		org_kde_kwin_idle_timeout_send_idle(timer->resource);
@@ -38,7 +38,7 @@ static void handle_activity(struct wlr_idle_timeout *timer) {
 	// in case the previous state was sleeping send a resume event and switch state
 	if (timer->idle_state) {
 		timer->idle_state = false;
-		wlr_signal_emit_safe(&timer->events.resume, timer);
+		wlr_signal_emit_safe(&timer->events.resume, NULL);
 
 		if (timer->resource) {
 			org_kde_kwin_idle_timeout_send_resumed(timer->resource);
@@ -212,7 +212,7 @@ static void idle_bind(struct wl_client *wl_client, void *data,
 
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_idle *idle = wl_container_of(listener, idle, display_destroy);
-	wlr_signal_emit_safe(&idle->events.destroy, idle);
+	wlr_signal_emit_safe(&idle->events.destroy, NULL);
 	wl_list_remove(&idle->display_destroy.link);
 	wl_global_destroy(idle->global);
 	free(idle);

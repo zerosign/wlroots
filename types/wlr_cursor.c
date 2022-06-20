@@ -810,14 +810,13 @@ static void handle_layout_add(struct wl_listener *listener, void *data) {
 static void handle_layout_change(struct wl_listener *listener, void *data) {
 	struct wlr_cursor_state *state =
 		wl_container_of(listener, state, layout_change);
-	struct wlr_output_layout *layout = data;
 
-	if (!wlr_output_layout_contains_point(layout, NULL, state->cursor->x,
+	if (!wlr_output_layout_contains_point(state->layout, NULL, state->cursor->x,
 			state->cursor->y)) {
 		// the output we were on has gone away so go to the closest boundary
 		// point
 		double x, y;
-		wlr_output_layout_closest_point(layout, NULL, state->cursor->x,
+		wlr_output_layout_closest_point(state->layout, NULL, state->cursor->x,
 			state->cursor->y, &x, &y);
 
 		cursor_warp_unchecked(state->cursor, x, y);

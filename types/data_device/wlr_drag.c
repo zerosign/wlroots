@@ -104,15 +104,15 @@ static void drag_set_focus(struct wlr_drag *drag,
 	wl_signal_add(&focus_client->events.destroy, &drag->seat_client_destroy);
 
 out:
-	wlr_signal_emit_safe(&drag->events.focus, drag);
+	wlr_signal_emit_safe(&drag->events.focus, NULL);
 }
 
 static void drag_icon_set_mapped(struct wlr_drag_icon *icon, bool mapped) {
 	if (mapped && !icon->mapped) {
 		icon->mapped = true;
-		wlr_signal_emit_safe(&icon->events.map, icon);
+		wlr_signal_emit_safe(&icon->events.map, NULL);
 	} else if (!mapped && icon->mapped) {
-		wlr_signal_emit_safe(&icon->events.unmap, icon);
+		wlr_signal_emit_safe(&icon->events.unmap, NULL);
 		icon->mapped = false;
 	}
 }
@@ -151,7 +151,7 @@ static void drag_destroy(struct wlr_drag *drag) {
 	// to ensure that the wl_data_device.leave is sent before emitting the
 	// signal. This allows e.g. wl_pointer.enter to be sent in the destroy
 	// signal handler.
-	wlr_signal_emit_safe(&drag->events.destroy, drag);
+	wlr_signal_emit_safe(&drag->events.destroy, NULL);
 
 	if (drag->source) {
 		wl_list_remove(&drag->source_destroy.link);
@@ -364,7 +364,7 @@ static void drag_icon_destroy(struct wlr_drag_icon *icon) {
 		return;
 	}
 	drag_icon_set_mapped(icon, false);
-	wlr_signal_emit_safe(&icon->events.destroy, icon);
+	wlr_signal_emit_safe(&icon->events.destroy, NULL);
 	icon->surface->role_data = NULL;
 	wl_list_remove(&icon->surface_destroy.link);
 	free(icon);

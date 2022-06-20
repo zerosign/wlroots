@@ -479,7 +479,7 @@ static void surface_commit_state(struct wlr_surface *surface,
 		surface->role->commit(surface);
 	}
 
-	wlr_signal_emit_safe(&surface->events.commit, surface);
+	wlr_signal_emit_safe(&surface->events.commit, NULL);
 }
 
 static void collect_subsurface_damage_iter(struct wlr_surface *surface,
@@ -644,7 +644,7 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 		surface_output_destroy(surface_output);
 	}
 
-	wlr_signal_emit_safe(&surface->events.destroy, surface);
+	wlr_signal_emit_safe(&surface->events.destroy, NULL);
 
 	wlr_addon_set_finish(&surface->addons);
 

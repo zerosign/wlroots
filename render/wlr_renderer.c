@@ -53,7 +53,7 @@ void wlr_renderer_destroy(struct wlr_renderer *r) {
 
 	assert(!r->rendering);
 
-	wlr_signal_emit_safe(&r->events.destroy, r);
+	wlr_signal_emit_safe(&r->events.destroy, NULL);
 
 	if (r->impl && r->impl->destroy) {
 		r->impl->destroy(r);

@@ -120,7 +120,7 @@ static void virtual_pointer_frame(struct wl_client *client,
 		}
 	}
 
-	wlr_signal_emit_safe(&wlr_dev->pointer->events.frame, wlr_dev->pointer);
+	wlr_signal_emit_safe(&wlr_dev->pointer->events.frame, NULL);
 }
 
 static void virtual_pointer_axis_source(struct wl_client *client,
@@ -309,7 +309,7 @@ static void virtual_pointer_manager_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_virtual_pointer_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	struct wlr_virtual_pointer_v1 *pointer, *pointer_tmp;

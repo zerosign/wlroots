@@ -44,7 +44,7 @@ void wlr_backend_init(struct wlr_backend *backend,
 }
 
 void wlr_backend_finish(struct wlr_backend *backend) {
-	wlr_signal_emit_safe(&backend->events.destroy, backend);
+	wlr_signal_emit_safe(&backend->events.destroy, NULL);
 }
 
 bool wlr_backend_start(struct wlr_backend *backend) {

@@ -27,7 +27,7 @@ static void input_inhibit_manager_deactivate(
 	}
 	manager->active_client = NULL;
 	manager->active_inhibitor = NULL;
-	wlr_signal_emit_safe(&manager->events.deactivate, manager);
+	wlr_signal_emit_safe(&manager->events.deactivate, NULL);
 }
 
 static void input_inhibitor_destroy(struct wl_client *client,
@@ -71,7 +71,7 @@ static void inhibit_manager_get_inhibitor(struct wl_client *client,
 	manager->active_client = client;
 	manager->active_inhibitor = wl_resource;
 
-	wlr_signal_emit_safe(&manager->events.activate, manager);
+	wlr_signal_emit_safe(&manager->events.activate, NULL);
 }
 
 static const struct zwlr_input_inhibit_manager_v1_interface inhibit_manager_implementation = {
@@ -106,7 +106,7 @@ static void inhibit_manager_bind(struct wl_client *wl_client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_input_inhibit_manager *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wlr_signal_emit_safe(&manager->events.destroy, NULL);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	free(manager);

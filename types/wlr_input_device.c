@@ -21,7 +21,7 @@ void wlr_input_device_finish(struct wlr_input_device *wlr_device) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&wlr_device->events.destroy, wlr_device);
+	wlr_signal_emit_safe(&wlr_device->events.destroy, NULL);
 
 	wl_list_remove(&wlr_device->events.destroy.listener_list);
 
