@@ -22,6 +22,5 @@ pixman_image_t *wlr_pixman_renderer_get_current_image(
 
 bool wlr_renderer_is_pixman(struct wlr_renderer *wlr_renderer);
 bool wlr_texture_is_pixman(struct wlr_texture *texture);
-pixman_image_t *wlr_pixman_texture_get_image(struct wlr_texture *wlr_texture);
 
 #endif
