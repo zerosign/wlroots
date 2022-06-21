@@ -27,14 +27,6 @@ struct wlr_texture {
 };
 
 /**
- * Create a new texture from raw pixel data. `stride` is in bytes. The returned
- * texture is mutable.
- */
-struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
-	uint32_t fmt, uint32_t stride, uint32_t width, uint32_t height,
-	const void *data);
-
-/**
   * Update a texture with a struct wlr_buffer's contents.
   *
   * The update might be rejected (in case the texture is immutable, the buffer
