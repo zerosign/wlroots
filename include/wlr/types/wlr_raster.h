@@ -75,4 +75,10 @@ void wlr_raster_attach(struct wlr_raster *raster, struct wlr_texture *texture);
  */
 void wlr_raster_detach(struct wlr_raster *raster, struct wlr_texture *texture);
 
+/**
+ * Create a new raster from raw pixel data. `stride` is in bytes.
+ */
+struct wlr_raster *wlr_raster_from_pixels(uint32_t fmt, uint32_t stride,
+	uint32_t width, uint32_t height, const void *data);
+
 #endif
