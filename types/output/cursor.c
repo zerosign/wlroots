@@ -363,24 +363,20 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 bool wlr_output_cursor_set_image(struct wlr_output_cursor *cursor,
 		const uint8_t *pixels, int32_t stride, uint32_t width, uint32_t height,
 		int32_t hotspot_x, int32_t hotspot_y) {
-	struct wlr_buffer *buffer = NULL;
+	struct wlr_raster *raster = NULL;
 
 	if (pixels) {
-		struct wlr_readonly_data_buffer *ro_buffer = readonly_data_buffer_create(
-			DRM_FORMAT_ARGB8888, stride, width, height, pixels);
-		if (ro_buffer == NULL) {
-			return false;
-		}
-		buffer = &ro_buffer->base;
+		raster = wlr_raster_from_pixels(DRM_FORMAT_ARGB8888,
+			stride, width, height, pixels);
 	}
-	bool ok = wlr_output_cursor_set_buffer(cursor, buffer, hotspot_x, hotspot_y);
+	bool ok = wlr_output_cursor_set_raster(cursor, raster, hotspot_x, hotspot_y);
 
-	wlr_buffer_drop(buffer);
+	wlr_raster_unlock(raster);
 	return ok;
 }
 
-bool wlr_output_cursor_set_buffer(struct wlr_output_cursor *cursor,
-		struct wlr_buffer *buffer, int32_t hotspot_x, int32_t hotspot_y) {
+bool wlr_output_cursor_set_raster(struct wlr_output_cursor *cursor,
+		struct wlr_raster *raster, int32_t hotspot_x, int32_t hotspot_y) {
 	struct wlr_renderer *renderer = cursor->output->renderer;
 	if (!renderer) {
 		return false;
@@ -388,9 +384,9 @@ bool wlr_output_cursor_set_buffer(struct wlr_output_cursor *cursor,
 
 	output_cursor_reset(cursor);
 
-	if (buffer != NULL) {
-		cursor->width = buffer->width;
-		cursor->height = buffer->height;
+	if (raster) {
+		cursor->width = raster->width;
+		cursor->height = raster->height;
 	} else {
 		cursor->width = 0;
 		cursor->height = 0;
@@ -404,14 +400,9 @@ bool wlr_output_cursor_set_buffer(struct wlr_output_cursor *cursor,
 	wlr_raster_unlock(cursor->raster);
 	cursor->raster = NULL;
 
-	cursor->enabled = false;
-	if (buffer != NULL) {
-		cursor->raster = wlr_raster_create(buffer);
-		if (!cursor->raster) {
-			return false;
-		}
-
-		cursor->enabled = true;
+	cursor->enabled = raster;
+	if (raster) {
+		cursor->raster = wlr_raster_lock(raster);
 	}
 
 	if (output_cursor_attempt_hardware(cursor)) {
