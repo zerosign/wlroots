@@ -46,8 +46,103 @@ static struct wlr_pixman_texture *get_texture(
 	return (struct wlr_pixman_texture *)wlr_texture;
 }
 
+static struct wlr_pixman_texture *pixman_texture_create(
+		struct wlr_pixman_renderer *renderer, uint32_t drm_format,
+		uint32_t width, uint32_t height) {
+	struct wlr_pixman_texture *texture =
+		calloc(1, sizeof(struct wlr_pixman_texture));
+	if (texture == NULL) {
+		wlr_log_errno(WLR_ERROR, "Failed to allocate pixman texture");
+		return NULL;
+	}
+
+	wlr_texture_init(&texture->wlr_texture, &texture_impl, width, height);
+	texture->renderer = renderer;
+
+	texture->format_info = drm_get_pixel_format_info(drm_format);
+	if (!texture->format_info) {
+		wlr_log(WLR_ERROR, "Unsupported drm format 0x%"PRIX32, drm_format);
+		free(texture);
+		return NULL;
+	}
+
+	texture->format = get_pixman_format_from_drm(drm_format);
+	if (texture->format == 0) {
+		wlr_log(WLR_ERROR, "Unsupported pixman drm format 0x%"PRIX32,
+				drm_format);
+		free(texture);
+		return NULL;
+	}
+
+	wl_list_insert(&renderer->textures, &texture->link);
+
+	return texture;
+}
+
+static struct wlr_texture *pixman_texture_from_buffer(
+		struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer) {
+	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
+
+	void *data = NULL;
+	uint32_t drm_format;
+	size_t stride;
+	if (!wlr_buffer_begin_data_ptr_access(buffer, WLR_BUFFER_DATA_PTR_ACCESS_READ,
+			&data, &drm_format, &stride)) {
+		return NULL;
+	}
+	wlr_buffer_end_data_ptr_access(buffer);
+
+	struct wlr_pixman_texture *texture = pixman_texture_create(renderer,
+		drm_format, buffer->width, buffer->height);
+	if (texture == NULL) {
+		return NULL;
+	}
+
+	texture->image = pixman_image_create_bits_no_clear(texture->format,
+		buffer->width, buffer->height, data, stride);
+	if (!texture->image) {
+		wlr_log(WLR_ERROR, "Failed to create pixman image");
+		wl_list_remove(&texture->link);
+		free(texture);
+		return NULL;
+	}
+
+	texture->buffer = wlr_buffer_lock(buffer);
+
+	return &texture->wlr_texture;
+}
+
+static struct wlr_pixman_texture *raster_upload(
+		struct wlr_pixman_renderer *renderer, struct wlr_raster *wlr_raster) {
+	struct wlr_texture *texture;
+	wl_list_for_each(texture, &wlr_raster->sources, link) {
+		if (wlr_texture_is_pixman(texture)) {
+			struct wlr_pixman_texture *pixman_tex =
+				(struct wlr_pixman_texture *)texture;
+			if (pixman_tex->renderer != renderer) {
+				continue;
+			}
+			return pixman_tex;
+		}
+	}
+
+	if (!wlr_raster->buffer) {
+		// we could possibly do a blit with another texture from another renderer,
+		// but this is unsupported currently.
+		return NULL;
+	}
+
+	texture = pixman_texture_from_buffer(&renderer->wlr_renderer, wlr_raster->buffer);
+	if (!texture) {
+		return NULL;
+	}
+
+	wlr_raster_attach(wlr_raster, texture);
+	return (struct wlr_pixman_texture *)texture;
+}
+
 static void texture_destroy(struct wlr_texture *wlr_texture) {
-	struct wlr_pixman_texture *texture = get_texture(wlr_texture);
+	struct wlr_pixman_texture *texture = (struct wlr_pixman_texture *)wlr_texture;
 	wl_list_remove(&texture->link);
 	pixman_image_unref(texture->image);
 	wlr_buffer_unlock(texture->buffer);
@@ -334,72 +429,6 @@ static const struct wlr_drm_format_set *pixman_get_render_formats(
 	return &renderer->drm_formats;
 }
 
-static struct wlr_pixman_texture *pixman_texture_create(
-		struct wlr_pixman_renderer *renderer, uint32_t drm_format,
-		uint32_t width, uint32_t height) {
-	struct wlr_pixman_texture *texture =
-		calloc(1, sizeof(struct wlr_pixman_texture));
-	if (texture == NULL) {
-		wlr_log_errno(WLR_ERROR, "Failed to allocate pixman texture");
-		return NULL;
-	}
-
-	wlr_texture_init(&texture->wlr_texture, &texture_impl, width, height);
-	texture->renderer = renderer;
-
-	texture->format_info = drm_get_pixel_format_info(drm_format);
-	if (!texture->format_info) {
-		wlr_log(WLR_ERROR, "Unsupported drm format 0x%"PRIX32, drm_format);
-		free(texture);
-		return NULL;
-	}
-
-	texture->format = get_pixman_format_from_drm(drm_format);
-	if (texture->format == 0) {
-		wlr_log(WLR_ERROR, "Unsupported pixman drm format 0x%"PRIX32,
-				drm_format);
-		free(texture);
-		return NULL;
-	}
-
-	wl_list_insert(&renderer->textures, &texture->link);
-
-	return texture;
-}
-
-static struct wlr_texture *pixman_texture_from_buffer(
-		struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer) {
-	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
-
-	void *data = NULL;
-	uint32_t drm_format;
-	size_t stride;
-	if (!wlr_buffer_begin_data_ptr_access(buffer, WLR_BUFFER_DATA_PTR_ACCESS_READ,
-			&data, &drm_format, &stride)) {
-		return NULL;
-	}
-	wlr_buffer_end_data_ptr_access(buffer);
-
-	struct wlr_pixman_texture *texture = pixman_texture_create(renderer,
-		drm_format, buffer->width, buffer->height);
-	if (texture == NULL) {
-		return NULL;
-	}
-
-	texture->image = pixman_image_create_bits_no_clear(texture->format,
-		buffer->width, buffer->height, data, stride);
-	if (!texture->image) {
-		wlr_log(WLR_ERROR, "Failed to create pixman image");
-		wl_list_remove(&texture->link);
-		free(texture);
-		return NULL;
-	}
-
-	texture->buffer = wlr_buffer_lock(buffer);
-
-	return &texture->wlr_texture;
-}
-
 static bool pixman_bind_buffer(struct wlr_renderer *wlr_renderer,
 		struct wlr_buffer *wlr_buffer) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
@@ -488,11 +517,19 @@ static uint32_t pixman_get_render_buffer_caps(struct wlr_renderer *renderer) {
 	return WLR_BUFFER_CAP_DATA_PTR;
 }
 
+static bool pixman_raster_upload(struct wlr_renderer *wlr_renderer,
+		struct wlr_raster *raster) {
+	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
+	struct wlr_pixman_texture *texture = raster_upload(renderer, raster);
+	return texture;
+}
+
 static const struct wlr_renderer_impl renderer_impl = {
 	.begin = pixman_begin,
 	.end = pixman_end,
 	.clear = pixman_clear,
 	.scissor = pixman_scissor,
+	.raster_upload = pixman_raster_upload,
 	.render_subtexture_with_matrix = pixman_render_subtexture_with_matrix,
 	.render_quad_with_matrix = pixman_render_quad_with_matrix,
 	.get_shm_texture_formats = pixman_get_shm_texture_formats,

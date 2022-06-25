@@ -376,6 +376,35 @@ struct wlr_texture *gles2_texture_from_buffer(struct wlr_renderer *wlr_renderer,
 	}
 }
 
+struct wlr_gles2_texture *gles2_raster_upload(struct wlr_gles2_renderer *renderer,
+		struct wlr_raster *wlr_raster) {
+	struct wlr_texture *texture;
+	wl_list_for_each(texture, &wlr_raster->sources, link) {
+		if (wlr_texture_is_gles2(texture)) {
+			struct wlr_gles2_texture *gles2_tex =
+				(struct wlr_gles2_texture *)texture;
+			if (gles2_tex->renderer != renderer) {
+				continue;
+			}
+			return gles2_tex;
+		}
+	}
+
+	if (!wlr_raster->buffer) {
+		// we could possibly do a blit with another texture from another renderer,
+		// but this is unsupported currently.
+		return NULL;
+	}
+
+	texture = gles2_texture_from_buffer(&renderer->wlr_renderer, wlr_raster->buffer);
+	if (!texture) {
+		return NULL;
+	}
+
+	wlr_raster_attach(wlr_raster, texture);
+	return (struct wlr_gles2_texture *)texture;
+}
+
 void wlr_gles2_texture_get_attribs(struct wlr_texture *wlr_texture,
 		struct wlr_gles2_texture_attribs *attribs) {
 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);

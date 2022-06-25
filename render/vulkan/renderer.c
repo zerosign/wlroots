@@ -976,12 +976,20 @@ static uint32_t vulkan_get_render_buffer_caps(struct wlr_renderer *wlr_renderer)
 	return WLR_BUFFER_CAP_DMABUF;
 }
 
+static bool _vulkan_raster_upload(struct wlr_renderer *wlr_renderer,
+		struct wlr_raster *raster) {
+	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
+	struct wlr_vk_texture *texture = vulkan_raster_upload(renderer, raster);
+	return texture;
+}
+
 static const struct wlr_renderer_impl renderer_impl = {
 	.bind_buffer = vulkan_bind_buffer,
 	.begin = vulkan_begin,
 	.end = vulkan_end,
 	.clear = vulkan_clear,
 	.scissor = vulkan_scissor,
+	.raster_upload = _vulkan_raster_upload,
 	.render_subtexture_with_matrix = vulkan_render_subtexture_with_matrix,
 	.render_quad_with_matrix = vulkan_render_quad_with_matrix,
 	.get_shm_texture_formats = vulkan_get_shm_texture_formats,

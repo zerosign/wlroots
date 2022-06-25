@@ -534,6 +534,13 @@ static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
 	free(renderer);
 }
 
+static bool _gles2_raster_upload(struct wlr_renderer *wlr_renderer,
+		struct wlr_raster *raster) {
+	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
+	struct wlr_gles2_texture *texture = gles2_raster_upload(renderer, raster);
+	return texture;
+}
+
 static const struct wlr_renderer_impl renderer_impl = {
 	.destroy = gles2_destroy,
 	.bind_buffer = gles2_bind_buffer,
@@ -541,6 +548,7 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.end = gles2_end,
 	.clear = gles2_clear,
 	.scissor = gles2_scissor,
+	.raster_upload = _gles2_raster_upload,
 	.render_subtexture_with_matrix = gles2_render_subtexture_with_matrix,
 	.render_quad_with_matrix = gles2_render_quad_with_matrix,
 	.get_shm_texture_formats = gles2_get_shm_texture_formats,

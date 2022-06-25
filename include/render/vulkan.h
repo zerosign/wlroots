@@ -256,6 +256,8 @@ struct wlr_vk_texture {
 };
 
 struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture);
+struct wlr_vk_texture *vulkan_raster_upload(struct wlr_vk_renderer *renderer,
+	struct wlr_raster *wlr_raster);
 VkImage vulkan_import_dmabuf(struct wlr_vk_renderer *renderer,
 	const struct wlr_dmabuf_attributes *attribs,
 	VkDeviceMemory mems[static WLR_DMABUF_MAX_PLANES], uint32_t *n_mems,

@@ -742,3 +742,32 @@ struct wlr_texture *vulkan_texture_from_buffer(
 		return NULL;
 	}
 }
+
+struct wlr_vk_texture *vulkan_raster_upload(struct wlr_vk_renderer *renderer,
+		struct wlr_raster *wlr_raster) {
+	struct wlr_texture *texture;
+	wl_list_for_each(texture, &wlr_raster->sources, link) {
+		if (wlr_texture_is_vk(texture)) {
+			struct wlr_vk_texture *vk_tex =
+				(struct wlr_vk_texture *)texture;
+			if (vk_tex->renderer != renderer) {
+				continue;
+			}
+			return vk_tex;
+		}
+	}
+
+	if (!wlr_raster->buffer) {
+		// we could possibly do a blit with another texture from another renderer,
+		// but this is unsupported currently.
+		return NULL;
+	}
+
+	texture = vulkan_texture_from_buffer(&renderer->wlr_renderer, wlr_raster->buffer);
+	if (!texture) {
+		return NULL;
+	}
+
+	wlr_raster_attach(wlr_raster, texture);
+	return (struct wlr_vk_texture *)texture;
+}

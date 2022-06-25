@@ -35,6 +35,7 @@ void wlr_renderer_init(struct wlr_renderer *renderer,
 	assert(impl->begin);
 	assert(impl->clear);
 	assert(impl->scissor);
+	assert(impl->raster_upload);
 	assert(impl->render_subtexture_with_matrix);
 	assert(impl->render_quad_with_matrix);
 	assert(impl->get_shm_texture_formats);
@@ -111,6 +112,11 @@ void wlr_renderer_clear(struct wlr_renderer *r, const float color[static 4]) {
 void wlr_renderer_scissor(struct wlr_renderer *r, struct wlr_box *box) {
 	assert(r->rendering);
 	r->impl->scissor(r, box);
+}
+
+bool wlr_renderer_raster_upload(struct wlr_renderer *r,
+		struct wlr_raster *raster) {
+	return r->impl->raster_upload(r, raster);
 }
 
 bool wlr_render_texture(struct wlr_renderer *r, struct wlr_texture *texture,

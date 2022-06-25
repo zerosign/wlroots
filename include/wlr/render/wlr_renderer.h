@@ -48,6 +48,14 @@ void wlr_renderer_clear(struct wlr_renderer *r, const float color[static 4]);
  * box.
  */
 void wlr_renderer_scissor(struct wlr_renderer *r, struct wlr_box *box);
+
+/**
+ * The renderer will attempt to upload the raster using an available compatible
+ * source found in the raster to the device that the renderer is running on.
+ * If the raster is already uploaded to said device, then this is a no-op.
+ */
+bool wlr_renderer_raster_upload(struct wlr_renderer *r,
+    struct wlr_raster *raster);
 /**
  * Renders the requested texture.
  */
