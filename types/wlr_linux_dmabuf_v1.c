@@ -86,6 +86,10 @@ struct wlr_dmabuf_v1_buffer *wlr_dmabuf_v1_buffer_from_buffer_resource(
 
 static const struct wlr_buffer_impl buffer_impl;
 
+bool wlr_dmabuf_v1_buffer_is_buffer(struct wlr_buffer *buffer) {
+	return buffer->impl == &buffer_impl;
+}
+
 static struct wlr_dmabuf_v1_buffer *dmabuf_v1_buffer_from_buffer(
 		struct wlr_buffer *buffer) {
 	assert(buffer->impl == &buffer_impl);

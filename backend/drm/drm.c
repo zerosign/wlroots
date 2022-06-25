@@ -16,6 +16,7 @@
 #include <wlr/backend/interface.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
@@ -1508,7 +1509,8 @@ static void handle_page_flip(int fd, unsigned seq,
 	 * data between the GPUs, even if we were using the direct scanout
 	 * interface.
 	 */
-	if (!drm->parent && plane->current_fb && false) {
+	if (!drm->parent && plane->current_fb &&
+			wlr_dmabuf_v1_buffer_is_buffer(plane->current_fb->wlr_buf)) {
 		present_flags |= WLR_OUTPUT_PRESENT_ZERO_COPY;
 	}
 
