@@ -343,12 +343,12 @@ static struct tinywl_view *desktop_view_at(
 	 * surface in the surface tree of a tinywl_view. */
 	struct wlr_scene_node *node = wlr_scene_node_at(
 		&server->scene->tree.node, lx, ly, sx, sy);
-	if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
+	if (node == NULL || node->type != WLR_SCENE_NODE_RASTER) {
 		return NULL;
 	}
-	struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+	struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
 	struct wlr_scene_surface *scene_surface =
-		wlr_scene_surface_from_buffer(scene_buffer);
+		wlr_scene_surface_from_raster(scene_raster);
 	if (!scene_surface) {
 		return NULL;
 	}

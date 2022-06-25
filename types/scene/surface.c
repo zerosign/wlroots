@@ -3,7 +3,7 @@
 #include <wlr/types/wlr_presentation_time.h>
 #include "types/wlr_scene.h"
 
-static void handle_scene_buffer_output_enter(
+static void handle_scene_raster_output_enter(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, output_enter);
@@ -12,7 +12,7 @@ static void handle_scene_buffer_output_enter(
 	wlr_surface_send_enter(surface->surface, output->output);
 }
 
-static void handle_scene_buffer_output_leave(
+static void handle_scene_raster_output_leave(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, output_leave);
@@ -21,14 +21,14 @@ static void handle_scene_buffer_output_leave(
 	wlr_surface_send_leave(surface->surface, output->output);
 }
 
-static void handle_scene_buffer_output_present(
+static void handle_scene_raster_output_present(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, output_present);
 	struct wlr_scene_output *scene_output = data;
 
-	if (surface->buffer->primary_output == scene_output) {
-		struct wlr_scene *root = scene_node_get_root(&surface->buffer->node);
+	if (surface->raster->primary_output == scene_output) {
+		struct wlr_scene *root = scene_node_get_root(&surface->raster->node);
 		struct wlr_presentation *presentation = root->presentation;
 
 		if (presentation) {
@@ -38,7 +38,7 @@ static void handle_scene_buffer_output_present(
 	}
 }
 
-static void handle_scene_buffer_frame_done(
+static void handle_scene_raster_frame_done(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, frame_done);
@@ -52,53 +52,60 @@ static void scene_surface_handle_surface_destroy(
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, surface_destroy);
 
-	wlr_scene_node_destroy(&surface->buffer->node);
+	wlr_scene_node_destroy(&surface->raster->node);
 }
 
-static void set_buffer_with_surface_state(struct wlr_scene_buffer *scene_buffer,
+static void set_raster_with_surface_state(struct wlr_scene_raster *scene_raster,
 		struct wlr_surface *surface) {
 	struct wlr_surface_state *state = &surface->current;
 
 	struct wlr_fbox src_box;
 	wlr_surface_get_buffer_source_box(surface, &src_box);
-	wlr_scene_buffer_set_source_box(scene_buffer, &src_box);
+	wlr_scene_raster_set_source_box(scene_raster, &src_box);
 
-	wlr_scene_buffer_set_dest_size(scene_buffer, state->width, state->height);
-	wlr_scene_buffer_set_transform(scene_buffer, state->transform);
+	wlr_scene_raster_set_dest_size(scene_raster, state->width, state->height);
+	wlr_scene_raster_set_transform(scene_raster, state->transform);
 
+	struct wlr_raster *raster = NULL;
 	if (surface->current.buffer) {
-		wlr_scene_buffer_set_buffer_with_damage(scene_buffer,
-			surface->current.buffer, &surface->buffer_damage);
-	} else {
-		wlr_scene_buffer_set_buffer(scene_buffer, NULL);
+		raster = wlr_raster_create(surface->current.buffer);
 	}
+
+	if (raster) {
+		wlr_scene_raster_set_raster_with_damage(scene_raster,
+			raster, &surface->buffer_damage);
+	} else {
+		wlr_scene_raster_set_raster(scene_raster, NULL);
+	}
+
+	wlr_raster_unlock(raster);
 }
 
 static void handle_scene_surface_surface_commit(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, surface_commit);
-	struct wlr_scene_buffer *scene_buffer = surface->buffer;
+	struct wlr_scene_raster *scene_raster = surface->raster;
 
-	set_buffer_with_surface_state(scene_buffer, surface->surface);
+	set_raster_with_surface_state(scene_raster, surface->surface);
 
 	// Even if the surface hasn't submitted damage, schedule a new frame if
 	// the client has requested a wl_surface.frame callback. Check if the node
 	// is visible. If not, the client will never receive a frame_done event
 	// anyway so it doesn't make sense to schedule here.
 	int lx, ly;
-	bool enabled = wlr_scene_node_coords(&scene_buffer->node, &lx, &ly);
+	bool enabled = wlr_scene_node_coords(&scene_raster->node, &lx, &ly);
 
 	if (!wl_list_empty(&surface->surface->current.frame_callback_list) &&
-			surface->buffer->primary_output != NULL && enabled) {
-		wlr_output_schedule_frame(surface->buffer->primary_output->output);
+			surface->raster->primary_output != NULL && enabled) {
+		wlr_output_schedule_frame(surface->raster->primary_output->output);
 	}
 }
 
-static bool scene_buffer_point_accepts_input(struct wlr_scene_buffer *scene_buffer,
+static bool scene_raster_point_accepts_input(struct wlr_scene_raster *scene_raster,
 		int sx, int sy) {
 	struct wlr_scene_surface *scene_surface =
-		wlr_scene_surface_from_buffer(scene_buffer);
+		wlr_scene_surface_from_raster(scene_raster);
 
 	return wlr_surface_point_accepts_input(scene_surface->surface, sx, sy);
 }
@@ -123,10 +130,10 @@ static const struct wlr_addon_interface surface_addon_impl = {
 	.destroy = surface_addon_destroy,
 };
 
-struct wlr_scene_surface *wlr_scene_surface_from_buffer(
-		struct wlr_scene_buffer *scene_buffer) {
-	struct wlr_addon *addon = wlr_addon_find(&scene_buffer->node.addons,
-		scene_buffer, &surface_addon_impl);
+struct wlr_scene_surface *wlr_scene_surface_from_raster(
+		struct wlr_scene_raster *scene_raster) {
+	struct wlr_addon *addon = wlr_addon_find(&scene_raster->node.addons,
+		scene_raster, &surface_addon_impl);
 	if (!addon) {
 		return NULL;
 	}
@@ -142,27 +149,27 @@ struct wlr_scene_surface *wlr_scene_surface_create(struct wlr_scene_tree *parent
 		return NULL;
 	}
 
-	struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_create(parent, NULL);
-	if (!scene_buffer) {
+	struct wlr_scene_raster *scene_raster = wlr_scene_raster_create(parent, NULL);
+	if (!scene_raster) {
 		free(surface);
 		return NULL;
 	}
 
-	surface->buffer = scene_buffer;
+	surface->raster = scene_raster;
 	surface->surface = wlr_surface;
-	scene_buffer->point_accepts_input = scene_buffer_point_accepts_input;
+	scene_raster->point_accepts_input = scene_raster_point_accepts_input;
 
-	surface->output_enter.notify = handle_scene_buffer_output_enter;
-	wl_signal_add(&scene_buffer->events.output_enter, &surface->output_enter);
+	surface->output_enter.notify = handle_scene_raster_output_enter;
+	wl_signal_add(&scene_raster->events.output_enter, &surface->output_enter);
 
-	surface->output_leave.notify = handle_scene_buffer_output_leave;
-	wl_signal_add(&scene_buffer->events.output_leave, &surface->output_leave);
+	surface->output_leave.notify = handle_scene_raster_output_leave;
+	wl_signal_add(&scene_raster->events.output_leave, &surface->output_leave);
 
-	surface->output_present.notify = handle_scene_buffer_output_present;
-	wl_signal_add(&scene_buffer->events.output_present, &surface->output_present);
+	surface->output_present.notify = handle_scene_raster_output_present;
+	wl_signal_add(&scene_raster->events.output_present, &surface->output_present);
 
-	surface->frame_done.notify = handle_scene_buffer_frame_done;
-	wl_signal_add(&scene_buffer->events.frame_done, &surface->frame_done);
+	surface->frame_done.notify = handle_scene_raster_frame_done;
+	wl_signal_add(&scene_raster->events.frame_done, &surface->frame_done);
 
 	surface->surface_destroy.notify = scene_surface_handle_surface_destroy;
 	wl_signal_add(&wlr_surface->events.destroy, &surface->surface_destroy);
@@ -170,10 +177,10 @@ struct wlr_scene_surface *wlr_scene_surface_create(struct wlr_scene_tree *parent
 	surface->surface_commit.notify = handle_scene_surface_surface_commit;
 	wl_signal_add(&wlr_surface->events.commit, &surface->surface_commit);
 
-	wlr_addon_init(&surface->addon, &scene_buffer->node.addons,
-		scene_buffer, &surface_addon_impl);
+	wlr_addon_init(&surface->addon, &scene_raster->node.addons,
+		scene_raster, &surface_addon_impl);
 
-	set_buffer_with_surface_state(scene_buffer, wlr_surface);
+	set_raster_with_surface_state(scene_raster, wlr_surface);
 
 	return surface;
 }

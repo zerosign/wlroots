@@ -81,9 +81,9 @@ static void subsurface_tree_reconfigure(
 	}
 
 	if (prev != NULL) {
-		wlr_scene_node_place_above(&subsurface_tree->scene_surface->buffer->node, prev);
+		wlr_scene_node_place_above(&subsurface_tree->scene_surface->raster->node, prev);
 	}
-	prev = &subsurface_tree->scene_surface->buffer->node;
+	prev = &subsurface_tree->scene_surface->raster->node;
 
 	wl_list_for_each(subsurface, &surface->current.subsurfaces_above,
 			current.link) {

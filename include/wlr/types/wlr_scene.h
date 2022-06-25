@@ -31,21 +31,21 @@ struct wlr_xdg_surface;
 struct wlr_layer_surface_v1;
 
 struct wlr_scene_node;
-struct wlr_scene_buffer;
+struct wlr_scene_raster;
 
 typedef void (*wlr_scene_node_iterator_func_t)(struct wlr_scene_node *node,
 	int sx, int sy, void *data);
 
-typedef bool (*wlr_scene_buffer_point_accepts_input_func_t)(
-	struct wlr_scene_buffer *buffer, int sx, int sy);
+typedef bool (*wlr_scene_raster_point_accepts_input_func_t)(
+	struct wlr_scene_raster *raster, int sx, int sy);
 
-typedef void (*wlr_scene_buffer_iterator_func_t)(
-	struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data);
+typedef void (*wlr_scene_raster_iterator_func_t)(
+	struct wlr_scene_raster *raster, int sx, int sy, void *user_data);
 
 enum wlr_scene_node_type {
 	WLR_SCENE_NODE_TREE,
 	WLR_SCENE_NODE_RECT,
-	WLR_SCENE_NODE_BUFFER,
+	WLR_SCENE_NODE_RASTER,
 };
 
 /** A node is an object in the scene. */
@@ -98,7 +98,7 @@ struct wlr_scene {
 
 /** A scene-graph node displaying a single surface. */
 struct wlr_scene_surface {
-	struct wlr_scene_buffer *buffer;
+	struct wlr_scene_raster *raster;
 	struct wlr_surface *surface;
 
 	// private state
@@ -120,12 +120,12 @@ struct wlr_scene_rect {
 	float color[4];
 };
 
-/** A scene-graph node displaying a buffer */
-struct wlr_scene_buffer {
+/** A scene-graph node displaying a raster */
+struct wlr_scene_raster {
 	struct wlr_scene_node node;
 
 	// May be NULL
-	struct wlr_buffer *buffer;
+	struct wlr_raster *raster;
 
 	struct {
 		struct wl_signal output_enter; // struct wlr_scene_output
@@ -135,11 +135,11 @@ struct wlr_scene_buffer {
 	} events;
 
 	// May be NULL
-	wlr_scene_buffer_point_accepts_input_func_t point_accepts_input;
+	wlr_scene_raster_point_accepts_input_func_t point_accepts_input;
 
 	/**
-	 * The output that the largest area of this buffer is displayed on.
-	 * This may be NULL if the buffer is not currently displayed on any
+	 * The output that the largest area of this raster is displayed on.
+	 * This may be NULL if the raster is not currently displayed on any
 	 * outputs. This is the output that should be used for frame callbacks,
 	 * presentation feedback, etc.
 	 */
@@ -148,7 +148,6 @@ struct wlr_scene_buffer {
 	// private state
 
 	uint64_t active_outputs;
-	struct wlr_raster *raster;
 	struct wlr_fbox src_box;
 	int dst_width, dst_height;
 	enum wl_output_transform transform;
@@ -240,12 +239,12 @@ void wlr_scene_node_reparent(struct wlr_scene_node *node,
  */
 bool wlr_scene_node_coords(struct wlr_scene_node *node, int *lx, int *ly);
 /**
- * Call `iterator` on each buffer in the scene-graph, with the buffer's
+ * Call `iterator` on each raster in the scene-graph, with the raster's
  * position in layout coordinates. The function is called from root to leaves
  * (in rendering order).
  */
-void wlr_scene_node_for_each_buffer(struct wlr_scene_node *node,
-	wlr_scene_buffer_iterator_func_t iterator, void *user_data);
+void wlr_scene_node_for_each_raster(struct wlr_scene_node *node,
+	wlr_scene_raster_iterator_func_t iterator, void *user_data);
 /**
  * Find the topmost node in this scene-graph that contains the point at the
  * given layout-local coordinates. (For surface nodes, this means accepting
@@ -285,14 +284,14 @@ struct wlr_scene_tree *wlr_scene_tree_create(struct wlr_scene_tree *parent);
 struct wlr_scene_surface *wlr_scene_surface_create(struct wlr_scene_tree *parent,
 	struct wlr_surface *surface);
 
-struct wlr_scene_buffer *wlr_scene_buffer_from_node(struct wlr_scene_node *node);
+struct wlr_scene_raster *wlr_scene_raster_from_node(struct wlr_scene_node *node);
 
 /**
- * If this buffer is backed by a surface, then the struct wlr_scene_surface is
+ * If this raster is backed by a surface, then the struct wlr_scene_surface is
  * returned. If not, NULL will be returned.
  */
-struct wlr_scene_surface *wlr_scene_surface_from_buffer(
-	struct wlr_scene_buffer *scene_buffer);
+struct wlr_scene_surface *wlr_scene_surface_from_raster(
+	struct wlr_scene_raster *scene_raster);
 
 /**
  * Add a node displaying a solid-colored rectangle to the scene-graph.
@@ -311,59 +310,59 @@ void wlr_scene_rect_set_size(struct wlr_scene_rect *rect, int width, int height)
 void wlr_scene_rect_set_color(struct wlr_scene_rect *rect, const float color[static 4]);
 
 /**
- * Add a node displaying a buffer to the scene-graph.
+ * Add a node displaying a raster to the scene-graph.
  *
- * If the buffer is NULL, this node will not be displayed.
+ * If the raster is NULL, this node will not be displayed.
  */
-struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
-	struct wlr_buffer *buffer);
+struct wlr_scene_raster *wlr_scene_raster_create(struct wlr_scene_tree *parent,
+	struct wlr_raster *raster);
 
 /**
- * Sets the buffer's backing buffer.
+ * Sets the raster's backing raster.
  *
- * If the buffer is NULL, the buffer node will not be displayed.
+ * If the raster is NULL, the raster node will not be displayed.
  */
-void wlr_scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
-	struct wlr_buffer *buffer);
+void wlr_scene_raster_set_raster(struct wlr_scene_raster *scene_raster,
+	struct wlr_raster *raster);
 
 /**
- * Sets the buffer's backing buffer with a custom damage region.
+ * Sets the raster's backing raster with a custom damage region.
  *
- * The damage region is in buffer-local coordinates. If the region is NULL,
- * the whole buffer node will be damaged.
+ * The damage region is in raster-local coordinates. If the region is NULL,
+ * the whole raster node will be damaged.
  */
-void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buffer,
-	struct wlr_buffer *buffer, pixman_region32_t *region);
+void wlr_scene_raster_set_raster_with_damage(struct wlr_scene_raster *scene_raster,
+	struct wlr_raster *raster, pixman_region32_t *region);
 
 /**
- * Set the source rectangle describing the region of the buffer which will be
- * sampled to render this node. This allows cropping the buffer.
+ * Set the source rectangle describing the region of the raster which will be
+ * sampled to render this node. This allows cropping the raster.
  *
- * If NULL, the whole buffer is sampled. By default, the source box is NULL.
+ * If NULL, the whole raster is sampled. By default, the source box is NULL.
  */
-void wlr_scene_buffer_set_source_box(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_set_source_box(struct wlr_scene_raster *scene_raster,
 	const struct wlr_fbox *box);
 
 /**
- * Set the destination size describing the region of the scene-graph the buffer
- * will be painted onto. This allows scaling the buffer.
+ * Set the destination size describing the region of the scene-graph the raster
+ * will be painted onto. This allows scaling the raster.
  *
- * If zero, the destination size will be the buffer size. By default, the
+ * If zero, the destination size will be the raster size. By default, the
  * destination size is zero.
  */
-void wlr_scene_buffer_set_dest_size(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_set_dest_size(struct wlr_scene_raster *scene_raster,
 	int width, int height);
 
 /**
- * Set a transform which will be applied to the buffer.
+ * Set a transform which will be applied to the raster.
  */
-void wlr_scene_buffer_set_transform(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_set_transform(struct wlr_scene_raster *scene_raster,
 	enum wl_output_transform transform);
 
 /**
- * Calls the buffer's frame_done signal.
+ * Calls the raster's frame_done signal.
  */
-void wlr_scene_buffer_send_frame_done(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_send_frame_done(struct wlr_scene_raster *scene_raster,
 	struct timespec *now);
 
 /**
@@ -394,12 +393,12 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output);
 void wlr_scene_output_send_frame_done(struct wlr_scene_output *scene_output,
 	struct timespec *now);
 /**
- * Call `iterator` on each buffer in the scene-graph visible on the output,
- * with the buffer's position in layout coordinates. The function is called
+ * Call `iterator` on each raster in the scene-graph visible on the output,
+ * with the raster's position in layout coordinates. The function is called
  * from root to leaves (in rendering order).
  */
-void wlr_scene_output_for_each_buffer(struct wlr_scene_output *scene_output,
-	wlr_scene_buffer_iterator_func_t iterator, void *user_data);
+void wlr_scene_output_for_each_raster(struct wlr_scene_output *scene_output,
+	wlr_scene_raster_iterator_func_t iterator, void *user_data);
 /**
  * Get a scene-graph output from a struct wlr_output.
  *

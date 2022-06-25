@@ -28,10 +28,10 @@ static struct wlr_scene_rect *scene_rect_from_node(
 	return (struct wlr_scene_rect *)node;
 }
 
-struct wlr_scene_buffer *wlr_scene_buffer_from_node(
+struct wlr_scene_raster *wlr_scene_raster_from_node(
 		struct wlr_scene_node *node) {
-	assert(node->type == WLR_SCENE_NODE_BUFFER);
-	return (struct wlr_scene_buffer *)node;
+	assert(node->type == WLR_SCENE_NODE_RASTER);
+	return (struct wlr_scene_raster *)node;
 }
 
 struct wlr_scene *scene_node_get_root(struct wlr_scene_node *node) {
@@ -87,22 +87,21 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
 	wlr_signal_emit_safe(&node->events.destroy, NULL);
 
 	struct wlr_scene *scene = scene_node_get_root(node);
-	if (node->type == WLR_SCENE_NODE_BUFFER) {
-		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+	if (node->type == WLR_SCENE_NODE_RASTER) {
+		struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
 
-		uint64_t active = scene_buffer->active_outputs;
+		uint64_t active = scene_raster->active_outputs;
 		if (active) {
 			struct wlr_scene_output *scene_output;
 			wl_list_for_each(scene_output, &scene->outputs, link) {
 				if (active & (1ull << scene_output->index)) {
-					wlr_signal_emit_safe(&scene_buffer->events.output_leave,
+					wlr_signal_emit_safe(&scene_raster->events.output_leave,
 						scene_output);
 				}
 			}
 		}
 
-		wlr_raster_unlock(scene_buffer->raster);
-		wlr_buffer_unlock(scene_buffer->buffer);
+		wlr_raster_unlock(scene_raster->raster);
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
 
@@ -182,16 +181,16 @@ struct wlr_scene_tree *wlr_scene_tree_create(struct wlr_scene_tree *parent) {
 static void scene_node_get_size(struct wlr_scene_node *node, int *lx, int *ly);
 
 // This function must be called whenever the coordinates/dimensions of a scene
-// buffer or scene output change. It is not necessary to call when a scene
-// buffer's node is enabled/disabled or obscured by other nodes.
-static void scene_buffer_update_outputs(struct wlr_scene_buffer *scene_buffer,
+// raster or scene output change. It is not necessary to call when a scene
+// raster's node is enabled/disabled or obscured by other nodes.
+static void scene_raster_update_outputs(struct wlr_scene_raster *scene_raster,
 		int lx, int ly, struct wlr_scene *scene,
 		struct wlr_scene_output *ignore) {
-	struct wlr_box buffer_box = { .x = lx, .y = ly };
-	scene_node_get_size(&scene_buffer->node, &buffer_box.width, &buffer_box.height);
+	struct wlr_box raster_box = { .x = lx, .y = ly };
+	scene_node_get_size(&scene_raster->node, &raster_box.width, &raster_box.height);
 
 	int largest_overlap = 0;
-	scene_buffer->primary_output = NULL;
+	scene_raster->primary_output = NULL;
 
 	uint64_t active_outputs = 0;
 
@@ -215,21 +214,21 @@ static void scene_buffer_update_outputs(struct wlr_scene_buffer *scene_buffer,
 			&output_box.width, &output_box.height);
 
 		struct wlr_box intersection;
-		bool intersects = wlr_box_intersection(&intersection, &buffer_box, &output_box);
+		bool intersects = wlr_box_intersection(&intersection, &raster_box, &output_box);
 
 		if (intersects) {
 			int overlap = intersection.width * intersection.height;
 			if (overlap > largest_overlap) {
 				largest_overlap = overlap;
-				scene_buffer->primary_output = scene_output;
+				scene_raster->primary_output = scene_output;
 			}
 
 			active_outputs |= 1ull << scene_output->index;
 		}
 	}
 
-	uint64_t old_active = scene_buffer->active_outputs;
-	scene_buffer->active_outputs = active_outputs;
+	uint64_t old_active = scene_raster->active_outputs;
+	scene_raster->active_outputs = active_outputs;
 
 	wl_list_for_each(scene_output, &scene->outputs, link) {
 		uint64_t mask = 1ull << scene_output->index;
@@ -237,9 +236,9 @@ static void scene_buffer_update_outputs(struct wlr_scene_buffer *scene_buffer,
 		bool intersects_before = old_active & mask;
 
 		if (intersects && !intersects_before) {
-			wlr_signal_emit_safe(&scene_buffer->events.output_enter, scene_output);
+			wlr_signal_emit_safe(&scene_raster->events.output_enter, scene_output);
 		} else if (!intersects && intersects_before) {
-			wlr_signal_emit_safe(&scene_buffer->events.output_leave, scene_output);
+			wlr_signal_emit_safe(&scene_raster->events.output_leave, scene_output);
 		}
 	}
 }
@@ -247,10 +246,10 @@ static void scene_buffer_update_outputs(struct wlr_scene_buffer *scene_buffer,
 static void _scene_node_update_outputs(struct wlr_scene_node *node,
 		int lx, int ly, struct wlr_scene *scene,
 		struct wlr_scene_output *ignore) {
-	if (node->type == WLR_SCENE_NODE_BUFFER) {
-		struct wlr_scene_buffer *scene_buffer =
-			wlr_scene_buffer_from_node(node);
-		scene_buffer_update_outputs(scene_buffer, lx, ly, scene, ignore);
+	if (node->type == WLR_SCENE_NODE_RASTER) {
+		struct wlr_scene_raster *scene_raster =
+			wlr_scene_raster_from_node(node);
+		scene_raster_update_outputs(scene_raster, lx, ly, scene, ignore);
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
 		struct wlr_scene_node *child;
@@ -308,57 +307,54 @@ void wlr_scene_rect_set_color(struct wlr_scene_rect *rect, const float color[sta
 	scene_node_damage_whole(&rect->node);
 }
 
-struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
-		struct wlr_buffer *buffer) {
-	struct wlr_scene_buffer *scene_buffer = calloc(1, sizeof(*scene_buffer));
-	if (scene_buffer == NULL) {
+struct wlr_scene_raster *wlr_scene_raster_create(struct wlr_scene_tree *parent,
+		struct wlr_raster *raster) {
+	struct wlr_scene_raster *scene_raster = calloc(1, sizeof(*scene_raster));
+	if (scene_raster == NULL) {
 		return NULL;
 	}
 	assert(parent);
-	scene_node_init(&scene_buffer->node, WLR_SCENE_NODE_BUFFER, parent);
+	scene_node_init(&scene_raster->node, WLR_SCENE_NODE_RASTER, parent);
 
-	if (buffer) {
-		scene_buffer->buffer = wlr_buffer_lock(buffer);
+	if (raster) {
+		scene_raster->raster = wlr_raster_lock(raster);
 	}
 
-	wl_signal_init(&scene_buffer->events.output_enter);
-	wl_signal_init(&scene_buffer->events.output_leave);
-	wl_signal_init(&scene_buffer->events.output_present);
-	wl_signal_init(&scene_buffer->events.frame_done);
+	wl_signal_init(&scene_raster->events.output_enter);
+	wl_signal_init(&scene_raster->events.output_leave);
+	wl_signal_init(&scene_raster->events.output_present);
+	wl_signal_init(&scene_raster->events.frame_done);
 
-	scene_node_damage_whole(&scene_buffer->node);
+	scene_node_damage_whole(&scene_raster->node);
 
-	scene_node_update_outputs(&scene_buffer->node, NULL);
+	scene_node_update_outputs(&scene_raster->node, NULL);
 
-	return scene_buffer;
+	return scene_raster;
 }
 
-void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buffer,
-		struct wlr_buffer *buffer, pixman_region32_t *damage) {
-	// specifying a region for a NULL buffer doesn't make sense. We need to know
-	// about the buffer to scale the buffer local coordinates down to scene
+void wlr_scene_raster_set_raster_with_damage(struct wlr_scene_raster *scene_raster,
+		struct wlr_raster *raster, pixman_region32_t *damage) {
+	// specifying a region for a NULL raster doesn't make sense. We need to know
+	// about the raster to scale the raster local coordinates down to scene
 	// coordinates. 
-	assert(buffer || !damage);
+	assert(raster || !damage);
 
-	if (buffer != scene_buffer->buffer) {
+	if (raster != scene_raster->raster) {
 		if (!damage) {
-			scene_node_damage_whole(&scene_buffer->node);
+			scene_node_damage_whole(&scene_raster->node);
 		}
 
-		wlr_raster_unlock(scene_buffer->raster);
-		scene_buffer->raster = NULL;
-		wlr_buffer_unlock(scene_buffer->buffer);
+		wlr_raster_unlock(scene_raster->raster);
+		scene_raster->raster = NULL;
 
-		if (buffer) {
-			scene_buffer->buffer = wlr_buffer_lock(buffer);
-		} else {
-			scene_buffer->buffer = NULL;
+		if (raster) {
+			scene_raster->raster = wlr_raster_lock(raster);
 		}
 
-		scene_node_update_outputs(&scene_buffer->node, NULL);
+		scene_node_update_outputs(&scene_raster->node, NULL);
 
 		if (!damage) {
-			scene_node_damage_whole(&scene_buffer->node);
+			scene_node_damage_whole(&scene_raster->node);
 		}
 	}
 
@@ -367,41 +363,41 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	}
 
 	int lx, ly;
-	if (!wlr_scene_node_coords(&scene_buffer->node, &lx, &ly)) {
+	if (!wlr_scene_node_coords(&scene_raster->node, &lx, &ly)) {
 		return;
 	}
 
-	struct wlr_fbox box = scene_buffer->src_box;
+	struct wlr_fbox box = scene_raster->src_box;
 	if (wlr_fbox_empty(&box)) {
 		box.x = 0;
 		box.y = 0;
 
-		if (scene_buffer->transform & WL_OUTPUT_TRANSFORM_90) {
-			box.width = buffer->height;
-			box.height = buffer->width;
+		if (scene_raster->transform & WL_OUTPUT_TRANSFORM_90) {
+			box.width = raster->height;
+			box.height = raster->width;
 		} else {
-			box.width = buffer->width;
-			box.height = buffer->height;
+			box.width = raster->width;
+			box.height = raster->height;
 		}
 	}
 
 	double scale_x, scale_y;
-	if (scene_buffer->dst_width || scene_buffer->dst_height) {
-		scale_x = scene_buffer->dst_width / box.width;
-		scale_y = scene_buffer->dst_height / box.height;
+	if (scene_raster->dst_width || scene_raster->dst_height) {
+		scale_x = scene_raster->dst_width / box.width;
+		scale_y = scene_raster->dst_height / box.height;
 	} else {
-		scale_x = buffer->width / box.width;
-		scale_y = buffer->height / box.height;
+		scale_x = raster->width / box.width;
+		scale_y = raster->height / box.height;
 	}
 
 	pixman_region32_t trans_damage;
 	pixman_region32_init(&trans_damage);
 	wlr_region_transform(&trans_damage, damage,
-		scene_buffer->transform, buffer->width, buffer->height);
+		scene_raster->transform, raster->width, raster->height);
 	pixman_region32_intersect_rect(&trans_damage, &trans_damage,
 		box.x, box.y, box.width, box.height);
 
-	struct wlr_scene *scene = scene_node_get_root(&scene_buffer->node);
+	struct wlr_scene *scene = scene_node_get_root(&scene_raster->node);
 	struct wlr_scene_output *scene_output;
 	wl_list_for_each(scene_output, &scene->outputs, link) {
 		float output_scale = scene_output->output->scale;
@@ -421,14 +417,14 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	pixman_region32_fini(&trans_damage);
 }
 
-void wlr_scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
-		struct wlr_buffer *buffer)  {
-	wlr_scene_buffer_set_buffer_with_damage(scene_buffer, buffer, NULL);
+void wlr_scene_raster_set_raster(struct wlr_scene_raster *scene_raster,
+		struct wlr_raster *raster)  {
+	wlr_scene_raster_set_raster_with_damage(scene_raster, raster, NULL);
 }
 
-void wlr_scene_buffer_set_source_box(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_set_source_box(struct wlr_scene_raster *scene_raster,
 		const struct wlr_fbox *box) {
-	struct wlr_fbox *cur = &scene_buffer->src_box;
+	struct wlr_fbox *cur = &scene_raster->src_box;
 	if ((wlr_fbox_empty(box) && wlr_fbox_empty(cur)) ||
 			(box != NULL && memcmp(cur, box, sizeof(*box)) == 0)) {
 		return;
@@ -440,39 +436,39 @@ void wlr_scene_buffer_set_source_box(struct wlr_scene_buffer *scene_buffer,
 		memset(cur, 0, sizeof(*cur));
 	}
 
-	scene_node_damage_whole(&scene_buffer->node);
+	scene_node_damage_whole(&scene_raster->node);
 }
 
-void wlr_scene_buffer_set_dest_size(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_set_dest_size(struct wlr_scene_raster *scene_raster,
 		int width, int height) {
-	if (scene_buffer->dst_width == width && scene_buffer->dst_height == height) {
+	if (scene_raster->dst_width == width && scene_raster->dst_height == height) {
 		return;
 	}
 
-	scene_node_damage_whole(&scene_buffer->node);
-	scene_buffer->dst_width = width;
-	scene_buffer->dst_height = height;
-	scene_node_damage_whole(&scene_buffer->node);
+	scene_node_damage_whole(&scene_raster->node);
+	scene_raster->dst_width = width;
+	scene_raster->dst_height = height;
+	scene_node_damage_whole(&scene_raster->node);
 
-	scene_node_update_outputs(&scene_buffer->node, NULL);
+	scene_node_update_outputs(&scene_raster->node, NULL);
 }
 
-void wlr_scene_buffer_set_transform(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_set_transform(struct wlr_scene_raster *scene_raster,
 		enum wl_output_transform transform) {
-	if (scene_buffer->transform == transform) {
+	if (scene_raster->transform == transform) {
 		return;
 	}
 
-	scene_node_damage_whole(&scene_buffer->node);
-	scene_buffer->transform = transform;
-	scene_node_damage_whole(&scene_buffer->node);
+	scene_node_damage_whole(&scene_raster->node);
+	scene_raster->transform = transform;
+	scene_node_damage_whole(&scene_raster->node);
 
-	scene_node_update_outputs(&scene_buffer->node, NULL);
+	scene_node_update_outputs(&scene_raster->node, NULL);
 }
 
-void wlr_scene_buffer_send_frame_done(struct wlr_scene_buffer *scene_buffer,
+void wlr_scene_raster_send_frame_done(struct wlr_scene_raster *scene_raster,
 		struct timespec *now) {
-	wlr_signal_emit_safe(&scene_buffer->events.frame_done, now);
+	wlr_signal_emit_safe(&scene_raster->events.frame_done, now);
 }
 
 static void scene_node_get_size(struct wlr_scene_node *node,
@@ -488,18 +484,18 @@ static void scene_node_get_size(struct wlr_scene_node *node,
 		*width = scene_rect->width;
 		*height = scene_rect->height;
 		break;
-	case WLR_SCENE_NODE_BUFFER:;
-		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-		if (scene_buffer->dst_width > 0 && scene_buffer->dst_height > 0) {
-			*width = scene_buffer->dst_width;
-			*height = scene_buffer->dst_height;
-		} else if (scene_buffer->buffer) {
-			if (scene_buffer->transform & WL_OUTPUT_TRANSFORM_90) {
-				*height = scene_buffer->buffer->width;
-				*width = scene_buffer->buffer->height;
+	case WLR_SCENE_NODE_RASTER:;
+		struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
+		if (scene_raster->dst_width > 0 && scene_raster->dst_height > 0) {
+			*width = scene_raster->dst_width;
+			*height = scene_raster->dst_height;
+		} else if (scene_raster->raster) {
+			if (scene_raster->transform & WL_OUTPUT_TRANSFORM_90) {
+				*height = scene_raster->raster->width;
+				*width = scene_raster->raster->height;
 			} else {
-				*width = scene_buffer->buffer->width;
-				*height = scene_buffer->buffer->height;
+				*width = scene_raster->raster->width;
+				*height = scene_raster->raster->height;
 			}
 		}
 		break;
@@ -687,8 +683,8 @@ bool wlr_scene_node_coords(struct wlr_scene_node *node,
 	return enabled;
 }
 
-static void scene_node_for_each_scene_buffer(struct wlr_scene_node *node,
-		int lx, int ly, wlr_scene_buffer_iterator_func_t user_iterator,
+static void scene_node_for_each_scene_raster(struct wlr_scene_node *node,
+		int lx, int ly, wlr_scene_raster_iterator_func_t user_iterator,
 		void *user_data) {
 	if (!node->enabled) {
 		return;
@@ -697,21 +693,21 @@ static void scene_node_for_each_scene_buffer(struct wlr_scene_node *node,
 	lx += node->x;
 	ly += node->y;
 
-	if (node->type == WLR_SCENE_NODE_BUFFER) {
-		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-		user_iterator(scene_buffer, lx, ly, user_data);
+	if (node->type == WLR_SCENE_NODE_RASTER) {
+		struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
+		user_iterator(scene_raster, lx, ly, user_data);
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
 		struct wlr_scene_node *child;
 		wl_list_for_each(child, &scene_tree->children, link) {
-			scene_node_for_each_scene_buffer(child, lx, ly, user_iterator, user_data);
+			scene_node_for_each_scene_raster(child, lx, ly, user_iterator, user_data);
 		}
 	}
 }
 
-void wlr_scene_node_for_each_buffer(struct wlr_scene_node *node,
-		wlr_scene_buffer_iterator_func_t user_iterator, void *user_data) {
-	scene_node_for_each_scene_buffer(node, 0, 0, user_iterator, user_data);
+void wlr_scene_node_for_each_raster(struct wlr_scene_node *node,
+		wlr_scene_raster_iterator_func_t user_iterator, void *user_data) {
+	scene_node_for_each_scene_raster(node, 0, 0, user_iterator, user_data);
 }
 
 struct wlr_scene_node *wlr_scene_node_at(struct wlr_scene_node *node,
@@ -742,11 +738,11 @@ struct wlr_scene_node *wlr_scene_node_at(struct wlr_scene_node *node,
 		scene_node_get_size(node, &width, &height);
 		intersects = lx >= 0 && lx < width && ly >= 0 && ly < height;
 		break;
-	case WLR_SCENE_NODE_BUFFER:;
-		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+	case WLR_SCENE_NODE_RASTER:;
+		struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
 
-		if (scene_buffer->point_accepts_input) {
-			intersects = scene_buffer->point_accepts_input(scene_buffer, lx, ly);
+		if (scene_raster->point_accepts_input) {
+			intersects = scene_raster->point_accepts_input(scene_raster, lx, ly);
 		} else {
 			int width, height;
 			scene_node_get_size(node, &width, &height);
@@ -871,24 +867,20 @@ static void render_node_iterator(struct wlr_scene_node *node,
 		render_rect(output, output_damage, scene_rect->color, &dst_box,
 			output->transform_matrix);
 		break;
-	case WLR_SCENE_NODE_BUFFER:;
-		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-		if (!scene_buffer->buffer) {
+	case WLR_SCENE_NODE_RASTER:;
+		struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
+		if (!scene_raster->raster) {
 			return;
 		}
 
-		if (!scene_buffer->raster) {
-			scene_buffer->raster = wlr_raster_create(scene_buffer->buffer);
-		}
-
-		transform = wlr_output_transform_invert(scene_buffer->transform);
+		transform = wlr_output_transform_invert(scene_raster->transform);
 		wlr_matrix_project_box(matrix, &dst_box, transform, 0.0,
 			output->transform_matrix);
 
-		render_raster(output, output_damage, scene_buffer->raster,
-			&scene_buffer->src_box, &dst_box, matrix);
+		render_raster(output, output_damage, scene_raster->raster,
+			&scene_raster->src_box, &dst_box, matrix);
 
-		wlr_signal_emit_safe(&scene_buffer->events.output_present, scene_output);
+		wlr_signal_emit_safe(&scene_raster->events.output_present, scene_output);
 		break;
 	}
 }
@@ -1143,31 +1135,35 @@ static bool scene_output_scanout(struct wlr_scene_output *scene_output) {
 	}
 
 	struct wlr_scene_node *node = check_scanout_data.node;
-	struct wlr_buffer *buffer;
+	struct wlr_raster *raster;
 	switch (node->type) {
-	case WLR_SCENE_NODE_BUFFER:;
-		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-		if (scene_buffer->buffer == NULL ||
-				!wlr_fbox_empty(&scene_buffer->src_box) ||
-				scene_buffer->transform != output->transform) {
+	case WLR_SCENE_NODE_RASTER:;
+		struct wlr_scene_raster *scene_raster = wlr_scene_raster_from_node(node);
+		if (scene_raster->raster == NULL ||
+				!wlr_fbox_empty(&scene_raster->src_box) ||
+				scene_raster->transform != output->transform) {
 			return false;
 		}
-		buffer = scene_buffer->buffer;
+		raster = scene_raster->raster;
 		break;
 	default:
 		return false;
 	}
 
-	wlr_output_attach_buffer(output, buffer);
+	if (!raster->buffer) {
+		return false;
+	}
+
+	wlr_output_attach_buffer(output, raster->buffer);
 	if (!wlr_output_test(output)) {
 		wlr_output_rollback(output);
 		return false;
 	}
 
-	if (node->type == WLR_SCENE_NODE_BUFFER) {
-		struct wlr_scene_buffer *scene_buffer =
-			wlr_scene_buffer_from_node(node);
-		wlr_signal_emit_safe(&scene_buffer->events.output_present, scene_output);
+	if (node->type == WLR_SCENE_NODE_RASTER) {
+		struct wlr_scene_raster *scene_raster =
+			wlr_scene_raster_from_node(node);
+		wlr_signal_emit_safe(&scene_raster->events.output_present, scene_output);
 	}
 
 	return wlr_output_commit(output);
@@ -1333,12 +1329,12 @@ static void scene_node_send_frame_done(struct wlr_scene_node *node,
 		return;
 	}
 
-	if (node->type == WLR_SCENE_NODE_BUFFER) {
-		struct wlr_scene_buffer *scene_buffer =
-			wlr_scene_buffer_from_node(node);
+	if (node->type == WLR_SCENE_NODE_RASTER) {
+		struct wlr_scene_raster *scene_raster =
+			wlr_scene_raster_from_node(node);
 
-		if (scene_buffer->primary_output == scene_output) {
-			wlr_scene_buffer_send_frame_done(scene_buffer, now);
+		if (scene_raster->primary_output == scene_output) {
+			wlr_scene_raster_send_frame_done(scene_raster, now);
 		}
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
@@ -1355,9 +1351,9 @@ void wlr_scene_output_send_frame_done(struct wlr_scene_output *scene_output,
 		scene_output, now);
 }
 
-static void scene_output_for_each_scene_buffer(const struct wlr_box *output_box,
+static void scene_output_for_each_scene_raster(const struct wlr_box *output_box,
 		struct wlr_scene_node *node, int lx, int ly,
-		wlr_scene_buffer_iterator_func_t user_iterator, void *user_data) {
+		wlr_scene_raster_iterator_func_t user_iterator, void *user_data) {
 	if (!node->enabled) {
 		return;
 	}
@@ -1365,31 +1361,31 @@ static void scene_output_for_each_scene_buffer(const struct wlr_box *output_box,
 	lx += node->x;
 	ly += node->y;
 
-	if (node->type == WLR_SCENE_NODE_BUFFER) {
+	if (node->type == WLR_SCENE_NODE_RASTER) {
 		struct wlr_box node_box = { .x = lx, .y = ly };
 		scene_node_get_size(node, &node_box.width, &node_box.height);
 
 		struct wlr_box intersection;
 		if (wlr_box_intersection(&intersection, output_box, &node_box)) {
-			struct wlr_scene_buffer *scene_buffer =
-				wlr_scene_buffer_from_node(node);
-			user_iterator(scene_buffer, lx, ly, user_data);
+			struct wlr_scene_raster *scene_raster =
+				wlr_scene_raster_from_node(node);
+			user_iterator(scene_raster, lx, ly, user_data);
 		}
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
 		struct wlr_scene_node *child;
 		wl_list_for_each(child, &scene_tree->children, link) {
-			scene_output_for_each_scene_buffer(output_box, child, lx, ly,
+			scene_output_for_each_scene_raster(output_box, child, lx, ly,
 				user_iterator, user_data);
 		}
 	}
 }
 
-void wlr_scene_output_for_each_buffer(struct wlr_scene_output *scene_output,
-		wlr_scene_buffer_iterator_func_t iterator, void *user_data) {
+void wlr_scene_output_for_each_raster(struct wlr_scene_output *scene_output,
+		wlr_scene_raster_iterator_func_t iterator, void *user_data) {
 	struct wlr_box box = { .x = scene_output->x, .y = scene_output->y };
 	wlr_output_effective_resolution(scene_output->output,
 		&box.width, &box.height);
-	scene_output_for_each_scene_buffer(&box, &scene_output->scene->tree.node, 0, 0,
+	scene_output_for_each_scene_raster(&box, &scene_output->scene->tree.node, 0, 0,
 		iterator, user_data);
 }
