@@ -88,7 +88,6 @@ struct wlr_surface_output {
 
 struct wlr_surface {
 	struct wl_resource *resource;
-	struct wlr_renderer *renderer;
 	/**
 	 * The buffer position, in surface-local units.
 	 */
@@ -154,8 +153,6 @@ struct wlr_surface {
 
 	// private state
 
-	struct wl_listener renderer_destroy;
-
 	struct {
 		int32_t scale;
 		enum wl_output_transform transform;
@@ -169,11 +166,8 @@ struct wlr_surface {
 	struct wl_listener raster_destroy;
 };
 
-struct wlr_renderer;
-
 struct wlr_compositor {
 	struct wl_global *global;
-	struct wlr_renderer *renderer;
 
 	struct wl_listener display_destroy;
 
@@ -295,7 +289,6 @@ uint32_t wlr_surface_lock_pending(struct wlr_surface *surface);
  */
 void wlr_surface_unlock_cached(struct wlr_surface *surface, uint32_t seq);
 
-struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
-	struct wlr_renderer *renderer);
+struct wlr_compositor *wlr_compositor_create(struct wl_display *display);
 
 #endif

@@ -166,8 +166,7 @@ int main(int argc, char *argv[]) {
 	server.allocator = wlr_allocator_autocreate(server.backend,
 		server.renderer);
 
-	struct wlr_compositor *compositor =
-		wlr_compositor_create(server.display, server.renderer);
+	struct wlr_compositor *compositor = wlr_compositor_create(server.display);
 
 	wlr_xdg_shell_create(server.display, 2);
 
