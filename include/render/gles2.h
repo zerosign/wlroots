@@ -92,7 +92,6 @@ struct wlr_gles2_buffer {
 
 struct wlr_gles2_texture {
 	struct wlr_texture wlr_texture;
-	struct wlr_gles2_renderer *renderer;
 	struct wl_list link; // wlr_gles2_renderer.textures
 
 	// Basically:

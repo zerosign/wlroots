@@ -234,7 +234,6 @@ struct wlr_vk_renderer *vulkan_get_renderer(struct wlr_renderer *r);
 // State (e.g. image texture) associated with a surface.
 struct wlr_vk_texture {
 	struct wlr_texture wlr_texture;
-	struct wlr_vk_renderer *renderer;
 	uint32_t mem_count;
 	VkDeviceMemory memories[WLR_DMABUF_MAX_PLANES];
 	VkImage image;

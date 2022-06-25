@@ -42,8 +42,9 @@ static bool write_pixels(struct wlr_texture *wlr_texture,
 		VkAccessFlags src_access) {
 	VkResult res;
 	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
-	struct wlr_vk_renderer *renderer = texture->renderer;
-	VkDevice dev = texture->renderer->dev->dev;
+	struct wlr_vk_renderer *renderer =
+		vulkan_get_renderer(wlr_texture->renderer);
+	VkDevice dev = renderer->dev->dev;
 
 	// make sure assumptions are met
 	assert(src_x + width <= texture->wlr_texture.width);
@@ -179,18 +180,16 @@ out:
 }
 
 void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
-	if (!texture->renderer) {
-		free(texture);
-		return;
-	}
+	struct wlr_vk_renderer *renderer =
+		vulkan_get_renderer(texture->wlr_texture.renderer);
 
 	// when we recorded a command to fill this image _this_ frame,
 	// it has to be executed before the texture can be destroyed.
 	// Add it to the renderer->destroy_textures list, destroying
 	// _after_ the stage command buffer has exectued
-	if (texture->last_used == texture->renderer->frame) {
+	if (texture->last_used == renderer->frame) {
 		assert(texture->destroy_link.next == NULL); // not already inserted
-		wl_list_insert(&texture->renderer->destroy_textures,
+		wl_list_insert(&renderer->destroy_textures,
 			&texture->destroy_link);
 		return;
 	}
@@ -198,9 +197,9 @@ void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
 	wl_list_remove(&texture->link);
 	wl_list_remove(&texture->buffer_destroy.link);
 
-	VkDevice dev = texture->renderer->dev->dev;
+	VkDevice dev = renderer->dev->dev;
 	if (texture->ds && texture->ds_pool) {
-		vulkan_free_ds(texture->renderer, texture->ds_pool, texture->ds);
+		vulkan_free_ds(renderer, texture->ds_pool, texture->ds);
 	}
 
 	vkDestroyImageView(dev, texture->image_view, NULL);
@@ -237,8 +236,8 @@ static struct wlr_vk_texture *vulkan_texture_create(
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
 		return NULL;
 	}
-	wlr_texture_init(&texture->wlr_texture, &texture_impl, width, height);
-	texture->renderer = renderer;
+	wlr_texture_init(&texture->wlr_texture, &renderer->wlr_renderer,
+		&texture_impl, width, height);
 	wl_list_insert(&renderer->textures, &texture->link);
 	wl_list_init(&texture->buffer_destroy.link);
 	return texture;
@@ -725,7 +724,7 @@ struct wlr_vk_texture *vulkan_raster_upload(struct wlr_vk_renderer *renderer,
 		if (wlr_texture_is_vk(raster_texture)) {
 			struct wlr_vk_texture *vk_tex =
 				(struct wlr_vk_texture *)raster_texture;
-			if (vk_tex->renderer != renderer) {
+			if (vk_tex->wlr_texture.renderer != &renderer->wlr_renderer) {
 				continue;
 			}
 			return vk_tex;

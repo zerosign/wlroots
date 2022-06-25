@@ -50,8 +50,8 @@ static struct wlr_pixman_texture *pixman_texture_create(
 		return NULL;
 	}
 
-	wlr_texture_init(&texture->wlr_texture, &texture_impl, width, height);
-	texture->renderer = renderer;
+	wlr_texture_init(&texture->wlr_texture, &renderer->wlr_renderer,
+		&texture_impl, width, height);
 
 	texture->format_info = drm_get_pixel_format_info(drm_format);
 	if (!texture->format_info) {
@@ -80,7 +80,7 @@ static struct wlr_pixman_texture *raster_upload(
 		if (wlr_texture_is_pixman(raster_texture)) {
 			struct wlr_pixman_texture *pixman_tex =
 				(struct wlr_pixman_texture *)raster_texture;
-			if (pixman_tex->renderer != renderer) {
+			if (pixman_tex->wlr_texture.renderer != &renderer->wlr_renderer) {
 				continue;
 			}
 			return pixman_tex;

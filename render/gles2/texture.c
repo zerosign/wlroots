@@ -79,11 +79,14 @@ static bool gles2_texture_update_from_raster(struct wlr_texture *wlr_texture,
 		return false;
 	}
 
+	struct wlr_gles2_renderer *renderer =
+		gles2_get_renderer(texture->wlr_texture.renderer);
+
 	struct wlr_egl_context prev_ctx;
 	wlr_egl_save_context(&prev_ctx);
-	wlr_egl_make_current(texture->renderer->egl);
+	wlr_egl_make_current(renderer->egl);
 
-	push_gles2_debug(texture->renderer);
+	push_gles2_debug(renderer);
 
 	glBindTexture(GL_TEXTURE_2D, texture->tex);
 
@@ -109,7 +112,7 @@ static bool gles2_texture_update_from_raster(struct wlr_texture *wlr_texture,
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 
-	pop_gles2_debug(texture->renderer);
+	pop_gles2_debug(renderer);
 
 	wlr_egl_restore_context(&prev_ctx);
 
@@ -127,18 +130,21 @@ static bool gles2_texture_invalidate(struct wlr_gles2_texture *texture) {
 		return true;
 	}
 
+	struct wlr_gles2_renderer *renderer =
+		gles2_get_renderer(texture->wlr_texture.renderer);
+
 	struct wlr_egl_context prev_ctx;
 	wlr_egl_save_context(&prev_ctx);
-	wlr_egl_make_current(texture->renderer->egl);
+	wlr_egl_make_current(renderer->egl);
 
-	push_gles2_debug(texture->renderer);
+	push_gles2_debug(renderer);
 
 	glBindTexture(texture->target, texture->tex);
-	texture->renderer->procs.glEGLImageTargetTexture2DOES(texture->target,
+	renderer->procs.glEGLImageTargetTexture2DOES(texture->target,
 		texture->image);
 	glBindTexture(texture->target, 0);
 
-	pop_gles2_debug(texture->renderer);
+	pop_gles2_debug(renderer);
 
 	wlr_egl_restore_context(&prev_ctx);
 
@@ -151,16 +157,20 @@ void gles2_texture_destroy(struct wlr_gles2_texture *texture) {
 		wlr_addon_finish(&texture->buffer_addon);
 	}
 
+	struct wlr_gles2_renderer *renderer =
+		gles2_get_renderer(texture->wlr_texture.renderer);
+
+
 	struct wlr_egl_context prev_ctx;
 	wlr_egl_save_context(&prev_ctx);
-	wlr_egl_make_current(texture->renderer->egl);
+	wlr_egl_make_current(renderer->egl);
 
-	push_gles2_debug(texture->renderer);
+	push_gles2_debug(renderer);
 
 	glDeleteTextures(1, &texture->tex);
-	wlr_egl_destroy_image(texture->renderer->egl, texture->image);
+	wlr_egl_destroy_image(renderer->egl, texture->image);
 
-	pop_gles2_debug(texture->renderer);
+	pop_gles2_debug(renderer);
 
 	wlr_egl_restore_context(&prev_ctx);
 
@@ -191,8 +201,8 @@ static struct wlr_gles2_texture *gles2_texture_create(
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
 		return NULL;
 	}
-	wlr_texture_init(&texture->wlr_texture, &texture_impl, width, height);
-	texture->renderer = renderer;
+	wlr_texture_init(&texture->wlr_texture, &renderer->wlr_renderer,
+		&texture_impl, width, height);
 	wl_list_insert(&renderer->textures, &texture->link);
 	return texture;
 }
@@ -361,7 +371,7 @@ struct wlr_gles2_texture *gles2_raster_upload(struct wlr_gles2_renderer *rendere
 		if (wlr_texture_is_gles2(raster_texture)) {
 			struct wlr_gles2_texture *gles2_tex =
 				(struct wlr_gles2_texture *)raster_texture;
-			if (gles2_tex->renderer != renderer) {
+			if (gles2_tex->wlr_texture.renderer != &renderer->wlr_renderer) {
 				continue;
 			}
 			return gles2_tex;
