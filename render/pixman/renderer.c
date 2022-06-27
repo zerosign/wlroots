@@ -40,12 +40,6 @@ bool wlr_texture_is_pixman(struct wlr_texture *texture) {
 	return texture->impl == &texture_impl;
 }
 
-static struct wlr_pixman_texture *get_texture(
-		struct wlr_texture *wlr_texture) {
-	assert(wlr_texture_is_pixman(wlr_texture));
-	return (struct wlr_pixman_texture *)wlr_texture;
-}
-
 static struct wlr_pixman_texture *pixman_texture_create(
 		struct wlr_pixman_renderer *renderer, uint32_t drm_format,
 		uint32_t width, uint32_t height) {
@@ -310,13 +304,16 @@ static void matrix_to_pixman_transform(struct pixman_transform *transform,
 	pixman_transform_from_pixman_f_transform(transform, &ftr);
 }
 
-static bool pixman_render_subtexture_with_matrix(
-		struct wlr_renderer *wlr_renderer, struct wlr_texture *wlr_texture,
+static bool pixman_render_subraster_with_matrix(
+		struct wlr_renderer *wlr_renderer, struct wlr_raster *wlr_raster,
 		const struct wlr_fbox *fbox, const float matrix[static 9],
 		float alpha) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
-	struct wlr_pixman_texture *texture = get_texture(wlr_texture);
 	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
+	struct wlr_pixman_texture *texture = raster_upload(renderer, wlr_raster);
+	if (!texture){
+		return false;
+	}
 
 	if (texture->buffer != NULL) {
 		void *data;
@@ -530,7 +527,7 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.clear = pixman_clear,
 	.scissor = pixman_scissor,
 	.raster_upload = pixman_raster_upload,
-	.render_subtexture_with_matrix = pixman_render_subtexture_with_matrix,
+	.render_subraster_with_matrix = pixman_render_subraster_with_matrix,
 	.render_quad_with_matrix = pixman_render_quad_with_matrix,
 	.get_shm_texture_formats = pixman_get_shm_texture_formats,
 	.get_render_formats = pixman_get_render_formats,

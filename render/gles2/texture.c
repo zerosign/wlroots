@@ -23,7 +23,7 @@ bool wlr_texture_is_gles2(struct wlr_texture *wlr_texture) {
 	return wlr_texture->impl == &texture_impl;
 }
 
-struct wlr_gles2_texture *gles2_get_texture(
+static struct wlr_gles2_texture *gles2_get_texture(
 		struct wlr_texture *wlr_texture) {
 	assert(wlr_texture_is_gles2(wlr_texture));
 	return (struct wlr_gles2_texture *)wlr_texture;

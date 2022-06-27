@@ -740,14 +740,17 @@ static void vulkan_end(struct wlr_renderer *wlr_renderer) {
 	}
 }
 
-static bool vulkan_render_subtexture_with_matrix(struct wlr_renderer *wlr_renderer,
-		struct wlr_texture *wlr_texture, const struct wlr_fbox *box,
+static bool vulkan_render_subraster_with_matrix(struct wlr_renderer *wlr_renderer,
+		struct wlr_raster *wlr_raster, const struct wlr_fbox *box,
 		const float matrix[static 9], float alpha) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
 	VkCommandBuffer cb = renderer->cb;
 
-	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
-	assert(texture->renderer == renderer);
+	struct wlr_vk_texture *texture = vulkan_raster_upload(renderer, wlr_raster);
+	if (!texture) {
+		return false;
+	}
+
 	if (texture->dmabuf_imported && !texture->owned) {
 		// Store this texture in the list of textures that need to be
 		// acquired before rendering and released after rendering.
@@ -776,10 +779,10 @@ static bool vulkan_render_subtexture_with_matrix(struct wlr_renderer *wlr_render
 	struct vert_pcr_data vert_pcr_data;
 	mat3_to_mat4(final_matrix, vert_pcr_data.mat4);
 
-	vert_pcr_data.uv_off[0] = box->x / wlr_texture->width;
-	vert_pcr_data.uv_off[1] = box->y / wlr_texture->height;
-	vert_pcr_data.uv_size[0] = box->width / wlr_texture->width;
-	vert_pcr_data.uv_size[1] = box->height / wlr_texture->height;
+	vert_pcr_data.uv_off[0] = box->x / wlr_raster->width;
+	vert_pcr_data.uv_off[1] = box->y / wlr_raster->height;
+	vert_pcr_data.uv_size[0] = box->width / wlr_raster->width;
+	vert_pcr_data.uv_size[1] = box->height / wlr_raster->height;
 
 	vkCmdPushConstants(cb, renderer->pipe_layout,
 		VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vert_pcr_data), &vert_pcr_data);
@@ -990,7 +993,7 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.clear = vulkan_clear,
 	.scissor = vulkan_scissor,
 	.raster_upload = _vulkan_raster_upload,
-	.render_subtexture_with_matrix = vulkan_render_subtexture_with_matrix,
+	.render_subraster_with_matrix = vulkan_render_subraster_with_matrix,
 	.render_quad_with_matrix = vulkan_render_quad_with_matrix,
 	.get_shm_texture_formats = vulkan_get_shm_texture_formats,
 	.get_dmabuf_texture_formats = vulkan_get_dmabuf_texture_formats,

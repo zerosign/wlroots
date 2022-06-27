@@ -14,6 +14,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_raster.h>
 #include <wlr/render/dmabuf.h>
 
 struct wlr_box;
@@ -29,8 +30,8 @@ struct wlr_renderer_impl {
 	void (*scissor)(struct wlr_renderer *renderer, struct wlr_box *box);
 	bool (*raster_upload)(struct wlr_renderer *renderer,
 		struct wlr_raster *raster);
-	bool (*render_subtexture_with_matrix)(struct wlr_renderer *renderer,
-		struct wlr_texture *texture, const struct wlr_fbox *box,
+	bool (*render_subraster_with_matrix)(struct wlr_renderer *renderer,
+		struct wlr_raster *raster, const struct wlr_fbox *box,
 		const float matrix[static 9], float alpha);
 	void (*render_quad_with_matrix)(struct wlr_renderer *renderer,
 		const float color[static 4], const float matrix[static 9]);

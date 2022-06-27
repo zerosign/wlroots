@@ -226,13 +226,17 @@ static bool frame_shm_copy(struct wlr_screencopy_frame_v1 *frame,
 static bool blit_dmabuf(struct wlr_renderer *renderer,
 		struct wlr_dmabuf_v1_buffer *dst_dmabuf,
 		struct wlr_buffer *src_buffer) {
-	struct wlr_buffer *dst_buffer = wlr_buffer_lock(&dst_dmabuf->base);
-
-	struct wlr_texture *src_tex =
-		wlr_texture_from_buffer(renderer, src_buffer);
-	if (src_tex == NULL) {
-		goto error_src_tex;
+	struct wlr_raster *raster = wlr_raster_create(src_buffer);
+	if (!raster){
+		return false;
 	}
+
+	if (!wlr_renderer_raster_upload(renderer, raster)) {
+		wlr_raster_unlock(raster);
+		return false;
+	}
+
+	struct wlr_buffer *dst_buffer = wlr_buffer_lock(&dst_dmabuf->base);
 
 	float mat[9];
 	wlr_matrix_identity(mat);
@@ -243,17 +247,16 @@ static bool blit_dmabuf(struct wlr_renderer *renderer,
 	}
 
 	wlr_renderer_clear(renderer, (float[]){ 0.0, 0.0, 0.0, 0.0 });
-	wlr_render_texture_with_matrix(renderer, src_tex, mat, 1.0f);
+	wlr_render_raster_with_matrix(renderer, raster, mat, 1.0f);
 
 	wlr_renderer_end(renderer);
 
-	wlr_texture_destroy(src_tex);
+	wlr_raster_unlock(raster);
 	wlr_buffer_unlock(dst_buffer);
 	return true;
 
 error_renderer_begin:
-	wlr_texture_destroy(src_tex);
-error_src_tex:
+	wlr_raster_unlock(raster);
 	wlr_buffer_unlock(dst_buffer);
 	return false;
 }

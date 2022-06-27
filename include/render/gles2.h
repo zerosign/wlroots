@@ -123,8 +123,6 @@ const uint32_t *get_gles2_shm_formats(const struct wlr_gles2_renderer *renderer,
 
 struct wlr_gles2_renderer *gles2_get_renderer(
 	struct wlr_renderer *wlr_renderer);
-struct wlr_gles2_texture *gles2_get_texture(
-	struct wlr_texture *wlr_texture);
 struct wlr_gles2_texture *gles2_raster_upload(struct wlr_gles2_renderer *renderer,
 	struct wlr_raster *wlr_raster);
 

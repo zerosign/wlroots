@@ -36,7 +36,7 @@ void wlr_renderer_init(struct wlr_renderer *renderer,
 	assert(impl->clear);
 	assert(impl->scissor);
 	assert(impl->raster_upload);
-	assert(impl->render_subtexture_with_matrix);
+	assert(impl->render_subraster_with_matrix);
 	assert(impl->render_quad_with_matrix);
 	assert(impl->get_shm_texture_formats);
 	assert(impl->get_render_buffer_caps);
@@ -119,39 +119,39 @@ bool wlr_renderer_raster_upload(struct wlr_renderer *r,
 	return r->impl->raster_upload(r, raster);
 }
 
-bool wlr_render_texture(struct wlr_renderer *r, struct wlr_texture *texture,
+bool wlr_render_raster(struct wlr_renderer *r, struct wlr_raster *raster,
 		const float projection[static 9], int x, int y, float alpha) {
 	struct wlr_box box = {
 		.x = x,
 		.y = y,
-		.width = texture->width,
-		.height = texture->height,
+		.width = raster->width,
+		.height = raster->height,
 	};
 
 	float matrix[9];
 	wlr_matrix_project_box(matrix, &box, WL_OUTPUT_TRANSFORM_NORMAL, 0,
 		projection);
 
-	return wlr_render_texture_with_matrix(r, texture, matrix, alpha);
+	return wlr_render_raster_with_matrix(r, raster, matrix, alpha);
 }
 
-bool wlr_render_texture_with_matrix(struct wlr_renderer *r,
-		struct wlr_texture *texture, const float matrix[static 9],
+bool wlr_render_raster_with_matrix(struct wlr_renderer *r,
+		struct wlr_raster *raster, const float matrix[static 9],
 		float alpha) {
 	struct wlr_fbox box = {
 		.x = 0,
 		.y = 0,
-		.width = texture->width,
-		.height = texture->height,
+		.width = raster->width,
+		.height = raster->height,
 	};
-	return wlr_render_subtexture_with_matrix(r, texture, &box, matrix, alpha);
+	return wlr_render_subraster_with_matrix(r, raster, &box, matrix, alpha);
 }
 
-bool wlr_render_subtexture_with_matrix(struct wlr_renderer *r,
-		struct wlr_texture *texture, const struct wlr_fbox *box,
+bool wlr_render_subraster_with_matrix(struct wlr_renderer *r,
+		struct wlr_raster *raster, const struct wlr_fbox *box,
 		const float matrix[static 9], float alpha) {
 	assert(r->rendering);
-	return r->impl->render_subtexture_with_matrix(r, texture,
+	return r->impl->render_subraster_with_matrix(r, raster,
 		box, matrix, alpha);
 }
 

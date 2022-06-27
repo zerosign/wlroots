@@ -18,7 +18,7 @@ bool wlr_texture_is_vk(struct wlr_texture *wlr_texture) {
 	return wlr_texture->impl == &texture_impl;
 }
 
-struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture) {
+static struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture) {
 	assert(wlr_texture_is_vk(wlr_texture));
 	return (struct wlr_vk_texture *)wlr_texture;
 }

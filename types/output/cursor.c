@@ -93,8 +93,7 @@ static void output_cursor_render(struct wlr_output_cursor *cursor,
 	struct wlr_renderer *renderer = cursor->output->renderer;
 	assert(renderer);
 
-	struct wlr_texture *texture = cursor->texture;
-	if (texture == NULL) {
+	if (!cursor->raster) {
 		return;
 	}
 
@@ -118,7 +117,7 @@ static void output_cursor_render(struct wlr_output_cursor *cursor,
 	pixman_box32_t *rects = pixman_region32_rectangles(&surface_damage, &nrects);
 	for (int i = 0; i < nrects; ++i) {
 		output_scissor(cursor->output, &rects[i]);
-		wlr_render_texture_with_matrix(renderer, texture, matrix, 1.0f);
+		wlr_render_raster_with_matrix(renderer, cursor->raster, matrix, 1.0f);
 	}
 	wlr_renderer_scissor(renderer, NULL);
 
@@ -231,28 +230,28 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 
 	float scale = output->scale;
 	enum wl_output_transform transform = WL_OUTPUT_TRANSFORM_NORMAL;
-	struct wlr_texture *texture = cursor->texture;
 	if (cursor->surface != NULL) {
 		scale = cursor->surface->current.scale;
 		transform = cursor->surface->current.transform;
-	}
-	if (texture == NULL) {
-		return NULL;
 	}
 
 	struct wlr_allocator *allocator = output->allocator;
 	struct wlr_renderer *renderer = output->renderer;
 	assert(allocator != NULL && renderer != NULL);
 
-	int width = texture->width;
-	int height = texture->height;
+	if (!cursor->raster) {
+		return NULL;
+	}
+
+	int width = cursor->raster->width;
+	int height = cursor->raster->height;
 	if (output->impl->get_cursor_size) {
 		// Apply hardware limitations on buffer size
 		output->impl->get_cursor_size(cursor->output, &width, &height);
-		if ((int)texture->width > width || (int)texture->height > height) {
-			wlr_log(WLR_DEBUG, "Cursor texture too large (%dx%d), "
-				"exceeds hardware limitations (%dx%d)", texture->width,
-				texture->height, width, height);
+		if ((int)cursor->raster->width > width || (int)cursor->raster->height > height) {
+			wlr_log(WLR_DEBUG, "Cursor raster too large (%dx%d), "
+				"exceeds hardware limitations (%dx%d)", cursor->raster->width,
+				cursor->raster->height, width, height);
 			return NULL;
 		}
 	}
@@ -284,8 +283,8 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 	}
 
 	struct wlr_box cursor_box = {
-		.width = texture->width * output->scale / scale,
-		.height = texture->height * output->scale / scale,
+		.width = cursor->raster->width * output->scale / scale,
+		.height = cursor->raster->height * output->scale / scale,
 	};
 
 	float output_matrix[9];
@@ -313,7 +312,7 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 	}
 
 	wlr_renderer_clear(renderer, (float[]){ 0.0, 0.0, 0.0, 0.0 });
-	wlr_render_texture_with_matrix(renderer, texture, matrix, 1.0);
+	wlr_render_raster_with_matrix(renderer, cursor->raster, matrix, 1.0);
 
 	wlr_renderer_end(renderer);
 
@@ -333,21 +332,16 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 		return false;
 	}
 
-	// TODO: try using the surface buffer directly
-	struct wlr_texture *texture = cursor->texture;
-
 	// If the cursor was hidden or was a software cursor, the hardware
 	// cursor position is outdated
 	output->impl->move_cursor(cursor->output,
 		(int)cursor->x, (int)cursor->y);
 
 	struct wlr_buffer *buffer = NULL;
-	if (texture != NULL) {
-		buffer = render_cursor_buffer(cursor);
-		if (buffer == NULL) {
-			wlr_log(WLR_ERROR, "Failed to render cursor buffer");
-			return false;
-		}
+	buffer = render_cursor_buffer(cursor);
+	if (buffer == NULL) {
+		wlr_log(WLR_ERROR, "Failed to render cursor buffer");
+		return false;
 	}
 
 	struct wlr_box hotspot = {
@@ -407,15 +401,16 @@ bool wlr_output_cursor_set_buffer(struct wlr_output_cursor *cursor,
 
 	output_cursor_update_visible(cursor);
 
-	wlr_texture_destroy(cursor->texture);
-	cursor->texture = NULL;
+	wlr_raster_unlock(cursor->raster);
+	cursor->raster = NULL;
 
 	cursor->enabled = false;
 	if (buffer != NULL) {
-		cursor->texture = wlr_texture_from_buffer(renderer, buffer);
-		if (cursor->texture == NULL) {
+		cursor->raster = wlr_raster_create(buffer);
+		if (!cursor->raster) {
 			return false;
 		}
+
 		cursor->enabled = true;
 	}
 
@@ -435,18 +430,14 @@ static void output_cursor_commit(struct wlr_output_cursor *cursor,
 		output_cursor_damage_whole(cursor);
 	}
 
+	wlr_raster_unlock(cursor->raster);
+	cursor->raster = NULL;
+
 	struct wlr_surface *surface = cursor->surface;
 	assert(surface != NULL);
 
-	wlr_texture_destroy(cursor->texture);
-	cursor->texture = NULL;
-
 	if (surface->current.buffer) {
-		cursor->texture = wlr_texture_from_buffer(cursor->output->renderer,
-			surface->current.buffer);
-		if (cursor->texture == NULL) {
-			return;
-		}
+		cursor->raster = wlr_raster_create(surface->current.buffer);
 	}
 
 	// Some clients commit a cursor surface with a NULL buffer to hide it.
@@ -593,7 +584,7 @@ void wlr_output_cursor_destroy(struct wlr_output_cursor *cursor) {
 		output_set_hardware_cursor(cursor->output, NULL, 0, 0);
 		cursor->output->hardware_cursor = NULL;
 	}
-	wlr_texture_destroy(cursor->texture);
+	wlr_raster_unlock(cursor->raster);
 	wl_list_remove(&cursor->link);
 	free(cursor);
 }

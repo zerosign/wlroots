@@ -23,6 +23,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_raster.h>
 
 struct wlr_output;
 struct wlr_output_layout;
@@ -147,7 +148,7 @@ struct wlr_scene_buffer {
 	// private state
 
 	uint64_t active_outputs;
-	struct wlr_texture *texture;
+	struct wlr_raster *raster;
 	struct wlr_fbox src_box;
 	int dst_width, dst_height;
 	enum wl_output_transform transform;

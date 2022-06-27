@@ -25,7 +25,7 @@ struct sample_state {
 	struct wl_display *display;
 	struct wlr_renderer *renderer;
 	struct wlr_allocator *allocator;
-	struct wlr_texture *cat_texture;
+	struct wlr_raster *cat_raster;
 	struct wl_list touch_points;
 	struct timespec last_frame;
 	struct wl_listener new_output;
@@ -81,9 +81,9 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
 	struct touch_point *p;
 	wl_list_for_each(p, &sample->touch_points, link) {
-		int x = (int)(p->x * width) - sample->cat_texture->width / 2;
-		int y = (int)(p->y * height) - sample->cat_texture->height / 2;
-		wlr_render_texture(sample->renderer, sample->cat_texture,
+		int x = (int)(p->x * width) - sample->cat_raster->width / 2;
+		int y = (int)(p->y * height) - sample->cat_raster->height / 2;
+		wlr_render_raster(sample->renderer, sample->cat_raster,
 			wlr_output->transform_matrix, x, y, 1.0f);
 	}
 
@@ -264,10 +264,9 @@ int main(int argc, char *argv[]) {
 		wlr_log(WLR_ERROR, "Could not start compositor, OOM");
 		exit(EXIT_FAILURE);
 	}
-	state.cat_texture = wlr_texture_from_pixels(state.renderer,
-		DRM_FORMAT_ARGB8888, cat_tex.width * 4, cat_tex.width, cat_tex.height,
-		cat_tex.pixel_data);
-	if (!state.cat_texture) {
+	state.cat_raster = wlr_raster_from_pixels(DRM_FORMAT_ARGB8888,
+		cat_tex.width * 4, cat_tex.width, cat_tex.height, cat_tex.pixel_data);
+	if (!state.cat_raster) {
 		wlr_log(WLR_ERROR, "Could not start compositor, OOM");
 		exit(EXIT_FAILURE);
 	}
@@ -281,6 +280,6 @@ int main(int argc, char *argv[]) {
 	}
 	wl_display_run(display);
 
-	wlr_texture_destroy(state.cat_texture);
+	wlr_raster_unlock(state.cat_raster);
 	wl_display_destroy(display);
 }
