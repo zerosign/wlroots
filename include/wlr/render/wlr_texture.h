@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/render/dmabuf.h>
+#include <wlr/types/wlr_raster.h>
 
 struct wlr_buffer;
 struct wlr_renderer;
@@ -21,6 +22,9 @@ struct wlr_texture_impl;
 struct wlr_texture {
 	const struct wlr_texture_impl *impl;
 	uint32_t width, height;
+
+	struct wlr_raster *raster;
+	struct wl_list link;
 };
 
 /**

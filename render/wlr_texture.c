@@ -4,6 +4,7 @@
 #include <string.h>
 #include <wlr/render/interface.h>
 #include <wlr/render/wlr_texture.h>
+#include <wlr/types/wlr_raster.h>
 #include "types/wlr_buffer.h"
 
 void wlr_texture_init(struct wlr_texture *texture,
@@ -15,7 +16,16 @@ void wlr_texture_init(struct wlr_texture *texture,
 }
 
 void wlr_texture_destroy(struct wlr_texture *texture) {
-	if (texture && texture->impl && texture->impl->destroy) {
+	if (!texture) {
+		 return;
+	}
+	
+	if (texture->raster) {
+		wlr_raster_detach(texture->raster, texture);
+		texture->raster = NULL;
+	}
+
+	if (texture->impl && texture->impl->destroy) {
 		texture->impl->destroy(texture);
 	} else {
 		free(texture);
