@@ -427,8 +427,8 @@ static void output_cursor_commit(struct wlr_output_cursor *cursor,
 	struct wlr_surface *surface = cursor->surface;
 	assert(surface != NULL);
 
-	if (surface->current.buffer) {
-		cursor->raster = wlr_raster_create(surface->current.buffer);
+	if (surface->raster) {
+		cursor->raster = wlr_raster_lock(surface->raster);
 	}
 
 	// Some clients commit a cursor surface with a NULL buffer to hide it.

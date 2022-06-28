@@ -66,10 +66,7 @@ static void set_raster_with_surface_state(struct wlr_scene_raster *scene_raster,
 	wlr_scene_raster_set_dest_size(scene_raster, state->width, state->height);
 	wlr_scene_raster_set_transform(scene_raster, state->transform);
 
-	struct wlr_raster *raster = NULL;
-	if (surface->current.buffer) {
-		raster = wlr_raster_create(surface->current.buffer);
-	}
+	struct wlr_raster *raster = surface->raster;
 
 	if (raster) {
 		wlr_scene_raster_set_raster_with_damage(scene_raster,
@@ -77,8 +74,6 @@ static void set_raster_with_surface_state(struct wlr_scene_raster *scene_raster,
 	} else {
 		wlr_scene_raster_set_raster(scene_raster, NULL);
 	}
-
-	wlr_raster_unlock(raster);
 }
 
 static void handle_scene_surface_surface_commit(

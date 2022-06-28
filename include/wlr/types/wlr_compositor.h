@@ -94,6 +94,13 @@ struct wlr_surface {
 	 */
 	int sx, sy;
 	/**
+	 * The surface's raster, if any. A surface has an attached raster when it
+	 * commits with a non-null buffer in its pending state. A surface will not
+	 * have a raster if it has never committed one or has committed a null
+	 * buffer.
+	 */
+	struct wlr_raster *raster;
+	/**
 	 * The last commit's buffer damage, in buffer-local coordinates. This
 	 * contains both the damage accumulated by the client via
 	 * `wlr_surface_state.surface_damage` and `wlr_surface_state.buffer_damage`.
@@ -157,6 +164,9 @@ struct wlr_surface {
 	} previous;
 
 	bool opaque;
+
+	struct wlr_raster *old_raster;
+	struct wl_listener raster_destroy;
 };
 
 struct wlr_renderer;

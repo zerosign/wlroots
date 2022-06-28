@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/interface.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
@@ -415,8 +416,34 @@ static void surface_commit_state(struct wlr_surface *surface,
 	surface_state_move(&surface->current, next);
 
 	if (invalid_buffer) {
+		if (!surface->current.buffer) {
+			wlr_raster_unlock(surface->raster);
+			surface->raster = NULL;
+		}
+
+		if (!surface->raster || surface->raster->buffer != surface->current.buffer) {
+			surface->old_raster = surface->raster;
+
+			if (surface->current.buffer) {
+				surface->raster = wlr_raster_create(surface->current.buffer);
+			}
+
+			if (surface->old_raster) {
+				// By the time we unlock the buffer next the buffer might
+				// get destroyed. We need to start listening here.
+				wl_signal_add(&surface->old_raster->events.destroy,
+					&surface->raster_destroy);
+
+				wlr_raster_unlock(surface->old_raster);
+			}
+		}
+
 		surface_apply_damage(surface);
+
+		wlr_buffer_unlock(surface->current.buffer);
+		surface->current.buffer = NULL;
 	}
+
 	surface_update_opaque_region(surface);
 	surface_update_input_region(surface);
 
@@ -450,6 +477,29 @@ static void surface_commit_state(struct wlr_surface *surface,
 	}
 
 	wlr_signal_emit_safe(&surface->events.commit, surface);
+
+	if (surface->old_raster) {
+		wl_list_remove(&surface->raster_destroy.link);
+		surface->old_raster = NULL;
+	}
+
+	if (invalid_buffer && surface->raster) {
+		// make sure there is at least one source for the raster before removing
+		// the buffer
+		if (wl_list_empty(&surface->raster->sources)) {
+			wlr_renderer_raster_upload(surface->renderer, surface->raster);
+		}
+
+		// unlock the buffer for shm buffers only. Clients may implement
+		// optimizations if given the shm buffer back immediately.
+		// 
+		// For other buffers, we want to continue to lock it so that we
+		// may direct scanout.
+		if (!wl_list_empty(&surface->raster->sources) && surface->raster->buffer &&
+				buffer_is_shm_client_buffer(surface->raster->buffer)) {
+			wlr_raster_remove_buffer(surface->raster);
+		}
+	}
 }
 
 static void collect_subsurface_damage_iter(struct wlr_surface *surface,
@@ -614,6 +664,8 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 		surface_output_destroy(surface_output);
 	}
 
+	wlr_raster_unlock(surface->raster);
+
 	wlr_signal_emit_safe(&surface->events.destroy, surface);
 
 	wlr_addon_set_finish(&surface->addons);
@@ -638,6 +690,46 @@ static void surface_handle_renderer_destroy(struct wl_listener *listener,
 	struct wlr_surface *surface =
 		wl_container_of(listener, surface, renderer_destroy);
 	wl_resource_destroy(surface->resource);
+}
+
+static void surface_handle_raster_destroy(struct wl_listener *listener, void *data) {
+	struct wlr_surface *surface =
+		wl_container_of(listener, surface, raster_destroy);
+
+	// try to reclaim a texture from this raster so we can try to do a partial
+	// upload next time.
+	struct wlr_texture *reuse = NULL;
+
+	struct wlr_texture *texture, *tmp_texture;
+	wl_list_for_each_safe(texture, tmp_texture,
+			&surface->old_raster->sources, link) {
+		// we can be smarter about this, but for now let's just take the first
+		// texture
+		wlr_raster_detach(surface->old_raster, texture);
+		reuse = texture;
+		break;
+	}
+
+	surface->old_raster = NULL;
+
+	if (!reuse) {
+		return;
+	}
+
+	// if there are already sources for the new raster, don't bother uploading
+	// if something else already did for us.
+	if (!wl_list_empty(&surface->raster->sources)) {
+		wlr_texture_destroy(reuse);
+		return;
+	}
+
+	if (!wlr_texture_update_from_raster(reuse,
+			surface->raster, &surface->buffer_damage)) {
+		wlr_texture_destroy(reuse);
+		return;
+	}
+
+	wlr_raster_attach(surface->raster, reuse);
 }
 
 static struct wlr_surface *surface_create(struct wl_client *client,
@@ -680,11 +772,13 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	wl_signal_add(&renderer->events.destroy, &surface->renderer_destroy);
 	surface->renderer_destroy.notify = surface_handle_renderer_destroy;
 
+	surface->raster_destroy.notify = surface_handle_raster_destroy;
+
 	return surface;
 }
 
 bool wlr_surface_has_buffer(struct wlr_surface *surface) {
-	return surface->current.buffer != NULL;
+	return surface->raster != NULL;
 }
 
 bool wlr_surface_set_role(struct wlr_surface *surface,
