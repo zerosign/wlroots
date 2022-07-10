@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <drm_fourcc.h>
 #include <wlr/render/interface.h>
 #include <wlr/render/pixman.h>
 #include <wlr/render/wlr_renderer.h>
@@ -147,10 +148,58 @@ bool wlr_render_raster_with_matrix(struct wlr_renderer *r,
 	return wlr_render_subraster_with_matrix(r, raster, &box, matrix, alpha);
 }
 
+static bool try_single_pixel(struct wlr_buffer *buffer,
+		float color[static 4], const struct wlr_fbox *box, float alpha) {
+	if (box->width != 1.f || box->height != 1.f ||
+			box->x < 0.f || box->y < 0.f ||
+			box->x >= buffer->width || box->y >= buffer->height) {
+		return false;
+	}
+
+	uint32_t x = floor(box->x);
+	uint32_t y = floor(box->y);
+
+	if (box->x != (float)x || box->y != (float)y) {
+		return false;
+	}
+
+	void *data;
+	uint32_t format;
+	size_t stride;
+	if (!wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+		return false;
+	}
+
+	if (format != DRM_FORMAT_ARGB8888) {
+		wlr_buffer_end_data_ptr_access(buffer);
+		return false;
+	}
+
+	size_t pixel_stride = stride / buffer->width;
+	uint8_t *data_color = &((uint8_t *)data)[pixel_stride * x + stride * y];
+	color[0] = data_color[3] * alpha / 255.f;
+	color[1] = data_color[2] * alpha / 255.f;
+	color[2] = data_color[1] * alpha / 255.f;
+	color[3] = data_color[0] * alpha / 255.f;
+
+	wlr_buffer_end_data_ptr_access(buffer);
+
+	return true;
+}
+
 bool wlr_render_subraster_with_matrix(struct wlr_renderer *r,
 		struct wlr_raster *raster, const struct wlr_fbox *box,
 		const float matrix[static 9], float alpha) {
 	assert(r->rendering);
+
+	float color[4];
+	if (raster->buffer &&
+			try_single_pixel(raster->buffer, (float *)&color, box, alpha)) {
+		wlr_render_quad_with_matrix(r, color, matrix);
+		return true;
+	}
+
 	return r->impl->render_subraster_with_matrix(r, raster,
 		box, matrix, alpha);
 }
