@@ -31,6 +31,7 @@ enum tinywl_cursor_mode {
 	TINYWL_CURSOR_PASSTHROUGH,
 	TINYWL_CURSOR_MOVE,
 	TINYWL_CURSOR_RESIZE,
+	TINYWL_CURSOR_DOWN,
 };
 
 struct tinywl_server {
@@ -447,7 +448,12 @@ static void process_cursor_motion(struct tinywl_server *server, uint32_t time) {
 		wlr_xcursor_manager_set_cursor_image(
 				server->cursor_mgr, "left_ptr", server->cursor);
 	}
-	if (surface) {
+	if (server->cursor_mode == TINYWL_CURSOR_DOWN && view != server->grabbed_view) {
+        /* Send pointer events to the view which the mouse button is down on. */
+		view = server->grabbed_view;
+        sx = server->cursor->x - view->x;
+		sy = server->cursor->y - view->y;
+	} else if (surface) {
 		/*
 		 * Send pointer enter and motion events.
 		 *
@@ -519,6 +525,10 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 	} else {
 		/* Focus that client if the button was _pressed_ */
 		focus_view(view, surface);
+
+		/* Change the cursor_mode while the button is pressed */
+		server->grabbed_view = view;
+	    server->cursor_mode = TINYWL_CURSOR_DOWN;
 	}
 }
 
