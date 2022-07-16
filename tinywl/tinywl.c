@@ -453,6 +453,7 @@ static void process_cursor_motion(struct tinywl_server *server, uint32_t time) {
 		view = server->grabbed_view;
         sx = server->cursor->x - view->x;
 		sy = server->cursor->y - view->y;
+		wlr_seat_pointer_notify_motion(seat, time, sx, sy);
 	} else if (surface) {
 		/*
 		 * Send pointer enter and motion events.
