@@ -467,6 +467,23 @@ static bool gles2_read_pixels(struct wlr_renderer *wlr_renderer,
 
 	push_gles2_debug(renderer);
 
+	// The 16F buffer formats have more than one possible color read
+	// format/type combination; the type can be GL_HALF_FLOAT = 0x140b,
+	// if the GLES implementation version is >= 3.0, or could be
+	// GL_HALF_FLOAT_OES (which would be appropriate at GLES 2.0.)
+	// To match glReadPixels' strict requirements on format+type,
+	// we submit exactly the implementation suggested format and type,
+	// if these are compatible with the drm_format.
+	GLint gl_format = -1, gl_type = -1;
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &gl_format);
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &gl_type);
+	const struct wlr_gles2_pixel_format *impl_format =
+		get_gles2_format_from_gl(gl_format, gl_type, fmt->has_alpha);
+	if (impl_format != fmt) {
+		gl_format = fmt->gl_format;
+		gl_type = fmt->gl_type;
+	}
+
 	// Make sure any pending drawing is finished before we try to read it
 	glFinish();
 
@@ -478,14 +495,14 @@ static bool gles2_read_pixels(struct wlr_renderer *wlr_renderer,
 		// Under these particular conditions, we can read the pixels with only
 		// one glReadPixels call
 
-		glReadPixels(src_x, src_y, width, height, fmt->gl_format, fmt->gl_type, p);
+		glReadPixels(src_x, src_y, width, height, gl_format, gl_type, p);
 	} else {
 		// Unfortunately GLES2 doesn't support GL_PACK_*, so we have to read
 		// the lines out row by row
 		for (size_t i = 0; i < height; ++i) {
 			uint32_t y = src_y + i;
-			glReadPixels(src_x, y, width, 1, fmt->gl_format,
-				fmt->gl_type, p + i * stride + dst_x * drm_fmt->bpp / 8);
+			glReadPixels(src_x, y, width, 1, gl_format,
+				gl_type, p + i * stride + dst_x * drm_fmt->bpp / 8);
 		}
 	}
 

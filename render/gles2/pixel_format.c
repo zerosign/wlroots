@@ -1,6 +1,7 @@
 #include <drm_fourcc.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <GLES3/gl3.h>
 #include "render/gles2.h"
 
 /*
@@ -150,6 +151,16 @@ const struct wlr_gles2_pixel_format *get_gles2_format_from_drm(uint32_t fmt) {
 
 const struct wlr_gles2_pixel_format *get_gles2_format_from_gl(
 		GLint gl_format, GLint gl_type, bool alpha) {
+	// Mesa may provide GL ES >= 3.0 instead of the minimum asked for 2.0;
+	// in this case, the gl_type associated to render buffers created from
+	// half float DMABUFs _may_ be the value GL_HALF_FLOAT = 0x140b from
+	// GL ES 3.0, not the value GL_HALF_FLOAT_OES = 0x8D61 from GL ES 2.0
+	// extension OES_texture_half_float, which is used to define texture
+	// images for half-float shm buffers.
+	if (gl_type == GL_HALF_FLOAT) {
+		gl_type = GL_HALF_FLOAT_OES;
+	}
+
 	for (size_t i = 0; i < sizeof(formats) / sizeof(*formats); ++i) {
 		if (formats[i].gl_format == gl_format &&
 				formats[i].gl_type == gl_type &&
