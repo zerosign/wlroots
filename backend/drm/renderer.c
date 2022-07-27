@@ -3,6 +3,7 @@
 #include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/util/log.h>
+#include "backend/backend.h"
 #include "backend/drm/drm.h"
 #include "backend/drm/fb.h"
 #include "backend/drm/renderer.h"

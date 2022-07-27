@@ -25,6 +25,7 @@
 #endif // WLR_HAS_VULKAN_RENDERER
 
 #include "backend/backend.h"
+#include "backend/multi.h"
 #include "render/pixel_format.h"
 #include "render/wlr_renderer.h"
 #include "util/env.h"
@@ -285,6 +286,13 @@ out:
 	if (own_drm_fd && drm_fd >= 0) {
 		close(drm_fd);
 	}
+	// If we have a multi GPU environment, then track this renderer
+	// for cross-GPU imports.
+	if (renderer && backend && wlr_backend_is_multi(backend)) {
+		struct wlr_multi_backend *multi = (struct wlr_multi_backend *)backend;
+		renderer->multi_gpu = multi->multi_gpu;
+	}
+
 	return renderer;
 }
 

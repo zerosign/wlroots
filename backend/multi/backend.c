@@ -2,11 +2,15 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
+#include <xf86drm.h>
+#include <fcntl.h>
 #include <wlr/backend/interface.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/util/log.h>
+#include "render/wlr_renderer.h"
 #include "backend/backend.h"
 #include "backend/multi.h"
+#include "render/allocator/allocator.h"
 
 struct subbackend_state {
 	struct wlr_backend *backend;
@@ -58,6 +62,7 @@ static void multi_backend_destroy(struct wlr_backend *wlr_backend) {
 			wl_container_of(backend->backends.next, sub, link);
 		wlr_backend_destroy(sub->backend);
 	}
+	wlr_multi_gpu_destroy(backend->multi_gpu);
 
 	free(backend);
 }
@@ -118,6 +123,7 @@ struct wlr_backend *wlr_multi_backend_create(struct wl_event_loop *loop) {
 	}
 
 	wl_list_init(&backend->backends);
+	backend->multi_gpu = wlr_multi_gpu_create();
 	wlr_backend_init(&backend->backend, &backend_impl);
 
 	wl_signal_init(&backend->events.backend_add);
@@ -224,4 +230,102 @@ void wlr_multi_for_each_backend(struct wlr_backend *_backend,
 	wl_list_for_each(sub, &backend->backends, link) {
 		callback(sub->backend, data);
 	}
+}
+
+/*
+ * Create a wlr_multi_gpu struct and populate it with a renderer and allocator for each
+ * device in the system. This is done by finding all DRM nodes using drmGetDevices2.
+ */
+struct wlr_multi_gpu *wlr_multi_gpu_create(void) {
+	int flags = 0;
+	struct wlr_multi_gpu *multi_gpu = NULL;
+	int devices_len = drmGetDevices2(flags, NULL, 0);
+
+	if (devices_len < 0) {
+		wlr_log(WLR_ERROR, "drmGetDevices2 failed: %s", strerror(-devices_len));
+		return NULL;
+	}
+	drmDevice **devices = calloc(devices_len, sizeof(*devices));
+	if (devices == NULL) {
+		wlr_log_errno(WLR_ERROR, "Allocation failed");
+		goto out;
+	}
+	devices_len = drmGetDevices2(flags, devices, devices_len);
+	if (devices_len < 0) {
+		wlr_log(WLR_ERROR, "drmGetDevices2 failed: %s", strerror(-devices_len));
+		goto out;
+	}
+
+	multi_gpu = calloc(1, sizeof(struct wlr_multi_gpu));
+	if (!multi_gpu) {
+		goto out;
+	}
+	wl_list_init(&multi_gpu->devices);
+
+	for (int i = 0; i < devices_len; i++) {
+		drmDevice *dev = devices[i];
+		if (dev->available_nodes & (1 << DRM_NODE_RENDER)) {
+			const char *name = dev->nodes[DRM_NODE_RENDER];
+			wlr_log(WLR_DEBUG, "Opening DRM render node '%s'", name);
+			int fd = open(name, O_RDWR | O_CLOEXEC);
+			if (fd < 0) {
+				wlr_log_errno(WLR_ERROR, "Failed to open '%s'", name);
+				goto out;
+			}
+
+			// Create a renderer/allocator and add it as a new device
+			struct wlr_renderer *renderer = renderer_autocreate_with_drm_fd(fd);
+			if (!renderer) {
+				wlr_log(WLR_ERROR, "Failed to create multi-GPU renderer");
+				goto fail;
+			}
+
+			struct wlr_allocator *allocator =
+				allocator_autocreate_with_drm_fd(WLR_BUFFER_CAP_DMABUF, renderer, fd);
+			if (!allocator) {
+				wlr_log(WLR_ERROR, "Failed to create multi-GPU allocator");
+				wlr_renderer_destroy(renderer);
+				goto fail;
+			}
+
+			struct wlr_multi_gpu_device *device = calloc(1, sizeof(struct wlr_multi_gpu_device));
+			if (!device) {
+				wlr_allocator_destroy(allocator);
+				wlr_renderer_destroy(renderer);
+				goto fail;
+			}
+			wl_list_insert(&multi_gpu->devices, &device->link);
+			device->renderer = renderer;
+			device->allocator = allocator;
+		}
+	}
+
+	goto out;
+
+fail:
+	wlr_multi_gpu_destroy(multi_gpu);
+	multi_gpu = NULL;
+
+out:
+	for (int i = 0; i < devices_len; i++) {
+		drmFreeDevice(&devices[i]);
+	}
+	if (devices) {
+		free(devices);
+	}
+
+	return multi_gpu;
+}
+
+void wlr_multi_gpu_destroy(struct wlr_multi_gpu *multi_gpu) {
+	struct wlr_multi_gpu_device *device;
+	// Remove and destroy all devices
+	wl_list_for_each(device, &multi_gpu->devices, link) {
+		wlr_allocator_destroy(device->allocator);
+		wlr_renderer_destroy(device->renderer);
+		wl_list_remove(&device->link);
+		free(device);
+	}
+
+	free(multi_gpu);
 }
