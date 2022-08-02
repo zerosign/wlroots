@@ -1096,15 +1096,6 @@ static bool devid_from_fd(int fd, dev_t *devid) {
 	return true;
 }
 
-static bool is_secondary_drm_backend(struct wlr_backend *backend) {
-#if WLR_HAS_DRM_BACKEND
-	return wlr_backend_is_drm(backend) &&
-		wlr_drm_backend_get_parent(backend) != NULL;
-#else
-	return false;
-#endif
-}
-
 bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feedback_v1 *feedback,
 		const struct wlr_linux_dmabuf_feedback_v1_init_options *options) {
 	assert(options->main_renderer != NULL);
@@ -1147,8 +1138,7 @@ bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feed
 			wlr_log(WLR_ERROR, "Failed to intersect renderer and scanout formats");
 			goto error;
 		}
-	} else if (options->scanout_primary_output != NULL &&
-			!is_secondary_drm_backend(options->scanout_primary_output->backend)) {
+	} else if (options->scanout_primary_output != NULL) {
 		int backend_drm_fd = wlr_backend_get_drm_fd(options->scanout_primary_output->backend);
 		if (backend_drm_fd < 0) {
 			wlr_log(WLR_ERROR, "Failed to get backend DRM FD");
@@ -1174,8 +1164,9 @@ bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feed
 
 		tranche->target_device = backend_dev;
 		tranche->flags = ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT;
-		if (!wlr_drm_format_set_intersect(&tranche->formats, scanout_formats, renderer_formats)) {
-			wlr_log(WLR_ERROR, "Failed to intersect renderer and scanout formats");
+		// Copy our scanout formats to the scanout tranche
+		if (!wlr_drm_format_set_copy(&tranche->formats, scanout_formats)) {
+			wlr_log(WLR_ERROR, "Failed to copy scanout formats");
 			goto error;
 		}
 	}
