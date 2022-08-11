@@ -86,6 +86,10 @@ struct wlr_dmabuf_v1_buffer *wlr_dmabuf_v1_buffer_from_buffer_resource(
 
 static const struct wlr_buffer_impl buffer_impl;
 
+bool wlr_dmabuf_v1_buffer_is_buffer(struct wlr_buffer *buffer) {
+	return buffer->impl == &buffer_impl;
+}
+
 static struct wlr_dmabuf_v1_buffer *dmabuf_v1_buffer_from_buffer(
 		struct wlr_buffer *buffer) {
 	assert(buffer->impl == &buffer_impl);
@@ -197,17 +201,15 @@ static void buffer_handle_resource_destroy(struct wl_resource *buffer_resource) 
 }
 
 static bool check_import_dmabuf(struct wlr_linux_dmabuf_v1 *linux_dmabuf,
-		struct wlr_dmabuf_attributes *attribs) {
-	struct wlr_texture *texture =
-		wlr_texture_from_dmabuf(linux_dmabuf->renderer, attribs);
-	if (texture == NULL) {
+		struct wlr_buffer *dmabuf) {
+	struct wlr_raster *raster = wlr_raster_create(dmabuf);
+	if (!raster) {
 		return false;
 	}
 
-	// We can import the image, good. No need to keep it since wlr_surface will
-	// import it again on commit.
-	wlr_texture_destroy(texture);
-	return true;
+	bool success = wlr_renderer_raster_upload(linux_dmabuf->renderer, raster);
+	wlr_raster_unlock(raster);
+	return success;
 }
 
 static void params_create_common(struct wl_resource *params_resource,
@@ -327,17 +329,19 @@ static void params_create_common(struct wl_resource *params_resource,
 		}
 	}
 
-	/* Check if dmabuf is usable */
-	if (!check_import_dmabuf(linux_dmabuf, &attribs)) {
-		goto err_failed;
-	}
-
 	struct wlr_dmabuf_v1_buffer *buffer = calloc(1, sizeof(*buffer));
 	if (!buffer) {
 		wl_resource_post_no_memory(params_resource);
 		goto err_failed;
 	}
 	wlr_buffer_init(&buffer->base, &buffer_impl, attribs.width, attribs.height);
+	buffer->attributes = attribs;
+
+	/* Check if dmabuf is usable */
+	if (!check_import_dmabuf(linux_dmabuf, &buffer->base)) {
+		free(buffer);
+		goto err_failed;
+	}
 
 	struct wl_client *client = wl_resource_get_client(params_resource);
 	buffer->resource = wl_resource_create(client, &wl_buffer_interface,
@@ -349,8 +353,6 @@ static void params_create_common(struct wl_resource *params_resource,
 	}
 	wl_resource_set_implementation(buffer->resource,
 		&wl_buffer_impl, buffer, buffer_handle_resource_destroy);
-
-	buffer->attributes = attribs;
 
 	buffer->release.notify = buffer_handle_release;
 	wl_signal_add(&buffer->base.events.release, &buffer->release);

@@ -29,7 +29,7 @@ struct sample_state {
 	struct wl_listener new_input;
 	struct wlr_renderer *renderer;
 	struct wlr_allocator *allocator;
-	struct wlr_texture *cat_texture;
+	struct wlr_raster *cat_raster;
 	struct wlr_output_layout *layout;
 	float x_offs, y_offs;
 	float x_vel, y_vel;
@@ -134,7 +134,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 		wlr_output_layout_output_coords(sample->layout, output->output,
 			&local_x, &local_y);
 
-		wlr_render_texture(sample->renderer, sample->cat_texture,
+		wlr_render_raster(sample->renderer, sample->cat_raster,
 			wlr_output->transform_matrix, local_x, local_y, 1.0f);
 	}
 
@@ -279,9 +279,8 @@ int main(int argc, char *argv[]) {
 	state.new_input.notify = new_input_notify;
 
 	state.renderer = wlr_renderer_autocreate(wlr);
-	state.cat_texture = wlr_texture_from_pixels(state.renderer,
-		DRM_FORMAT_ABGR8888, cat_tex.width * 4, cat_tex.width, cat_tex.height,
-		cat_tex.pixel_data);
+	state.cat_raster = wlr_raster_from_pixels(DRM_FORMAT_ABGR8888,
+		cat_tex.width * 4, cat_tex.width, cat_tex.height, cat_tex.pixel_data);
 
 	state.allocator = wlr_allocator_autocreate(wlr, state.renderer);
 
@@ -292,7 +291,7 @@ int main(int argc, char *argv[]) {
 	}
 	wl_display_run(display);
 
-	wlr_texture_destroy(state.cat_texture);
+	wlr_raster_unlock(state.cat_raster);
 
 	wl_display_destroy(state.display);
 	wlr_output_layout_destroy(state.layout);

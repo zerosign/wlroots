@@ -133,52 +133,8 @@ bool wlr_buffer_begin_data_ptr_access(struct wlr_buffer *buffer, uint32_t flags,
 void wlr_buffer_end_data_ptr_access(struct wlr_buffer *buffer);
 
 /**
- * A client buffer.
- */
-struct wlr_client_buffer {
-	struct wlr_buffer base;
-
-	/**
-	 * The buffer's texture, if any. A buffer will not have a texture if the
-	 * client destroys the buffer before it has been released.
-	 */
-	struct wlr_texture *texture;
-	/**
-	 * The buffer this client buffer was created from. NULL if destroyed.
-	 */
-	struct wlr_buffer *source;
-
-	// private state
-
-	struct wl_listener source_destroy;
-
-	// If the client buffer has been created from a wl_shm buffer
-	uint32_t shm_source_format;
-};
-
-/**
- * Creates a struct wlr_client_buffer from a given struct wlr_buffer by creating
- * a texture from it, and copying its struct wl_resource.
- */
-struct wlr_client_buffer *wlr_client_buffer_create(struct wlr_buffer *buffer,
-	struct wlr_renderer *renderer);
-
-/**
- * Get a client buffer from a generic buffer. If the buffer isn't a client
- * buffer, returns NULL.
- */
-struct wlr_client_buffer *wlr_client_buffer_get(struct wlr_buffer *buffer);
-/**
  * Check if a resource is a wl_buffer resource.
  */
 bool wlr_resource_is_buffer(struct wl_resource *resource);
-/**
- * Try to update the buffer's content.
- *
- * Fails if there's more than one reference to the buffer or if the texture
- * isn't mutable.
- */
-bool wlr_client_buffer_apply_damage(struct wlr_client_buffer *client_buffer,
-	struct wlr_buffer *next, pixman_region32_t *damage);
 
 #endif

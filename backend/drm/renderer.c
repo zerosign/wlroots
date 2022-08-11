@@ -90,14 +90,14 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		return NULL;
 	}
 
-	struct wlr_texture *tex = wlr_texture_from_buffer(renderer, buffer);
-	if (tex == NULL) {
+	struct wlr_raster *raster = wlr_raster_create(buffer);
+	if (!raster) {
 		return NULL;
 	}
 
 	struct wlr_buffer *dst = wlr_swapchain_acquire(surf->swapchain, NULL);
 	if (!dst) {
-		wlr_texture_destroy(tex);
+		wlr_raster_unlock(raster);
 		return NULL;
 	}
 
@@ -107,16 +107,15 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 
 	if (!wlr_renderer_begin_with_buffer(renderer, dst)) {
 		wlr_buffer_unlock(dst);
-		wlr_texture_destroy(tex);
+		wlr_raster_unlock(raster);
 		return NULL;
 	}
 
 	wlr_renderer_clear(renderer, (float[]){ 0.0, 0.0, 0.0, 0.0 });
-	wlr_render_texture_with_matrix(renderer, tex, mat, 1.0f);
+	wlr_render_raster_with_matrix(renderer, raster, mat, 1.0f);
 
 	wlr_renderer_end(renderer);
-
-	wlr_texture_destroy(tex);
+	wlr_raster_unlock(raster);
 
 	return dst;
 }

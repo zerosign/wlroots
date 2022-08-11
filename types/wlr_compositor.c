@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/interface.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_compositor.h>
@@ -333,45 +334,15 @@ static void surface_state_move(struct wlr_surface_state *state,
 static void surface_apply_damage(struct wlr_surface *surface) {
 	if (surface->current.buffer == NULL) {
 		// NULL commit
-		if (surface->buffer != NULL) {
-			wlr_buffer_unlock(&surface->buffer->base);
-		}
-		surface->buffer = NULL;
 		surface->opaque = false;
 		return;
 	}
 
 	surface->opaque = buffer_is_opaque(surface->current.buffer);
-
-	if (surface->buffer != NULL) {
-		if (wlr_client_buffer_apply_damage(surface->buffer,
-				surface->current.buffer, &surface->buffer_damage)) {
-			wlr_buffer_unlock(surface->current.buffer);
-			surface->current.buffer = NULL;
-			return;
-		}
-	}
-
-	struct wlr_client_buffer *buffer = wlr_client_buffer_create(
-			surface->current.buffer, surface->renderer);
-
-	wlr_buffer_unlock(surface->current.buffer);
-	surface->current.buffer = NULL;
-
-	if (buffer == NULL) {
-		wlr_log(WLR_ERROR, "Failed to upload buffer");
-		return;
-	}
-
-	if (surface->buffer != NULL) {
-		wlr_buffer_unlock(&surface->buffer->base);
-	}
-	surface->buffer = buffer;
 }
 
 static void surface_update_opaque_region(struct wlr_surface *surface) {
-	struct wlr_texture *texture = wlr_surface_get_texture(surface);
-	if (texture == NULL) {
+	if (!wlr_surface_has_buffer(surface)) {
 		pixman_region32_clear(&surface->opaque_region);
 		return;
 	}
@@ -445,8 +416,34 @@ static void surface_commit_state(struct wlr_surface *surface,
 	surface_state_move(&surface->current, next);
 
 	if (invalid_buffer) {
+		if (!surface->current.buffer) {
+			wlr_raster_unlock(surface->raster);
+			surface->raster = NULL;
+		}
+
+		if (!surface->raster || surface->raster->buffer != surface->current.buffer) {
+			surface->old_raster = surface->raster;
+
+			if (surface->current.buffer) {
+				surface->raster = wlr_raster_create(surface->current.buffer);
+			}
+
+			if (surface->old_raster) {
+				// By the time we unlock the buffer next the buffer might
+				// get destroyed. We need to start listening here.
+				wl_signal_add(&surface->old_raster->events.destroy,
+					&surface->raster_destroy);
+
+				wlr_raster_unlock(surface->old_raster);
+			}
+		}
+
 		surface_apply_damage(surface);
+
+		wlr_buffer_unlock(surface->current.buffer);
+		surface->current.buffer = NULL;
 	}
+
 	surface_update_opaque_region(surface);
 	surface_update_input_region(surface);
 
@@ -480,6 +477,37 @@ static void surface_commit_state(struct wlr_surface *surface,
 	}
 
 	wlr_signal_emit_safe(&surface->events.commit, surface);
+
+	if (surface->old_raster) {
+		wl_list_remove(&surface->raster_destroy.link);
+		surface->old_raster = NULL;
+	}
+
+	if (invalid_buffer && surface->raster) {
+		// upload the texture to all renderers that this surface intersects.
+		struct wlr_surface_output *surface_output;
+		wl_list_for_each(surface_output, &surface->current_outputs, link) {
+			if (!surface_output->output->renderer) {
+				continue;
+			}
+
+			wlr_renderer_raster_upload(surface_output->output->renderer,
+				surface->raster);
+		}
+
+		// unlock the buffer for shm buffers only. Clients may implement
+		// optimizations if given the shm buffer back immediately. But only do
+		// this if the raster has a source, if not, that means that the surface
+		// is not visible on any outputs and let's continue locking the buffer
+		// until it is visible.
+		// 
+		// For other buffers, we want to continue to lock it so that we
+		// may direct scanout.
+		if (!wl_list_empty(&surface->raster->sources) && surface->raster->buffer &&
+				buffer_is_shm_client_buffer(surface->raster->buffer)) {
+			wlr_raster_remove_buffer(surface->raster);
+		}
+	}
 }
 
 static void collect_subsurface_damage_iter(struct wlr_surface *surface,
@@ -644,6 +672,8 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 		surface_output_destroy(surface_output);
 	}
 
+	wlr_raster_unlock(surface->raster);
+
 	wlr_signal_emit_safe(&surface->events.destroy, surface);
 
 	wlr_addon_set_finish(&surface->addons);
@@ -653,28 +683,63 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 		surface_state_destroy_cached(cached);
 	}
 
-	wl_list_remove(&surface->renderer_destroy.link);
 	surface_state_finish(&surface->pending);
 	surface_state_finish(&surface->current);
 	pixman_region32_fini(&surface->buffer_damage);
 	pixman_region32_fini(&surface->external_damage);
 	pixman_region32_fini(&surface->opaque_region);
 	pixman_region32_fini(&surface->input_region);
-	if (surface->buffer != NULL) {
-		wlr_buffer_unlock(&surface->buffer->base);
-	}
 	free(surface);
 }
 
-static void surface_handle_renderer_destroy(struct wl_listener *listener,
-		void *data) {
+static void surface_handle_raster_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_surface *surface =
-		wl_container_of(listener, surface, renderer_destroy);
-	wl_resource_destroy(surface->resource);
+		wl_container_of(listener, surface, raster_destroy);
+
+	// if there are already sources for the new raster, don't bother uploading
+	// if something else already did for us.
+	if (!wl_list_empty(&surface->raster->sources)) {
+		surface->old_raster = NULL;
+		return;
+	}
+
+	// try to reclaim the textures from this raster so we can try to do a partial
+	// upload.
+	struct wlr_texture *texture, *tmp_texture;
+	wl_list_for_each_safe(texture, tmp_texture,
+			&surface->old_raster->sources, link) {
+		wlr_raster_detach(surface->old_raster, texture);
+
+		bool visible = false;
+
+		// only try to reuse textures of renderers that will see this surface.
+		struct wlr_surface_output *surface_output; 
+		wl_list_for_each(surface_output, &surface->current_outputs, link) {
+			if (surface_output->output->renderer == texture->renderer) {
+				visible = true;
+				break;
+			}
+		}
+
+		if (!visible) {
+			wlr_texture_destroy(texture);
+			continue;
+		}
+
+		if (!wlr_texture_update_from_raster(texture,
+				surface->raster, &surface->buffer_damage)) {
+			wlr_texture_destroy(texture);
+			continue;
+		}
+
+		wlr_raster_attach(surface->raster, texture);
+	}
+
+	surface->old_raster = NULL;
 }
 
 static struct wlr_surface *surface_create(struct wl_client *client,
-		uint32_t version, uint32_t id, struct wlr_renderer *renderer) {
+		uint32_t version, uint32_t id) {
 	struct wlr_surface *surface = calloc(1, sizeof(struct wlr_surface));
 	if (!surface) {
 		wl_client_post_no_memory(client);
@@ -692,8 +757,6 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 
 	wlr_log(WLR_DEBUG, "New wlr_surface %p (res %p)", surface, surface->resource);
 
-	surface->renderer = renderer;
-
 	surface_state_init(&surface->current);
 	surface_state_init(&surface->pending);
 	surface->pending.seq = 1;
@@ -710,21 +773,13 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	pixman_region32_init(&surface->input_region);
 	wlr_addon_set_init(&surface->addons);
 
-	wl_signal_add(&renderer->events.destroy, &surface->renderer_destroy);
-	surface->renderer_destroy.notify = surface_handle_renderer_destroy;
+	surface->raster_destroy.notify = surface_handle_raster_destroy;
 
 	return surface;
 }
 
-struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface) {
-	if (surface->buffer == NULL) {
-		return NULL;
-	}
-	return surface->buffer->texture;
-}
-
 bool wlr_surface_has_buffer(struct wlr_surface *surface) {
-	return wlr_surface_get_texture(surface) != NULL;
+	return surface->raster != NULL;
 }
 
 bool wlr_surface_set_role(struct wlr_surface *surface,
@@ -1097,7 +1152,7 @@ static void compositor_create_surface(struct wl_client *client,
 	struct wlr_compositor *compositor = compositor_from_resource(resource);
 
 	struct wlr_surface *surface = surface_create(client,
-		wl_resource_get_version(resource), id, compositor->renderer);
+		wl_resource_get_version(resource), id);
 	if (surface == NULL) {
 		wl_client_post_no_memory(client);
 		return;
@@ -1139,8 +1194,7 @@ static void compositor_handle_display_destroy(
 	free(compositor);
 }
 
-struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
-		struct wlr_renderer *renderer) {
+struct wlr_compositor *wlr_compositor_create(struct wl_display *display) {
 	struct wlr_compositor *compositor = calloc(1, sizeof(*compositor));
 	if (!compositor) {
 		return NULL;
@@ -1152,7 +1206,6 @@ struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
 		free(compositor);
 		return NULL;
 	}
-	compositor->renderer = renderer;
 
 	wl_signal_init(&compositor->events.new_surface);
 	wl_signal_init(&compositor->events.destroy);

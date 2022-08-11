@@ -234,7 +234,6 @@ struct wlr_vk_renderer *vulkan_get_renderer(struct wlr_renderer *r);
 // State (e.g. image texture) associated with a surface.
 struct wlr_vk_texture {
 	struct wlr_texture wlr_texture;
-	struct wlr_vk_renderer *renderer;
 	uint32_t mem_count;
 	VkDeviceMemory memories[WLR_DMABUF_MAX_PLANES];
 	VkImage image;
@@ -255,13 +254,12 @@ struct wlr_vk_texture {
 	struct wl_listener buffer_destroy;
 };
 
-struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture);
+struct wlr_vk_texture *vulkan_raster_upload(struct wlr_vk_renderer *renderer,
+	struct wlr_raster *wlr_raster);
 VkImage vulkan_import_dmabuf(struct wlr_vk_renderer *renderer,
 	const struct wlr_dmabuf_attributes *attribs,
 	VkDeviceMemory mems[static WLR_DMABUF_MAX_PLANES], uint32_t *n_mems,
 	bool for_render);
-struct wlr_texture *vulkan_texture_from_buffer(
-	struct wlr_renderer *wlr_renderer, struct wlr_buffer *buffer);
 void vulkan_texture_destroy(struct wlr_vk_texture *texture);
 
 struct wlr_vk_descriptor_pool {

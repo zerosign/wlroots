@@ -27,7 +27,7 @@ struct sample_state {
 	struct timespec last_frame;
 	struct wlr_renderer *renderer;
 	struct wlr_allocator *allocator;
-	struct wlr_texture *cat_texture;
+	struct wlr_raster *cat_raster;
 	struct wl_list outputs;
 	enum wl_output_transform transform;
 };
@@ -65,7 +65,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
 	for (int y = -128 + (int)sample_output->y_offs; y < height; y += 128) {
 		for (int x = -128 + (int)sample_output->x_offs; x < width; x += 128) {
-			wlr_render_texture(sample->renderer, sample->cat_texture,
+			wlr_render_raster(sample->renderer, sample->cat_raster,
 				wlr_output->transform_matrix, x, y, 1.0f);
 		}
 	}
@@ -256,10 +256,9 @@ int main(int argc, char *argv[]) {
 		wlr_backend_destroy(wlr);
 		exit(EXIT_FAILURE);
 	}
-	state.cat_texture = wlr_texture_from_pixels(state.renderer,
-		DRM_FORMAT_ABGR8888, cat_tex.width * 4, cat_tex.width, cat_tex.height,
-		cat_tex.pixel_data);
-	if (!state.cat_texture) {
+	state.cat_raster = wlr_raster_from_pixels(DRM_FORMAT_ABGR8888,
+		cat_tex.width * 4, cat_tex.width, cat_tex.height, cat_tex.pixel_data);
+	if (!state.cat_raster) {
 		wlr_log(WLR_ERROR, "Could not start compositor, OOM");
 		exit(EXIT_FAILURE);
 	}
@@ -273,6 +272,6 @@ int main(int argc, char *argv[]) {
 	}
 	wl_display_run(display);
 
-	wlr_texture_destroy(state.cat_texture);
+	wlr_raster_unlock(state.cat_raster);
 	wl_display_destroy(display);
 }

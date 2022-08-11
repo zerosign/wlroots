@@ -246,15 +246,17 @@ static void gles2_scissor(struct wlr_renderer *wlr_renderer,
 	pop_gles2_debug(renderer);
 }
 
-static bool gles2_render_subtexture_with_matrix(
-		struct wlr_renderer *wlr_renderer, struct wlr_texture *wlr_texture,
+static bool gles2_render_subraster_with_matrix(
+		struct wlr_renderer *wlr_renderer, struct wlr_raster *wlr_raster,
 		const struct wlr_fbox *box, const float matrix[static 9],
 		float alpha) {
 	struct wlr_gles2_renderer *renderer =
 		gles2_get_renderer_in_context(wlr_renderer);
 	struct wlr_gles2_texture *texture =
-		gles2_get_texture(wlr_texture);
-	assert(texture->renderer == renderer);
+		gles2_raster_upload(renderer, wlr_raster);
+	if (!texture) {
+		return false;
+	}
 
 	struct wlr_gles2_tex_shader *shader = NULL;
 
@@ -305,10 +307,10 @@ static bool gles2_render_subtexture_with_matrix(
 	glUniform1i(shader->tex, 0);
 	glUniform1f(shader->alpha, alpha);
 
-	const GLfloat x1 = box->x / wlr_texture->width;
-	const GLfloat y1 = box->y / wlr_texture->height;
-	const GLfloat x2 = (box->x + box->width) / wlr_texture->width;
-	const GLfloat y2 = (box->y + box->height) / wlr_texture->height;
+	const GLfloat x1 = box->x / wlr_raster->width;
+	const GLfloat y1 = box->y / wlr_raster->height;
+	const GLfloat x2 = (box->x + box->width) / wlr_raster->width;
+	const GLfloat y2 = (box->y + box->height) / wlr_raster->height;
 	const GLfloat texcoord[] = {
 		x2, y1, // top right
 		x1, y1, // top left
@@ -529,6 +531,13 @@ static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
 	free(renderer);
 }
 
+static bool _gles2_raster_upload(struct wlr_renderer *wlr_renderer,
+		struct wlr_raster *raster) {
+	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
+	struct wlr_gles2_texture *texture = gles2_raster_upload(renderer, raster);
+	return texture;
+}
+
 static const struct wlr_renderer_impl renderer_impl = {
 	.destroy = gles2_destroy,
 	.bind_buffer = gles2_bind_buffer,
@@ -536,7 +545,8 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.end = gles2_end,
 	.clear = gles2_clear,
 	.scissor = gles2_scissor,
-	.render_subtexture_with_matrix = gles2_render_subtexture_with_matrix,
+	.raster_upload = _gles2_raster_upload,
+	.render_subraster_with_matrix = gles2_render_subraster_with_matrix,
 	.render_quad_with_matrix = gles2_render_quad_with_matrix,
 	.get_shm_texture_formats = gles2_get_shm_texture_formats,
 	.get_dmabuf_texture_formats = gles2_get_dmabuf_texture_formats,
@@ -545,7 +555,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.read_pixels = gles2_read_pixels,
 	.get_drm_fd = gles2_get_drm_fd,
 	.get_render_buffer_caps = gles2_get_render_buffer_caps,
-	.texture_from_buffer = gles2_texture_from_buffer,
 };
 
 void push_gles2_debug_(struct wlr_gles2_renderer *renderer,

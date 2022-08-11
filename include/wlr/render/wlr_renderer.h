@@ -48,22 +48,30 @@ void wlr_renderer_clear(struct wlr_renderer *r, const float color[static 4]);
  * box.
  */
 void wlr_renderer_scissor(struct wlr_renderer *r, struct wlr_box *box);
+
 /**
- * Renders the requested texture.
+ * The renderer will attempt to upload the raster using an available compatible
+ * source found in the raster to the device that the renderer is running on.
+ * If the raster is already uploaded to said device, then this is a no-op.
  */
-bool wlr_render_texture(struct wlr_renderer *r, struct wlr_texture *texture,
+bool wlr_renderer_raster_upload(struct wlr_renderer *r,
+    struct wlr_raster *raster);
+/**
+ * Renders the requested raster.
+ */
+bool wlr_render_raster(struct wlr_renderer *r, struct wlr_raster *raster,
 	const float projection[static 9], int x, int y, float alpha);
 /**
- * Renders the requested texture using the provided matrix.
+ * Renders the requested raster using the provided matrix.
  */
-bool wlr_render_texture_with_matrix(struct wlr_renderer *r,
-	struct wlr_texture *texture, const float matrix[static 9], float alpha);
+bool wlr_render_raster_with_matrix(struct wlr_renderer *r,
+	struct wlr_raster *raster, const float matrix[static 9], float alpha);
 /**
- * Renders the requested texture using the provided matrix, after cropping it
+ * Renders the requested raster using the provided matrix, after cropping it
  * to the provided rectangle.
  */
-bool wlr_render_subtexture_with_matrix(struct wlr_renderer *r,
-	struct wlr_texture *texture, const struct wlr_fbox *box,
+bool wlr_render_subraster_with_matrix(struct wlr_renderer *r,
+	struct wlr_raster *raster, const struct wlr_fbox *box,
 	const float matrix[static 9], float alpha);
 /**
  * Renders a solid rectangle in the specified color.

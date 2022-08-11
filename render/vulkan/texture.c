@@ -18,7 +18,7 @@ bool wlr_texture_is_vk(struct wlr_texture *wlr_texture) {
 	return wlr_texture->impl == &texture_impl;
 }
 
-struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture) {
+static struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture) {
 	assert(wlr_texture_is_vk(wlr_texture));
 	return (struct wlr_vk_texture *)wlr_texture;
 }
@@ -42,8 +42,9 @@ static bool write_pixels(struct wlr_texture *wlr_texture,
 		VkAccessFlags src_access) {
 	VkResult res;
 	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
-	struct wlr_vk_renderer *renderer = texture->renderer;
-	VkDevice dev = texture->renderer->dev->dev;
+	struct wlr_vk_renderer *renderer =
+		vulkan_get_renderer(wlr_texture->renderer);
+	VkDevice dev = renderer->dev->dev;
 
 	// make sure assumptions are met
 	assert(src_x + width <= texture->wlr_texture.width);
@@ -136,27 +137,59 @@ static bool write_pixels(struct wlr_texture *wlr_texture,
 	return true;
 }
 
-static bool vulkan_texture_write_pixels(struct wlr_texture *wlr_texture,
-		uint32_t stride, uint32_t width, uint32_t height, uint32_t src_x,
-		uint32_t src_y, uint32_t dst_x, uint32_t dst_y, const void *vdata) {
-	return write_pixels(wlr_texture, stride, width, height, src_x, src_y,
-		dst_x, dst_y, vdata, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+static bool vulkan_texture_update_from_raster(struct wlr_texture *wlr_texture,
+		struct wlr_raster *raster, pixman_region32_t *damage) {
+	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
+	struct wlr_buffer *buffer = raster->buffer;
+
+	void *data;
+	uint32_t format;
+	size_t stride;
+	if (!wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+		return false;
+	}
+
+	bool ok = true;
+
+	if (format != texture->format->drm_format) {
+		ok = false;
+		goto out;
+	}
+
+	int rects_len = 0;
+	pixman_box32_t *rects = pixman_region32_rectangles(damage, &rects_len);
+
+	for (int i = 0; i < rects_len; i++) {
+		pixman_box32_t rect = rects[i];
+		uint32_t width = rect.x2 - rect.x1;
+		uint32_t height = rect.y2 - rect.y1;
+
+		// TODO: only map memory once
+		ok = write_pixels(wlr_texture, stride, width, height, rect.x1, rect.y1,
+			rect.x1, rect.y1, data, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+		if (!ok) {
+			goto out;
+		}
+	}
+
+out:
+	wlr_buffer_end_data_ptr_access(buffer);
+	return ok;
 }
 
 void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
-	if (!texture->renderer) {
-		free(texture);
-		return;
-	}
+	struct wlr_vk_renderer *renderer =
+		vulkan_get_renderer(texture->wlr_texture.renderer);
 
 	// when we recorded a command to fill this image _this_ frame,
 	// it has to be executed before the texture can be destroyed.
 	// Add it to the renderer->destroy_textures list, destroying
 	// _after_ the stage command buffer has exectued
-	if (texture->last_used == texture->renderer->frame) {
+	if (texture->last_used == renderer->frame) {
 		assert(texture->destroy_link.next == NULL); // not already inserted
-		wl_list_insert(&texture->renderer->destroy_textures,
+		wl_list_insert(&renderer->destroy_textures,
 			&texture->destroy_link);
 		return;
 	}
@@ -164,9 +197,9 @@ void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
 	wl_list_remove(&texture->link);
 	wl_list_remove(&texture->buffer_destroy.link);
 
-	VkDevice dev = texture->renderer->dev->dev;
+	VkDevice dev = renderer->dev->dev;
 	if (texture->ds && texture->ds_pool) {
-		vulkan_free_ds(texture->renderer, texture->ds_pool, texture->ds);
+		vulkan_free_ds(renderer, texture->ds_pool, texture->ds);
 	}
 
 	vkDestroyImageView(dev, texture->image_view, NULL);
@@ -191,7 +224,7 @@ static void vulkan_texture_unref(struct wlr_texture *wlr_texture) {
 }
 
 static const struct wlr_texture_impl texture_impl = {
-	.write_pixels = vulkan_texture_write_pixels,
+	.update_from_raster = vulkan_texture_update_from_raster,
 	.destroy = vulkan_texture_unref,
 };
 
@@ -203,18 +236,16 @@ static struct wlr_vk_texture *vulkan_texture_create(
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
 		return NULL;
 	}
-	wlr_texture_init(&texture->wlr_texture, &texture_impl, width, height);
-	texture->renderer = renderer;
+	wlr_texture_init(&texture->wlr_texture, &renderer->wlr_renderer,
+		&texture_impl, width, height);
 	wl_list_insert(&renderer->textures, &texture->link);
 	wl_list_init(&texture->buffer_destroy.link);
 	return texture;
 }
 
-static struct wlr_texture *vulkan_texture_from_pixels(struct wlr_renderer *wlr_renderer,
+static struct wlr_vk_texture *vulkan_texture_from_pixels(struct wlr_vk_renderer *renderer,
 		uint32_t drm_fmt, uint32_t stride, uint32_t width,
 		uint32_t height, const void *data) {
-	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
-
 	VkResult res;
 	VkDevice dev = renderer->dev->dev;
 
@@ -338,7 +369,7 @@ static struct wlr_texture *vulkan_texture_from_pixels(struct wlr_renderer *wlr_r
 		goto error;
 	}
 
-	return &texture->wlr_texture;
+	return texture;
 
 error:
 	vulkan_texture_destroy(texture);
@@ -573,7 +604,7 @@ error_image:
 	return VK_NULL_HANDLE;
 }
 
-static struct wlr_texture *vulkan_texture_from_dmabuf(struct wlr_renderer *wlr_renderer,
+static struct wlr_vk_texture *vulkan_texture_from_dmabuf(struct wlr_renderer *wlr_renderer,
 		struct wlr_dmabuf_attributes *attribs) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
 
@@ -648,7 +679,7 @@ static struct wlr_texture *vulkan_texture_from_dmabuf(struct wlr_renderer *wlr_r
 	vkUpdateDescriptorSets(dev, 1, &ds_write, 0, NULL);
 	texture->dmabuf_imported = true;
 
-	return &texture->wlr_texture;
+	return texture;
 
 error:
 	vulkan_texture_destroy(texture);
@@ -662,50 +693,69 @@ static void texture_handle_buffer_destroy(struct wl_listener *listener,
 	vulkan_texture_destroy(texture);
 }
 
-static struct wlr_texture *vulkan_texture_from_dmabuf_buffer(
+static struct wlr_vk_texture *vulkan_texture_from_dmabuf_buffer(
 		struct wlr_vk_renderer *renderer, struct wlr_buffer *buffer,
 		struct wlr_dmabuf_attributes *dmabuf) {
 	struct wlr_vk_texture *texture;
 	wl_list_for_each(texture, &renderer->textures, link) {
 		if (texture->buffer == buffer) {
 			wlr_buffer_lock(texture->buffer);
-			return &texture->wlr_texture;
+			return texture;
 		}
 	}
 
-	struct wlr_texture *wlr_texture =
-		vulkan_texture_from_dmabuf(&renderer->wlr_renderer, dmabuf);
-	if (wlr_texture == NULL) {
-		return false;
+	texture = vulkan_texture_from_dmabuf(&renderer->wlr_renderer, dmabuf);
+	if (!texture) {
+		return NULL;
 	}
 
-	texture = vulkan_get_texture(wlr_texture);
 	texture->buffer = wlr_buffer_lock(buffer);
 
 	texture->buffer_destroy.notify = texture_handle_buffer_destroy;
 	wl_signal_add(&buffer->events.destroy, &texture->buffer_destroy);
 
-	return &texture->wlr_texture;
+	return texture;
 }
 
-struct wlr_texture *vulkan_texture_from_buffer(
-		struct wlr_renderer *wlr_renderer,
-		struct wlr_buffer *buffer) {
-	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
+struct wlr_vk_texture *vulkan_raster_upload(struct wlr_vk_renderer *renderer,
+		struct wlr_raster *wlr_raster) {
+	struct wlr_texture *raster_texture;
+	wl_list_for_each(raster_texture, &wlr_raster->sources, link) {
+		if (wlr_texture_is_vk(raster_texture)) {
+			struct wlr_vk_texture *vk_tex =
+				(struct wlr_vk_texture *)raster_texture;
+			if (vk_tex->wlr_texture.renderer != &renderer->wlr_renderer) {
+				continue;
+			}
+			return vk_tex;
+		}
+	}
+
+	struct wlr_buffer *buffer = wlr_raster->buffer;
+	if (!wlr_raster->buffer) {
+		// we could possibly do a blit with another texture from another renderer,
+		// but this is unsupported currently.
+		return NULL;
+	}
+
+	struct wlr_vk_texture *texture = NULL;
 
 	void *data;
 	uint32_t format;
 	size_t stride;
 	struct wlr_dmabuf_attributes dmabuf;
 	if (wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
-		return vulkan_texture_from_dmabuf_buffer(renderer, buffer, &dmabuf);
+		texture = vulkan_texture_from_dmabuf_buffer(renderer, buffer, &dmabuf);
 	} else if (wlr_buffer_begin_data_ptr_access(buffer,
 			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
-		struct wlr_texture *tex = vulkan_texture_from_pixels(wlr_renderer,
+		texture = vulkan_texture_from_pixels(renderer,
 			format, stride, buffer->width, buffer->height, data);
 		wlr_buffer_end_data_ptr_access(buffer);
-		return tex;
-	} else {
-		return NULL;
 	}
+
+	if (texture) {
+		wlr_raster_attach(wlr_raster, &texture->wlr_texture);
+	}
+
+	return texture;
 }

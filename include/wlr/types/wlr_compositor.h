@@ -88,18 +88,17 @@ struct wlr_surface_output {
 
 struct wlr_surface {
 	struct wl_resource *resource;
-	struct wlr_renderer *renderer;
-	/**
-	 * The surface's buffer, if any. A surface has an attached buffer when it
-	 * commits with a non-null buffer in its pending state. A surface will not
-	 * have a buffer if it has never committed one, has committed a null buffer,
-	 * or something went wrong with uploading the buffer.
-	 */
-	struct wlr_client_buffer *buffer;
 	/**
 	 * The buffer position, in surface-local units.
 	 */
 	int sx, sy;
+	/**
+	 * The surface's raster, if any. A surface has an attached raster when it
+	 * commits with a non-null buffer in its pending state. A surface will not
+	 * have a raster if it has never committed one or has committed a null
+	 * buffer.
+	 */
+	struct wlr_raster *raster;
 	/**
 	 * The last commit's buffer damage, in buffer-local coordinates. This
 	 * contains both the damage accumulated by the client via
@@ -154,8 +153,6 @@ struct wlr_surface {
 
 	// private state
 
-	struct wl_listener renderer_destroy;
-
 	struct {
 		int32_t scale;
 		enum wl_output_transform transform;
@@ -164,13 +161,13 @@ struct wlr_surface {
 	} previous;
 
 	bool opaque;
-};
 
-struct wlr_renderer;
+	struct wlr_raster *old_raster;
+	struct wl_listener raster_destroy;
+};
 
 struct wlr_compositor {
 	struct wl_global *global;
-	struct wlr_renderer *renderer;
 
 	struct wl_listener display_destroy;
 
@@ -198,13 +195,6 @@ bool wlr_surface_set_role(struct wlr_surface *surface,
  * committed a null buffer, or something went wrong with uploading the buffer.
  */
 bool wlr_surface_has_buffer(struct wlr_surface *surface);
-
-/**
- * Get the texture of the buffer currently attached to this surface. Returns
- * NULL if no buffer is currently attached or if something went wrong with
- * uploading the buffer.
- */
-struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface);
 
 /**
  * Get the root of the subsurface tree for this surface. Can return NULL if
@@ -299,7 +289,6 @@ uint32_t wlr_surface_lock_pending(struct wlr_surface *surface);
  */
 void wlr_surface_unlock_cached(struct wlr_surface *surface, uint32_t seq);
 
-struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
-	struct wlr_renderer *renderer);
+struct wlr_compositor *wlr_compositor_create(struct wl_display *display);
 
 #endif

@@ -37,7 +37,6 @@ struct wlr_pixman_buffer {
 
 struct wlr_pixman_texture {
 	struct wlr_texture wlr_texture;
-	struct wlr_pixman_renderer *renderer;
 	struct wl_list link; // wlr_pixman_renderer.textures
 
 	pixman_image_t *image;
