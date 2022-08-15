@@ -363,16 +363,16 @@ int main(int argc, char *argv[]) {
 	state.cursor_axis.notify = handle_cursor_axis;
 
 	// touch events
-	wl_signal_add(&state.cursor->events.touch_up, &state.touch_up);
+	wl_signal_add(&state.cursor->touch.events.up, &state.touch_up);
 	state.touch_up.notify = handle_touch_up;
 
-	wl_signal_add(&state.cursor->events.touch_down, &state.touch_down);
+	wl_signal_add(&state.cursor->touch.events.down, &state.touch_down);
 	state.touch_down.notify = handle_touch_down;
 
-	wl_signal_add(&state.cursor->events.touch_motion, &state.touch_motion);
+	wl_signal_add(&state.cursor->touch.events.motion, &state.touch_motion);
 	state.touch_motion.notify = handle_touch_motion;
 
-	wl_signal_add(&state.cursor->events.touch_cancel, &state.touch_cancel);
+	wl_signal_add(&state.cursor->touch.events.cancel, &state.touch_cancel);
 	state.touch_cancel.notify = handle_touch_cancel;
 
 	wl_signal_add(&wlr->events.new_input, &state.new_input);
