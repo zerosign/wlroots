@@ -272,9 +272,12 @@ static void drag_handle_touch_up(struct wlr_seat_touch_grab *grab,
 
 	if (drag->focus_client) {
 		drag_drop(drag, time);
+	} else if (drag->source->impl->dnd_finish) {
+		// This will end the grab and free `drag`
+		wlr_data_source_destroy(drag->source);
+	} else {
+		drag_destroy(drag);
 	}
-
-	drag_destroy(drag);
 }
 
 static void drag_handle_touch_motion(struct wlr_seat_touch_grab *grab,
