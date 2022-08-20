@@ -303,7 +303,7 @@ VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) 
 	}
 
 	struct stat drm_stat = {0};
-	if (fstat(drm_fd, &drm_stat) != 0) {
+	if (drm_fd >= 0 && fstat(drm_fd, &drm_stat) != 0) {
 		wlr_log_errno(WLR_ERROR, "fstat failed");
 		return VK_NULL_HANDLE;
 	}
@@ -368,6 +368,15 @@ VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) 
 
 		if (has_driver_props) {
 			wlr_log(WLR_INFO, "  Driver name: %s (%s)", driver_props.driverName, driver_props.driverInfo);
+		}
+
+		if (drm_fd < 0) {
+			if (phdev_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) {
+				wlr_log(WLR_INFO, "Found matching Vulkan physical device: %s",
+					phdev_props.deviceName);
+				return phdev;
+			}
+			continue;
 		}
 
 		if (!has_drm_props) {
@@ -449,9 +458,9 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	const char *names[] = {
 		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
 		VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, // or vulkan 1.2
-		VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-		VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
-		VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+		//VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+		//VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
+		//VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
 	};
 
 	unsigned nc = sizeof(names) / sizeof(names[0]);
@@ -464,6 +473,11 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 
 	for (unsigned i = 0u; i < nc; ++i) {
 		dev->extensions[dev->extension_count++] = names[i];
+	}
+
+	const char *name = "VK_EXT_external_memory_host";
+	if (find_extensions(avail_ext_props, avail_extc, &name, 1) == NULL) {
+		dev->extensions[dev->extension_count++] = name;
 	}
 
 	// queue families
@@ -514,11 +528,14 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	// load api
 	dev->api.getMemoryFdPropertiesKHR = (PFN_vkGetMemoryFdPropertiesKHR)
 		vkGetDeviceProcAddr(dev->dev, "vkGetMemoryFdPropertiesKHR");
-
 	if (!dev->api.getMemoryFdPropertiesKHR) {
 		wlr_log(WLR_ERROR, "Failed to retrieve required dev function pointers");
 		goto error;
 	}
+
+	dev->api.getMemoryHostPointerPropertiesEXT =
+		(PFN_vkGetMemoryHostPointerPropertiesEXT)
+		vkGetDeviceProcAddr(dev->dev, "vkGetMemoryHostPointerPropertiesEXT");
 
 	// - check device format support -
 	size_t max_fmts;
@@ -556,6 +573,7 @@ void vulkan_device_destroy(struct wlr_vk_device *dev) {
 
 	wlr_drm_format_set_finish(&dev->dmabuf_render_formats);
 	wlr_drm_format_set_finish(&dev->dmabuf_texture_formats);
+	wlr_drm_format_set_finish(&dev->shm_render_formats);
 
 	for (unsigned i = 0u; i < dev->format_prop_count; ++i) {
 		vulkan_format_props_finish(&dev->format_props[i]);

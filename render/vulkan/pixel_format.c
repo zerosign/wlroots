@@ -261,6 +261,12 @@ void vulkan_format_props_query(struct wlr_vk_device *dev,
 	}
 
 	// non-dmabuf texture properties
+	if (fmtp.formatProperties.optimalTilingFeatures & render_features) {
+		wlr_drm_format_set_add(&dev->shm_render_formats,
+			format->drm_format, DRM_FORMAT_MOD_INVALID);
+		add_fmt_props = true;
+	}
+
 	if (fmtp.formatProperties.optimalTilingFeatures & tex_features) {
 		fmti.pNext = NULL;
 		ifmtp.pNext = NULL;

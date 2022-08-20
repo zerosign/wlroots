@@ -426,26 +426,47 @@ static struct wlr_vk_render_buffer *create_render_buffer(
 	buffer->wlr_buffer = wlr_buffer;
 	buffer->renderer = renderer;
 
+	uint32_t format = DRM_FORMAT_INVALID;
 	struct wlr_dmabuf_attributes dmabuf = {0};
-	if (!wlr_buffer_get_dmabuf(wlr_buffer, &dmabuf)) {
+	void *data_ptr;
+	uint32_t data_ptr_format;
+	size_t data_ptr_stride;
+	if (wlr_buffer_get_dmabuf(wlr_buffer, &dmabuf)) {
+		format = dmabuf.format;
+		wlr_log(WLR_DEBUG, "vulkan create_render_buffer: DMA-BUF %.4s, %dx%d",
+			(const char *) &format, dmabuf.width, dmabuf.height);
+
+		buffer->image = vulkan_import_dmabuf(renderer, &dmabuf,
+			buffer->memories, &buffer->mem_count, true);
+	} else if (wlr_buffer_begin_data_ptr_access(wlr_buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data_ptr, &data_ptr_format,
+			&data_ptr_stride)) {
+		format = data_ptr_format;
+		wlr_log(WLR_DEBUG, "vulkan create_render_buffer: data ptr %.4s, %dx%d",
+			(const char *) &format, wlr_buffer->width, wlr_buffer->height);
+
+		buffer->image = vulkan_import_host_memory(renderer, data_ptr,
+			data_ptr_format, wlr_buffer->width, wlr_buffer->height,
+			data_ptr_stride, &buffer->memories[0], true);
+		if (buffer->image) {
+			buffer->mem_count = 1;
+		}
+
+		wlr_buffer_end_data_ptr_access(wlr_buffer);
+	} else {
+		wlr_log(WLR_ERROR, "Unsupported render buffer");
 		goto error_buffer;
 	}
-
-	wlr_log(WLR_DEBUG, "vulkan create_render_buffer: %.4s, %dx%d",
-		(const char*) &dmabuf.format, dmabuf.width, dmabuf.height);
-
-	buffer->image = vulkan_import_dmabuf(renderer, &dmabuf,
-		buffer->memories, &buffer->mem_count, true);
 	if (!buffer->image) {
 		goto error_buffer;
 	}
 
 	VkDevice dev = renderer->dev->dev;
 	const struct wlr_vk_format_props *fmt = vulkan_format_props_from_drm(
-		renderer->dev, dmabuf.format);
+		renderer->dev, format);
 	if (fmt == NULL) {
 		wlr_log(WLR_ERROR, "Unsupported pixel format %"PRIx32 " (%.4s)",
-			dmabuf.format, (const char*) &dmabuf.format);
+			format, (const char *) &format);
 		goto error_buffer;
 	}
 
@@ -479,8 +500,8 @@ static struct wlr_vk_render_buffer *create_render_buffer(
 	fb_info.attachmentCount = 1u;
 	fb_info.pAttachments = &buffer->image_view;
 	fb_info.flags = 0u;
-	fb_info.width = dmabuf.width;
-	fb_info.height = dmabuf.height;
+	fb_info.width = wlr_buffer->width;
+	fb_info.height = wlr_buffer->height;
 	fb_info.layers = 1u;
 	fb_info.renderPass = buffer->render_setup->render_pass;
 
@@ -504,7 +525,6 @@ error_view:
 		vkFreeMemory(dev, buffer->memories[i], NULL);
 	}
 error_buffer:
-	wlr_dmabuf_attributes_finish(&dmabuf);
 	free(buffer);
 	return NULL;
 }
@@ -893,7 +913,11 @@ static const struct wlr_drm_format_set *vulkan_get_dmabuf_texture_formats(
 static const struct wlr_drm_format_set *vulkan_get_render_formats(
 		struct wlr_renderer *wlr_renderer) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
-	return &renderer->dev->dmabuf_render_formats;
+	if (renderer->dev->drm_fd >= 0) {
+		return &renderer->dev->dmabuf_render_formats;
+	} else {
+		return &renderer->dev->shm_render_formats;
+	}
 }
 
 static uint32_t vulkan_preferred_read_format(
@@ -973,7 +997,12 @@ static int vulkan_get_drm_fd(struct wlr_renderer *wlr_renderer) {
 }
 
 static uint32_t vulkan_get_render_buffer_caps(struct wlr_renderer *wlr_renderer) {
-	return WLR_BUFFER_CAP_DMABUF;
+	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
+	if (renderer->dev->drm_fd >= 0) {
+		return WLR_BUFFER_CAP_DMABUF;
+	} else {
+		return WLR_BUFFER_CAP_DATA_PTR;
+	}
 }
 
 static const struct wlr_renderer_impl renderer_impl = {
@@ -1504,12 +1533,16 @@ struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
 	}
 
 	// We duplicate it so it's not closed while we still need it.
-	dev->drm_fd = fcntl(drm_fd, F_DUPFD_CLOEXEC, 0);
-	if (dev->drm_fd < 0) {
-		wlr_log_errno(WLR_ERROR, "fcntl(F_DUPFD_CLOEXEC) failed");
-		vulkan_device_destroy(dev);
-		vulkan_instance_destroy(ini);
-		return NULL;
+	if (drm_fd >= 0) {
+		dev->drm_fd = fcntl(drm_fd, F_DUPFD_CLOEXEC, 0);
+		if (dev->drm_fd < 0) {
+			wlr_log_errno(WLR_ERROR, "fcntl(F_DUPFD_CLOEXEC) failed");
+			vulkan_device_destroy(dev);
+			vulkan_instance_destroy(ini);
+			return NULL;
+		}
+	} else {
+		dev->drm_fd = -1;
 	}
 
 	return vulkan_renderer_create_for_device(dev);

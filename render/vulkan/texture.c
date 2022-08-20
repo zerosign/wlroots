@@ -606,6 +606,133 @@ error_image:
 	return VK_NULL_HANDLE;
 }
 
+VkImage vulkan_import_host_memory(struct wlr_vk_renderer *renderer,
+		void *host_ptr, uint32_t format, uint32_t width, uint32_t height,
+		uint32_t stride, VkDeviceMemory *mem, bool for_render) {
+	VkResult res;
+	VkDevice dev = renderer->dev->dev;
+
+	*mem = VK_NULL_HANDLE;
+
+	struct wlr_vk_format_props *fmt =
+		vulkan_format_props_from_drm(renderer->dev, format);
+	if (fmt == NULL) {
+		wlr_log(WLR_ERROR, "Unsupported pixel format %"PRIx32 " (%.4s)",
+			format, (const char*) &format);
+		return VK_NULL_HANDLE;
+	}
+
+	VkExternalMemoryHandleTypeFlagBits htype =
+		VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+
+	VkImageCreateInfo img_info = {0};
+	img_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	img_info.imageType = VK_IMAGE_TYPE_2D;
+	img_info.format = fmt->format.vk_format;
+	img_info.mipLevels = 1;
+	img_info.arrayLayers = 1;
+	img_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	img_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	img_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	img_info.extent = (VkExtent3D) { width, height, 1 };
+	img_info.usage = for_render ?
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT :
+		VK_IMAGE_USAGE_SAMPLED_BIT;
+
+	VkExternalMemoryImageCreateInfo eimg = {0};
+	eimg.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+	eimg.handleTypes = htype;
+	img_info.pNext = &eimg;
+
+	VkImage image;
+	res = vkCreateImage(dev, &img_info, NULL, &image);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateImage", res);
+		return VK_NULL_HANDLE;
+	}
+
+	VkMemoryHostPointerPropertiesEXT host_ptr_props = {0};
+	host_ptr_props.sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT;
+	res = renderer->dev->api.getMemoryHostPointerPropertiesEXT(dev, htype,
+		host_ptr, &host_ptr_props);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("getMemoryHostPointerPropertiesEXT", res);
+		goto error_image;
+	}
+
+	VkImageMemoryRequirementsInfo2 memri = {0};
+	memri.image = image;
+	memri.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+
+	VkMemoryRequirements2 memr = {0};
+	memr.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+
+	vkGetImageMemoryRequirements2(dev, &memri, &memr);
+
+	int mem_index = vulkan_find_mem_type(renderer->dev, 0,
+		memr.memoryRequirements.memoryTypeBits & host_ptr_props.memoryTypeBits);
+	if (mem_index < 0) {
+		wlr_log(WLR_ERROR, "no valid memory type index");
+		goto error_image;
+	}
+
+	if ((uintptr_t)host_ptr % memr.memoryRequirements.alignment != 0) {
+		wlr_log(WLR_ERROR, "Invalid memory alignment "
+			"(%p not aligned to %zu bytes)", host_ptr,
+			(size_t)memr.memoryRequirements.alignment);
+		goto error_image;
+	}
+
+	if (height * stride < memr.memoryRequirements.size) {
+		wlr_log(WLR_ERROR, "Invalid memory size (%zu bytes required, "
+			"but has %zu bytes)", (size_t)memr.memoryRequirements.size,
+			(size_t)height * stride);
+		goto error_image;
+	}
+
+	VkMemoryAllocateInfo memi = {0};
+	memi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	memi.allocationSize = memr.memoryRequirements.size;
+	memi.memoryTypeIndex = mem_index;
+
+	VkImportMemoryHostPointerInfoEXT importi = {0};
+	importi.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT;
+	importi.handleType = htype;
+	importi.pHostPointer = host_ptr;
+	memi.pNext = &importi;
+
+	VkMemoryDedicatedAllocateInfo dedi = {0};
+	dedi.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+	dedi.image = image;
+	importi.pNext = &dedi;
+
+	res = vkAllocateMemory(dev, &memi, NULL, mem);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkAllocateMemory failed", res);
+		goto error_image;
+	}
+
+	VkBindImageMemoryInfo bindi = {0};
+	bindi.image = image;
+	bindi.memory = *mem;
+	bindi.memoryOffset = 0;
+	bindi.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+
+	res = vkBindImageMemory2(dev, 1, &bindi);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkBindMemory failed", res);
+		goto error_image;
+	}
+
+	return image;
+
+error_image:
+	vkFreeMemory(dev, *mem, NULL);
+	vkDestroyImage(dev, image, NULL);
+
+	return VK_NULL_HANDLE;
+}
+
 static struct wlr_texture *vulkan_texture_from_dmabuf(struct wlr_renderer *wlr_renderer,
 		struct wlr_dmabuf_attributes *attribs) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
