@@ -52,6 +52,18 @@ static const struct wl_callback_listener frame_listener = {
 	.done = surface_frame_callback
 };
 
+static void handle_buffer_release(void *data, struct wl_callback *callback,
+		uint32_t callback_data) {
+	struct wlr_wl_buffer *buffer = data;
+
+	wlr_buffer_unlock(buffer->buffer);
+	wl_callback_destroy(callback);
+}
+
+static const struct wl_callback_listener release_listener = {
+	.done = handle_buffer_release,
+};
+
 static void presentation_feedback_destroy(
 		struct wlr_wl_presentation_feedback *feedback) {
 	wl_list_remove(&feedback->link);
@@ -209,7 +221,10 @@ static struct wlr_wl_buffer *create_wl_buffer(struct wlr_wl_backend *wl,
 	buffer->buffer = wlr_buffer_lock(wlr_buffer);
 	wl_list_insert(&wl->buffers, &buffer->link);
 
-	wl_buffer_add_listener(wl_buffer, &buffer_listener, buffer);
+	if (wl_compositor_get_version(wl->compositor) <
+			WL_SURFACE_GET_RELEASE_SINCE_VERSION) {
+		wl_buffer_add_listener(wl_buffer, &buffer_listener, buffer);
+	}
 
 	buffer->buffer_destroy.notify = buffer_handle_buffer_destroy;
 	wl_signal_add(&wlr_buffer->events.destroy, &buffer->buffer_destroy);
@@ -221,10 +236,22 @@ static struct wlr_wl_buffer *get_or_create_wl_buffer(struct wlr_wl_backend *wl,
 		struct wlr_buffer *wlr_buffer) {
 	struct wlr_wl_buffer *buffer;
 	wl_list_for_each(buffer, &wl->buffers, link) {
+		if (buffer->buffer != wlr_buffer) {
+			continue;
+		}
+
+		// If wl_surface.get_release is supported, we can use per-commit buffer
+		// release events.
+		if (wl_compositor_get_version(wl->compositor) >=
+				WL_SURFACE_GET_RELEASE_SINCE_VERSION) {
+			wlr_buffer_lock(buffer->buffer);
+			return buffer;
+		}
+
 		// We can only re-use a wlr_wl_buffer if the parent compositor has
 		// released it, because wl_buffer.release is per-wl_buffer, not per
 		// wl_surface.commit.
-		if (buffer->buffer == wlr_buffer && buffer->released) {
+		if (buffer->released) {
 			buffer->released = false;
 			wlr_buffer_lock(buffer->buffer);
 			return buffer;
@@ -310,6 +337,13 @@ static bool output_commit(struct wlr_output *wlr_output,
 		}
 
 		wl_surface_attach(output->surface, buffer->wl_buffer, 0, 0);
+
+		if (wl_surface_get_version(output->surface) >=
+				WL_SURFACE_GET_RELEASE_SINCE_VERSION) {
+			struct wl_callback *release_callback =
+				wl_surface_get_release(output->surface);
+			wl_callback_add_listener(release_callback, &release_listener, buffer);
+		}
 
 		if (damage == NULL) {
 			wl_surface_damage_buffer(output->surface,
