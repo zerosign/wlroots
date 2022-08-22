@@ -29,6 +29,7 @@ enum wlr_surface_state_field {
 	WLR_SURFACE_STATE_FRAME_CALLBACK_LIST = 1 << 7,
 	WLR_SURFACE_STATE_VIEWPORT = 1 << 8,
 	WLR_SURFACE_STATE_OFFSET = 1 << 9,
+	WLR_SURFACE_STATE_RELEASE_CALLBACK_LIST = 1 << 10,
 };
 
 struct wlr_surface_state {
@@ -44,6 +45,7 @@ struct wlr_surface_state {
 	enum wl_output_transform transform;
 	int32_t scale;
 	struct wl_list frame_callback_list; // wl_resource
+	struct wl_list release_callback_list; // wl_resource
 
 	int width, height; // in surface-local coordinates
 	int buffer_width, buffer_height;

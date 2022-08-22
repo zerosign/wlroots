@@ -101,7 +101,7 @@ internal_features = {
 
 wayland_project_options = ['tests=false', 'documentation=false']
 wayland_server = dependency('wayland-server',
-	version: '>=1.21',
+	version: '>=1.21.90',
 	fallback: 'wayland',
 	default_options: wayland_project_options,
 )
