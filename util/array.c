@@ -38,3 +38,26 @@ bool array_realloc(struct wl_array *arr, size_t size) {
 	arr->alloc = alloc;
 	return true;
 }
+
+void *array_reversed_start(struct wl_array *arr) {
+	char *data = arr->data;
+	return data + arr->alloc - arr->size;
+}
+
+void *array_reversed_add(struct wl_array *arr, size_t size) {
+	if (arr->size + size > arr->alloc) {
+		size_t new_alloc = arr->alloc * 2;
+		char *new = malloc(new_alloc);
+		if (!new) {
+			return NULL;
+		}
+
+		memcpy(new + (new_alloc - arr->size), array_reversed_start(arr), arr->size);
+		free(arr->data);
+		arr->data = new;
+		arr->alloc = new_alloc;
+	}
+
+	arr->size += size;
+	return array_reversed_start(arr);
+}
