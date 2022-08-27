@@ -377,16 +377,18 @@ static void surface_handle_output_precommit_formats(
 
 static void surface_accumulate_frame_damage(
 		struct wlr_ext_screencopy_surface_v1 *surface,
-		struct wlr_output *output)
+		struct wlr_output *output,
+		const struct wlr_output_state *state)
 {
 	struct pixman_region32 *region = &surface->frame_damage;
 
-	if (output->pending.committed & WLR_OUTPUT_STATE_DAMAGE) {
+	if (state->committed & WLR_OUTPUT_STATE_DAMAGE) {
 		// If the compositor submitted damage, copy it over
-		pixman_region32_union(region, region, &output->pending.damage);
+		pixman_region32_union(region, region,
+				(pixman_region32_t*)&state->damage);
 		pixman_region32_intersect_rect(region, region, 0, 0,
 			output->width, output->height);
-	} else if (output->pending.committed & WLR_OUTPUT_STATE_BUFFER) {
+	} else if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
 		// If the compositor did not submit damage but did submit a
 		// buffer damage everything
 		pixman_region32_union_rect(region, region, 0, 0,
@@ -402,7 +404,7 @@ static void surface_handle_output_precommit_ready(
 		return;
 	}
 
-	surface_accumulate_frame_damage(surface, output);
+	surface_accumulate_frame_damage(surface, output, event->state);
 }
 
 static void surface_handle_output_precommit(struct wl_listener *listener,
