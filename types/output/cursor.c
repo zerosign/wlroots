@@ -34,7 +34,7 @@ static bool output_set_hardware_cursor(struct wlr_output *output,
 		.hotspot_x = hotspot_x,
 		.hotspot_y = hotspot_y,
 	};
-	wlr_signal_emit_safe(&output->events.set_cursor, &event);
+	wl_signal_emit_mutable(&output->events.set_cursor, &event);
 
 	return true;
 }
@@ -360,7 +360,7 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 		.x = (int)cursor->x,
 		.y = (int)cursor->y,
 	};
-	wlr_signal_emit_safe(&cursor->output->events.move_cursor, &event);
+	wl_signal_emit_mutable(&cursor->output->events.move_cursor, &event);
 
 	struct wlr_buffer *buffer = NULL;
 	if (texture != NULL) {
@@ -583,7 +583,7 @@ bool wlr_output_cursor_move(struct wlr_output_cursor *cursor,
 		.x = (int)x,
 		.y = (int)y,
 	};
-	wlr_signal_emit_safe(&cursor->output->events.move_cursor, &event);
+	wl_signal_emit_mutable(&cursor->output->events.move_cursor, &event);
 
 	return true;
 }
