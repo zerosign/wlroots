@@ -175,8 +175,7 @@ static void session_attach_buffer(struct wl_client *client,
 
 static void session_attach_cursor_buffer(struct wl_client *client,
 		struct wl_resource *session_resource,
-		struct wl_resource *buffer_resource,
-		const char *seat_name,
+		struct wl_resource *buffer_resource, struct wl_resource *seat,
 		enum ext_screencopy_session_v1_input_type input_type) {
 	struct wlr_ext_screencopy_session_v1 *session =
 		session_from_resource(session_resource);
@@ -185,8 +184,8 @@ static void session_attach_cursor_buffer(struct wl_client *client,
 	}
 
 	// TODO: Support more seat/input_type pairs
-	if (strcmp(seat_name, "default") != 0 ||
-			input_type != EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER) {
+	// TODO: If seat != NULL, check is seat is the default seat
+	if (seat != NULL || input_type != EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER) {
 		ext_screencopy_session_v1_send_failed(session->resource,
 				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_UNKNOWN_INPUT);
 		return;
@@ -219,7 +218,7 @@ static void session_damage_buffer(struct wl_client *client,
 }
 
 static void session_damage_cursor_buffer(struct wl_client *client,
-		struct wl_resource *session_resource, const char *seat_name,
+		struct wl_resource *session_resource, struct wl_resource *seat,
 		enum ext_screencopy_session_v1_input_type input_type) {
 	struct wlr_ext_screencopy_session_v1 *session =
 		session_from_resource(session_resource);
@@ -227,10 +226,9 @@ static void session_damage_cursor_buffer(struct wl_client *client,
 		return;
 	}
 
-	// TODO: Support more seats
 	// TODO: Support more seat/input_type pairs
-	if (strcmp(seat_name, "default") != 0 ||
-			input_type != EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER) {
+	// TODO: If seat != NULL, check is seat is the default seat
+	if (seat == NULL || input_type != EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER) {
 		ext_screencopy_session_v1_send_failed(session->resource,
 				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_UNKNOWN_INPUT);
 		return;

@@ -184,9 +184,11 @@
         The cursor buffer may exceed the dimensions specified in the
         "cursor_buffer_info" event. The cursor image will be drawn in the top,
         left corner of the buffer.
+
+        If seat is NULL, the default seat is used.
       </description>
       <arg name="buffer" type="object" interface="wl_buffer"/>
-      <arg name="seat_name" type="string"/>
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
       <arg name="input_type" type="uint" enum="input_type"/>
     </request>
 
@@ -195,8 +197,10 @@
         Apply damage to a named cursor buffer which is to be committed next.
 
         The whole cursor buffer will be considered damaged.
+
+        If seat is NULL, the default seat is used.
       </description>
-      <arg name="seat_name" type="string"/>
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
       <arg name="input_type" type="uint" enum="input_type"/>
     </request>
 
