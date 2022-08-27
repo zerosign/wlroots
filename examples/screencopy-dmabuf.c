@@ -99,14 +99,14 @@ static bool find_render_node(char *node, size_t node_size) {
 static void dmabuf_created(void *data,
 		struct zwp_linux_buffer_params_v1 *params,
 		struct wl_buffer *wl_buffer) {
-	struct ext_screencopy_surface_v1 *surface = data;
+	struct ext_screencopy_session_v1 *session = data;
 
 	buffer.wl_buffer = wl_buffer;
 
-	ext_screencopy_surface_v1_attach_buffer(surface, buffer.wl_buffer);
-	ext_screencopy_surface_v1_damage_buffer(surface, 0, 0, buffer.width,
+	ext_screencopy_session_v1_attach_buffer(session, buffer.wl_buffer);
+	ext_screencopy_session_v1_damage_buffer(session, 0, 0, buffer.width,
 			buffer.height);
-	ext_screencopy_surface_v1_commit(surface, 0);
+	ext_screencopy_session_v1_commit(session, 0);
 }
 
 static void dmabuf_failed(void *data,
@@ -120,8 +120,8 @@ static const struct zwp_linux_buffer_params_v1_listener params_listener = {
 	.failed = dmabuf_failed,
 };
 
-static void surface_handle_buffer_done(
-		struct ext_screencopy_surface_v1 *surface) {
+static void session_handle_buffer_done(
+		struct ext_screencopy_session_v1 *session) {
 	assert(!buffer.bo);
 
 	if (!have_linux_dmabuf) {
@@ -149,18 +149,18 @@ static void surface_handle_buffer_done(
 			mod & 0xffffffff);
 
 	zwp_linux_buffer_params_v1_add_listener(params, &params_listener,
-			surface);
+			session);
 
 	zwp_linux_buffer_params_v1_create(params, buffer.width, buffer.height,
 			buffer.format, /* flags */ 0);
 }
 
-static void surface_handle_buffer_info(void *data,
-		struct ext_screencopy_surface_v1 *surface, uint32_t type,
+static void session_handle_buffer_info(void *data,
+		struct ext_screencopy_session_v1 *session, uint32_t type,
 		uint32_t fourcc, uint32_t width, uint32_t height,
 		uint32_t stride) {
 
-	if (type != EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_DMABUF) {
+	if (type != EXT_SCREENCOPY_SESSION_V1_BUFFER_TYPE_DMABUF) {
 		return;
 	}
 
@@ -170,63 +170,63 @@ static void surface_handle_buffer_info(void *data,
 	have_linux_dmabuf = true;
 }
 
-static void surface_handle_cursor_buffer_info(void *data,
-		struct ext_screencopy_surface_v1 *surface, const char* name,
-		enum ext_screencopy_surface_v1_input_type input_type,
+static void session_handle_cursor_buffer_info(void *data,
+		struct ext_screencopy_session_v1 *session, const char* name,
+		enum ext_screencopy_session_v1_input_type input_type,
 		uint32_t type, uint32_t fourcc, uint32_t width, uint32_t height,
 		uint32_t stride) {
 }
 
-static void surface_handle_init_done(void *data,
-		struct ext_screencopy_surface_v1 *surface) {
-	surface_handle_buffer_done(surface);
+static void session_handle_init_done(void *data,
+		struct ext_screencopy_session_v1 *session) {
+	session_handle_buffer_done(session);
 }
 
-static void surface_handle_damage(void *data,
-		struct ext_screencopy_surface_v1 *surface,
+static void session_handle_damage(void *data,
+		struct ext_screencopy_session_v1 *session,
 		uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
 }
 
-static void surface_handle_cursor_info(void *data,
-		struct ext_screencopy_surface_v1 *surface, const char *name,
-		enum ext_screencopy_surface_v1_input_type input_type,
+static void session_handle_cursor_info(void *data,
+		struct ext_screencopy_session_v1 *session, const char *name,
+		enum ext_screencopy_session_v1_input_type input_type,
 		int damaged, int32_t pos_x, int32_t pos_y,
 		int32_t width, int32_t height, int32_t hotspot_x,
 		int32_t hotspot_y) {
 }
 
-static void surface_handle_transform(void *data,
-		struct ext_screencopy_surface_v1 *frame, int32_t transform) {
+static void session_handle_transform(void *data,
+		struct ext_screencopy_session_v1 *frame, int32_t transform) {
 	buffer.y_invert = transform == WL_OUTPUT_TRANSFORM_FLIPPED_180;
 }
 
-static void surface_handle_commit_time(void *data,
-		struct ext_screencopy_surface_v1 *frame, uint32_t tv_sec_hi,
+static void session_handle_commit_time(void *data,
+		struct ext_screencopy_session_v1 *frame, uint32_t tv_sec_hi,
 		uint32_t tv_sec_lo, uint32_t tv_nsec) {
 }
 
-static void surface_handle_ready(void *data,
-		struct ext_screencopy_surface_v1 *surface) {
+static void session_handle_ready(void *data,
+		struct ext_screencopy_session_v1 *session) {
 	buffer_copy_done = true;
 }
 
-static void surface_handle_failed(void *data,
-		struct ext_screencopy_surface_v1 *surface,
-		enum ext_screencopy_surface_v1_failure_reason reason) {
+static void session_handle_failed(void *data,
+		struct ext_screencopy_session_v1 *session,
+		enum ext_screencopy_session_v1_failure_reason reason) {
 	fprintf(stderr, "failed to copy frame\n");
 	exit(EXIT_FAILURE);
 }
 
-static const struct ext_screencopy_surface_v1_listener surface_listener = {
-	.buffer_info = surface_handle_buffer_info,
-	.cursor_buffer_info = surface_handle_cursor_buffer_info,
-	.init_done = surface_handle_init_done,
-	.damage = surface_handle_damage,
-	.cursor_info = surface_handle_cursor_info,
-	.commit_time = surface_handle_commit_time,
-	.transform = surface_handle_transform,
-	.ready = surface_handle_ready,
-	.failed = surface_handle_failed,
+static const struct ext_screencopy_session_v1_listener session_listener = {
+	.buffer_info = session_handle_buffer_info,
+	.cursor_buffer_info = session_handle_cursor_buffer_info,
+	.init_done = session_handle_init_done,
+	.damage = session_handle_damage,
+	.cursor_info = session_handle_cursor_info,
+	.commit_time = session_handle_commit_time,
+	.transform = session_handle_transform,
+	.ready = session_handle_ready,
+	.failed = session_handle_failed,
 };
 
 static void dmabuf_format(void *data,
@@ -368,11 +368,11 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	struct ext_screencopy_surface_v1 *surface =
+	struct ext_screencopy_session_v1 *session =
 		ext_screencopy_manager_v1_capture_output(screencopy_manager,
 				output,
 				EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS);
-	ext_screencopy_surface_v1_add_listener(surface, &surface_listener, NULL);
+	ext_screencopy_session_v1_add_listener(session, &session_listener, NULL);
 
 	while (!buffer_copy_done && wl_display_dispatch(display) != -1) {
 		// This space is intentionally left blank

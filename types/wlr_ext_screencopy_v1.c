@@ -24,12 +24,12 @@
 #define EXT_SCREENCOPY_MANAGER_VERSION 1
 
 static const struct ext_screencopy_manager_v1_interface manager_impl;
-static const struct ext_screencopy_surface_v1_interface surface_impl;
+static const struct ext_screencopy_session_v1_interface session_impl;
 
-static struct wlr_ext_screencopy_surface_v1 *surface_from_resource(
+static struct wlr_ext_screencopy_session_v1 *session_from_resource(
 		struct wl_resource *resource) {
 	assert(wl_resource_instance_of(resource,
-		&ext_screencopy_surface_v1_interface, &surface_impl));
+		&ext_screencopy_session_v1_interface, &session_impl));
 	return wl_resource_get_user_data(resource);
 }
 
@@ -40,302 +40,302 @@ static struct wlr_ext_screencopy_manager_v1 *manager_from_resource(
 	return wl_resource_get_user_data(resource);
 }
 
-static void surface_destroy(struct wlr_ext_screencopy_surface_v1 *surface) {
-	if (!surface) {
+static void session_destroy(struct wlr_ext_screencopy_session_v1 *session) {
+	if (!session) {
 		return;
 	}
 
-	pixman_region32_fini(&surface->frame_damage);
-	pixman_region32_fini(&surface->current_buffer.damage);
-	pixman_region32_fini(&surface->staged_buffer.damage);
-	pixman_region32_fini(&surface->staged_cursor_buffer.damage);
-	pixman_region32_fini(&surface->current_cursor_buffer.damage);
+	pixman_region32_fini(&session->frame_damage);
+	pixman_region32_fini(&session->current_buffer.damage);
+	pixman_region32_fini(&session->staged_buffer.damage);
+	pixman_region32_fini(&session->staged_cursor_buffer.damage);
+	pixman_region32_fini(&session->current_cursor_buffer.damage);
 
-	wl_list_remove(&surface->output_set_cursor.link);
-	wl_list_remove(&surface->output_move_cursor.link);
-	wl_list_remove(&surface->output_precommit.link);
-	wl_list_remove(&surface->output_commit.link);
-	wl_list_remove(&surface->output_destroy.link);
+	wl_list_remove(&session->output_set_cursor.link);
+	wl_list_remove(&session->output_move_cursor.link);
+	wl_list_remove(&session->output_precommit.link);
+	wl_list_remove(&session->output_commit.link);
+	wl_list_remove(&session->output_destroy.link);
 
-	if (surface->staged_buffer.resource) {
-		wl_list_remove(&surface->staged_buffer.destroy.link);
+	if (session->staged_buffer.resource) {
+		wl_list_remove(&session->staged_buffer.destroy.link);
 	}
 
-	if (surface->current_buffer.resource) {
-		wl_list_remove(&surface->current_buffer.destroy.link);
+	if (session->current_buffer.resource) {
+		wl_list_remove(&session->current_buffer.destroy.link);
 	}
 
-	if (surface->staged_cursor_buffer.resource) {
-		wl_list_remove(&surface->staged_cursor_buffer.destroy.link);
+	if (session->staged_cursor_buffer.resource) {
+		wl_list_remove(&session->staged_cursor_buffer.destroy.link);
 	}
 
-	if (surface->current_cursor_buffer.resource) {
-		wl_list_remove(&surface->current_cursor_buffer.destroy.link);
+	if (session->current_cursor_buffer.resource) {
+		wl_list_remove(&session->current_cursor_buffer.destroy.link);
 	}
 
-	wl_resource_set_user_data(surface->resource, NULL);
-	free(surface);
+	wl_resource_set_user_data(session->resource, NULL);
+	free(session);
 }
 
-static struct wlr_output *surface_check_output(
-		struct wlr_ext_screencopy_surface_v1 *surface) {
-	if (!surface->output) {
-		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_OUTPUT_MISSING);
-		surface_destroy(surface);
+static struct wlr_output *session_check_output(
+		struct wlr_ext_screencopy_session_v1 *session) {
+	if (!session->output) {
+		ext_screencopy_session_v1_send_failed(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_OUTPUT_MISSING);
+		session_destroy(session);
 		return NULL;
 	}
 
-	if (!surface->output->enabled) {
-		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_OUTPUT_DISABLED);
-		surface_destroy(surface);
+	if (!session->output->enabled) {
+		ext_screencopy_session_v1_send_failed(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_OUTPUT_DISABLED);
+		session_destroy(session);
 		return NULL;
 	}
 
-	return surface->output;
+	return session->output;
 }
 
-static void surface_handle_staged_buffer_destroy(struct wl_listener *listener,
+static void session_handle_staged_buffer_destroy(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, staged_buffer.destroy);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, staged_buffer.destroy);
 
-	if (!surface->staged_buffer.resource) {
+	if (!session->staged_buffer.resource) {
 		return;
 	}
 
-	surface->staged_buffer.resource = NULL;
-	wl_list_remove(&surface->staged_buffer.destroy.link);
+	session->staged_buffer.resource = NULL;
+	wl_list_remove(&session->staged_buffer.destroy.link);
 }
 
-static void surface_handle_committed_buffer_destroy(struct wl_listener *listener,
+static void session_handle_committed_buffer_destroy(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, current_buffer.destroy);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, current_buffer.destroy);
 
-	if (!surface->current_buffer.resource) {
+	if (!session->current_buffer.resource) {
 		return;
 	}
 
-	surface->current_buffer.resource = NULL;
-	wl_list_remove(&surface->current_buffer.destroy.link);
+	session->current_buffer.resource = NULL;
+	wl_list_remove(&session->current_buffer.destroy.link);
 }
 
-static void surface_handle_staged_cursor_buffer_destroy(struct wl_listener *listener,
+static void session_handle_staged_cursor_buffer_destroy(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, staged_cursor_buffer.destroy);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, staged_cursor_buffer.destroy);
 
-	if (!surface->staged_cursor_buffer.resource) {
+	if (!session->staged_cursor_buffer.resource) {
 		return;
 	}
 
-	surface->staged_cursor_buffer.resource = NULL;
-	wl_list_remove(&surface->staged_cursor_buffer.destroy.link);
+	session->staged_cursor_buffer.resource = NULL;
+	wl_list_remove(&session->staged_cursor_buffer.destroy.link);
 }
 
-static void surface_handle_committed_cursor_buffer_destroy(
+static void session_handle_committed_cursor_buffer_destroy(
 		struct wl_listener *listener, void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, current_cursor_buffer.destroy);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, current_cursor_buffer.destroy);
 
-	if (!surface->current_cursor_buffer.resource) {
+	if (!session->current_cursor_buffer.resource) {
 		return;
 	}
 
-	surface->current_cursor_buffer.resource = NULL;
-	wl_list_remove(&surface->current_cursor_buffer.destroy.link);
+	session->current_cursor_buffer.resource = NULL;
+	wl_list_remove(&session->current_cursor_buffer.destroy.link);
 }
 
-static void surface_attach_buffer(struct wl_client *client,
-		struct wl_resource *surface_resource,
+static void session_attach_buffer(struct wl_client *client,
+		struct wl_resource *session_resource,
 		struct wl_resource *buffer_resource) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(surface_resource);
-	if (!surface) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(session_resource);
+	if (!session) {
 		return;
 	}
 
 	assert(buffer_resource);
 
-	if (surface->staged_buffer.resource) {
-		wl_list_remove(&surface->staged_buffer.destroy.link);
+	if (session->staged_buffer.resource) {
+		wl_list_remove(&session->staged_buffer.destroy.link);
 	}
 
-	surface->staged_buffer.resource = buffer_resource;
+	session->staged_buffer.resource = buffer_resource;
 	if (buffer_resource) {
-		wl_list_init(&surface->staged_buffer.destroy.link);
+		wl_list_init(&session->staged_buffer.destroy.link);
 		wl_resource_add_destroy_listener(buffer_resource,
-				&surface->staged_buffer.destroy);
-		surface->staged_buffer.destroy.notify =
-			surface_handle_staged_buffer_destroy;
+				&session->staged_buffer.destroy);
+		session->staged_buffer.destroy.notify =
+			session_handle_staged_buffer_destroy;
 	}
 }
 
-static void surface_attach_cursor_buffer(struct wl_client *client,
-		struct wl_resource *surface_resource,
+static void session_attach_cursor_buffer(struct wl_client *client,
+		struct wl_resource *session_resource,
 		struct wl_resource *buffer_resource,
 		const char *seat_name,
-		enum ext_screencopy_surface_v1_input_type input_type) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(surface_resource);
-	if (!surface) {
+		enum ext_screencopy_session_v1_input_type input_type) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(session_resource);
+	if (!session) {
 		return;
 	}
 
 	// TODO: Support more seat/input_type pairs
 	if (strcmp(seat_name, "default") != 0 ||
-			input_type != EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER) {
-		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_INPUT);
+			input_type != EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER) {
+		ext_screencopy_session_v1_send_failed(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_UNKNOWN_INPUT);
 		return;
 	}
 
-	if (surface->staged_cursor_buffer.resource) {
-		wl_list_remove(&surface->staged_cursor_buffer.destroy.link);
+	if (session->staged_cursor_buffer.resource) {
+		wl_list_remove(&session->staged_cursor_buffer.destroy.link);
 	}
 
-	surface->staged_cursor_buffer.resource = buffer_resource;
+	session->staged_cursor_buffer.resource = buffer_resource;
 	if (buffer_resource) {
 		wl_resource_add_destroy_listener(buffer_resource,
-				&surface->staged_cursor_buffer.destroy);
-		surface->staged_cursor_buffer.destroy.notify =
-			surface_handle_staged_cursor_buffer_destroy;
+				&session->staged_cursor_buffer.destroy);
+		session->staged_cursor_buffer.destroy.notify =
+			session_handle_staged_cursor_buffer_destroy;
 	}
 }
 
-static void surface_damage_buffer(struct wl_client *client,
-		struct wl_resource *surface_resource, uint32_t x, uint32_t y,
+static void session_damage_buffer(struct wl_client *client,
+		struct wl_resource *session_resource, uint32_t x, uint32_t y,
 		uint32_t width, uint32_t height) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(surface_resource);
-	if (!surface) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(session_resource);
+	if (!session) {
 		return;
 	}
 
-	pixman_region32_union_rect(&surface->staged_buffer.damage,
-			&surface->staged_buffer.damage, x, y, width, height);
+	pixman_region32_union_rect(&session->staged_buffer.damage,
+			&session->staged_buffer.damage, x, y, width, height);
 }
 
-static void surface_damage_cursor_buffer(struct wl_client *client,
-		struct wl_resource *surface_resource, const char *seat_name,
-		enum ext_screencopy_surface_v1_input_type input_type) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(surface_resource);
-	if (!surface) {
+static void session_damage_cursor_buffer(struct wl_client *client,
+		struct wl_resource *session_resource, const char *seat_name,
+		enum ext_screencopy_session_v1_input_type input_type) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(session_resource);
+	if (!session) {
 		return;
 	}
 
 	// TODO: Support more seats
 	// TODO: Support more seat/input_type pairs
 	if (strcmp(seat_name, "default") != 0 ||
-			input_type != EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER) {
-		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_UNKNOWN_INPUT);
+			input_type != EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER) {
+		ext_screencopy_session_v1_send_failed(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_UNKNOWN_INPUT);
 		return;
 	}
 
-	pixman_region32_union_rect(&surface->staged_cursor_buffer.damage,
-			&surface->staged_cursor_buffer.damage, 0, 0,
-			surface->cursor_width, surface->cursor_height);
+	pixman_region32_union_rect(&session->staged_cursor_buffer.damage,
+			&session->staged_cursor_buffer.damage, 0, 0,
+			session->cursor_width, session->cursor_height);
 }
 
-static void surface_commit(struct wl_client *client,
-		struct wl_resource *surface_resource, uint32_t options) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(surface_resource);
-	if (!surface) {
+static void session_commit(struct wl_client *client,
+		struct wl_resource *session_resource, uint32_t options) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(session_resource);
+	if (!session) {
 		return;
 	}
 
-	struct wlr_output *output = surface_check_output(surface);
+	struct wlr_output *output = session_check_output(session);
 	if (!output) {
 		return;
 	}
 
 	// Main buffer
-	if (surface->current_buffer.resource) {
-		wl_list_remove(&surface->current_buffer.destroy.link);
+	if (session->current_buffer.resource) {
+		wl_list_remove(&session->current_buffer.destroy.link);
 	}
 
-	surface->current_buffer.resource = surface->staged_buffer.resource;
-	surface->staged_buffer.resource = NULL;
+	session->current_buffer.resource = session->staged_buffer.resource;
+	session->staged_buffer.resource = NULL;
 
-	if (surface->current_buffer.resource) {
-		wl_list_remove(&surface->staged_buffer.destroy.link);
+	if (session->current_buffer.resource) {
+		wl_list_remove(&session->staged_buffer.destroy.link);
 		wl_resource_add_destroy_listener(
-				surface->current_buffer.resource,
-				&surface->current_buffer.destroy);
-		surface->current_buffer.destroy.notify =
-			surface_handle_committed_buffer_destroy;
+				session->current_buffer.resource,
+				&session->current_buffer.destroy);
+		session->current_buffer.destroy.notify =
+			session_handle_committed_buffer_destroy;
 	}
 
-	pixman_region32_copy(&surface->current_buffer.damage,
-			&surface->staged_buffer.damage);
-	pixman_region32_clear(&surface->staged_buffer.damage);
-	pixman_region32_intersect_rect(&surface->current_buffer.damage,
-			&surface->current_buffer.damage, 0, 0, output->width,
+	pixman_region32_copy(&session->current_buffer.damage,
+			&session->staged_buffer.damage);
+	pixman_region32_clear(&session->staged_buffer.damage);
+	pixman_region32_intersect_rect(&session->current_buffer.damage,
+			&session->current_buffer.damage, 0, 0, output->width,
 			output->height);
 
 	// Cursor buffer
-	if (surface->current_cursor_buffer.resource) {
-		wl_list_remove(&surface->current_cursor_buffer.destroy.link);
+	if (session->current_cursor_buffer.resource) {
+		wl_list_remove(&session->current_cursor_buffer.destroy.link);
 	}
 
-	surface->current_cursor_buffer.resource =
-		surface->staged_cursor_buffer.resource;
-	surface->staged_cursor_buffer.resource = NULL;
+	session->current_cursor_buffer.resource =
+		session->staged_cursor_buffer.resource;
+	session->staged_cursor_buffer.resource = NULL;
 
-	if (surface->current_cursor_buffer.resource) {
-		wl_list_remove(&surface->staged_cursor_buffer.destroy.link);
+	if (session->current_cursor_buffer.resource) {
+		wl_list_remove(&session->staged_cursor_buffer.destroy.link);
 		wl_resource_add_destroy_listener(
-				surface->current_cursor_buffer.resource,
-				&surface->current_cursor_buffer.destroy);
-		surface->current_cursor_buffer.destroy.notify =
-			surface_handle_committed_cursor_buffer_destroy;
+				session->current_cursor_buffer.resource,
+				&session->current_cursor_buffer.destroy);
+		session->current_cursor_buffer.destroy.notify =
+			session_handle_committed_cursor_buffer_destroy;
 	}
 
-	pixman_region32_copy(&surface->current_cursor_buffer.damage,
-			&surface->staged_cursor_buffer.damage);
-	pixman_region32_clear(&surface->staged_cursor_buffer.damage);
+	pixman_region32_copy(&session->current_cursor_buffer.damage,
+			&session->staged_cursor_buffer.damage);
+	pixman_region32_clear(&session->staged_cursor_buffer.damage);
 
-	if (!(options & EXT_SCREENCOPY_SURFACE_V1_OPTIONS_ON_DAMAGE) ||
-			pixman_region32_not_empty(&surface->frame_damage) ||
-			pixman_region32_not_empty(&surface->cursor_damage)) {
+	if (!(options & EXT_SCREENCOPY_SESSION_V1_OPTIONS_ON_DAMAGE) ||
+			pixman_region32_not_empty(&session->frame_damage) ||
+			pixman_region32_not_empty(&session->cursor_damage)) {
 		wlr_output_schedule_frame(output);
 	}
 
-	surface->committed = true;
+	session->committed = true;
 }
 
-static void surface_handle_destroy(struct wl_client *client,
-		struct wl_resource *surface_resource) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(surface_resource);
-	surface_destroy(surface);
+static void session_handle_destroy(struct wl_client *client,
+		struct wl_resource *session_resource) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(session_resource);
+	session_destroy(session);
 }
 
-static const struct ext_screencopy_surface_v1_interface surface_impl = {
-	.attach_buffer = surface_attach_buffer,
-	.attach_cursor_buffer = surface_attach_cursor_buffer,
-	.damage_buffer = surface_damage_buffer,
-	.damage_cursor_buffer = surface_damage_cursor_buffer,
-	.commit = surface_commit,
-	.destroy = surface_handle_destroy,
+static const struct ext_screencopy_session_v1_interface session_impl = {
+	.attach_buffer = session_attach_buffer,
+	.attach_cursor_buffer = session_attach_cursor_buffer,
+	.damage_buffer = session_damage_buffer,
+	.damage_cursor_buffer = session_damage_cursor_buffer,
+	.commit = session_commit,
+	.destroy = session_handle_destroy,
 };
 
-static void surface_handle_resource_destroy(struct wl_resource *resource) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		surface_from_resource(resource);
-	surface_destroy(surface);
+static void session_handle_resource_destroy(struct wl_resource *resource) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		session_from_resource(resource);
+	session_destroy(session);
 }
 
-static void surface_handle_output_destroy(struct wl_listener *listener,
+static void session_handle_output_destroy(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, output_destroy);
-	surface->output = NULL;
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, output_destroy);
+	session->output = NULL;
 }
 
 static uint32_t get_dmabuf_format(struct wlr_buffer *buffer) {
@@ -364,10 +364,10 @@ static uint32_t get_buffer_preferred_read_format(struct wlr_buffer *buffer,
 	return format;
 }
 
-static void surface_handle_output_precommit_formats(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_handle_output_precommit_formats(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_output_event_precommit *event) {
-	struct wlr_output *output = surface_check_output(surface);
+	struct wlr_output *output = session_check_output(session);
 	if (!output) {
 		return;
 	}
@@ -375,12 +375,12 @@ static void surface_handle_output_precommit_formats(
 	// Nothing to do here...
 }
 
-static void surface_accumulate_frame_damage(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_accumulate_frame_damage(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_output *output,
 		const struct wlr_output_state *state)
 {
-	struct pixman_region32 *region = &surface->frame_damage;
+	struct pixman_region32 *region = &session->frame_damage;
 
 	if (state->committed & WLR_OUTPUT_STATE_DAMAGE) {
 		// If the compositor submitted damage, copy it over
@@ -396,31 +396,31 @@ static void surface_accumulate_frame_damage(
 	}
 }
 
-static void surface_handle_output_precommit_ready(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_handle_output_precommit_ready(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_output_event_precommit *event) {
-	struct wlr_output *output = surface_check_output(surface);
+	struct wlr_output *output = session_check_output(session);
 	if (!output) {
 		return;
 	}
 
-	surface_accumulate_frame_damage(surface, output, event->state);
+	session_accumulate_frame_damage(session, output, event->state);
 }
 
-static void surface_handle_output_precommit(struct wl_listener *listener,
+static void session_handle_output_precommit(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, output_precommit);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, output_precommit);
 	struct wlr_output_event_precommit *event = data;
 
-	assert(surface->output);
+	assert(session->output);
 
-	switch(surface->state) {
-	case WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_WAITING_FOR_BUFFER_FORMATS:
-		surface_handle_output_precommit_formats(surface, event);
+	switch(session->state) {
+	case WLR_EXT_SCREENCOPY_SESSION_V1_STATE_WAITING_FOR_BUFFER_FORMATS:
+		session_handle_output_precommit_formats(session, event);
 		break;
-	case WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_READY:
-		surface_handle_output_precommit_ready(surface, event);
+	case WLR_EXT_SCREENCOPY_SESSION_V1_STATE_READY:
+		session_handle_output_precommit_ready(session, event);
 		break;
 	default:
 		abort();
@@ -428,10 +428,10 @@ static void surface_handle_output_precommit(struct wl_listener *listener,
 	}
 }
 
-static bool surface_is_cursor_visible(
-		struct wlr_ext_screencopy_surface_v1 *surface)
+static bool session_is_cursor_visible(
+		struct wlr_ext_screencopy_session_v1 *session)
 {
-	struct wlr_output *output = surface->output;
+	struct wlr_output *output = session->output;
 	struct wlr_output_cursor *cursor = output->hardware_cursor;
 
 	return output->cursor_front_buffer && cursor && cursor->enabled &&
@@ -440,9 +440,9 @@ static bool surface_is_cursor_visible(
 	return output->cursor_front_buffer;
 }
 
-static void surface_advertise_cursor_formats(
-		struct wlr_ext_screencopy_surface_v1 *surface) {
-	struct wlr_output *output = surface_check_output(surface);
+static void session_advertise_cursor_formats(
+		struct wlr_ext_screencopy_session_v1 *session) {
+	struct wlr_output *output = session_check_output(session);
 	if (!output) {
 		return;
 	}
@@ -454,90 +454,90 @@ static void surface_advertise_cursor_formats(
 
 	struct wlr_renderer *renderer = output->renderer;
 
-	surface->cursor_wl_shm_format =
+	session->cursor_wl_shm_format =
 		get_buffer_preferred_read_format(buffer, renderer);
-	surface->cursor_wl_shm_stride =
+	session->cursor_wl_shm_stride =
 		buffer->width * 4; // TODO: This assumes things...
-	surface->cursor_dmabuf_format = get_dmabuf_format(buffer);
+	session->cursor_dmabuf_format = get_dmabuf_format(buffer);
 
-	surface->cursor_width = buffer->width;
-	surface->cursor_height = buffer->height;
+	session->cursor_width = buffer->width;
+	session->cursor_height = buffer->height;
 
-	if (surface->cursor_wl_shm_format != DRM_FORMAT_INVALID) {
-		assert(surface->cursor_wl_shm_stride);
+	if (session->cursor_wl_shm_format != DRM_FORMAT_INVALID) {
+		assert(session->cursor_wl_shm_stride);
 
-		ext_screencopy_surface_v1_send_cursor_buffer_info(
-				surface->resource, "default",
-				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER,
-				EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_WL_SHM,
-				surface->cursor_wl_shm_format,
+		ext_screencopy_session_v1_send_cursor_buffer_info(
+				session->resource, "default",
+				EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER,
+				EXT_SCREENCOPY_SESSION_V1_BUFFER_TYPE_WL_SHM,
+				session->cursor_wl_shm_format,
 				buffer->width, buffer->height,
-				surface->cursor_wl_shm_stride);
+				session->cursor_wl_shm_stride);
 	}
 
-	if (surface->cursor_dmabuf_format != DRM_FORMAT_INVALID) {
-		ext_screencopy_surface_v1_send_cursor_buffer_info(
-				surface->resource, "default",
-				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER,
-				EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_DMABUF,
-				surface->cursor_dmabuf_format,
+	if (session->cursor_dmabuf_format != DRM_FORMAT_INVALID) {
+		ext_screencopy_session_v1_send_cursor_buffer_info(
+				session->resource, "default",
+				EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER,
+				EXT_SCREENCOPY_SESSION_V1_BUFFER_TYPE_DMABUF,
+				session->cursor_dmabuf_format,
 				buffer->width, buffer->height, 0);
 	}
 
-	pixman_region32_union_rect(&surface->cursor_damage,
-			&surface->cursor_damage, 0, 0, surface->cursor_width,
-			surface->cursor_height);
+	pixman_region32_union_rect(&session->cursor_damage,
+			&session->cursor_damage, 0, 0, session->cursor_width,
+			session->cursor_height);
 }
 
-static void surface_advertise_buffer_formats(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_advertise_buffer_formats(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_buffer *buffer) {
-	struct wlr_output *output = surface_check_output(surface);
+	struct wlr_output *output = session_check_output(session);
 	if (!output) {
 		return;
 	}
 
 	struct wlr_renderer *renderer = output->renderer;
 
-	surface->wl_shm_format =
+	session->wl_shm_format =
 		get_buffer_preferred_read_format(buffer, renderer);
-	surface->wl_shm_stride = buffer->width * 4; // TODO: This assumes things...
+	session->wl_shm_stride = buffer->width * 4; // TODO: This assumes things...
 
-	surface->dmabuf_format = get_dmabuf_format(buffer);
+	session->dmabuf_format = get_dmabuf_format(buffer);
 
-	if (surface->wl_shm_format != DRM_FORMAT_INVALID) {
-		assert(surface->wl_shm_stride);
+	if (session->wl_shm_format != DRM_FORMAT_INVALID) {
+		assert(session->wl_shm_stride);
 
-		ext_screencopy_surface_v1_send_buffer_info(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_WL_SHM,
-				surface->wl_shm_format, output->width,
-				output->height, surface->wl_shm_stride);
+		ext_screencopy_session_v1_send_buffer_info(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_BUFFER_TYPE_WL_SHM,
+				session->wl_shm_format, output->width,
+				output->height, session->wl_shm_stride);
 	}
 
-	if (surface->dmabuf_format != DRM_FORMAT_INVALID) {
-		ext_screencopy_surface_v1_send_buffer_info(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_BUFFER_TYPE_DMABUF,
-				surface->dmabuf_format, output->width,
+	if (session->dmabuf_format != DRM_FORMAT_INVALID) {
+		ext_screencopy_session_v1_send_buffer_info(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_BUFFER_TYPE_DMABUF,
+				session->dmabuf_format, output->width,
 				output->height, 0);
 	}
 
-	surface_advertise_cursor_formats(surface);
+	session_advertise_cursor_formats(session);
 
-	ext_screencopy_surface_v1_send_init_done(surface->resource);
+	ext_screencopy_session_v1_send_init_done(session->resource);
 
-	if (surface_is_cursor_visible(surface)) {
-		ext_screencopy_surface_v1_send_cursor_enter(surface->resource,
+	if (session_is_cursor_visible(session)) {
+		ext_screencopy_session_v1_send_cursor_enter(session->resource,
 				"default",
-				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
-		surface->have_cursor = true;
+				EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER);
+		session->have_cursor = true;
 	}
 }
 
-static void surface_handle_output_commit_formats(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_handle_output_commit_formats(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_output_event_commit *event) {
-	surface_advertise_buffer_formats(surface, event->buffer);
-	surface->state = WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_READY;
+	session_advertise_buffer_formats(session, event->buffer);
+	session->state = WLR_EXT_SCREENCOPY_SESSION_V1_STATE_READY;
 }
 
 static void get_cursor_buffer_coordinates(struct wlr_box *box,
@@ -556,40 +556,40 @@ static void get_cursor_buffer_coordinates(struct wlr_box *box,
 	wlr_box_transform(box, box, transform, width, height);
 }
 
-static void surface_send_cursor_info(
-		struct wlr_ext_screencopy_surface_v1 *surface) {
-	if (!surface->current_cursor_buffer.resource ||
-			!surface_is_cursor_visible(surface)) {
+static void session_send_cursor_info(
+		struct wlr_ext_screencopy_session_v1 *session) {
+	if (!session->current_cursor_buffer.resource ||
+			!session_is_cursor_visible(session)) {
 		return;
 	}
 
-	struct wlr_output *output = surface->output;
+	struct wlr_output *output = session->output;
 	struct wlr_output_cursor *cursor = output->hardware_cursor;
 
-	bool have_damage = pixman_region32_not_empty(&surface->cursor_damage);
+	bool have_damage = pixman_region32_not_empty(&session->cursor_damage);
 
 	struct wlr_box box;
 	get_cursor_buffer_coordinates(&box, cursor, output);
 
-	ext_screencopy_surface_v1_send_cursor_info(surface->resource,
-			"default", EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER,
+	ext_screencopy_session_v1_send_cursor_info(session->resource,
+			"default", EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER,
 			have_damage, box.x, box.y, cursor->width,
 			cursor->height, cursor->hotspot_x, cursor->hotspot_y);
 }
 
-static void surface_send_transform(struct wlr_ext_screencopy_surface_v1 *surface) {
-	enum wl_output_transform transform = surface->output->transform;
-	ext_screencopy_surface_v1_send_transform(surface->resource, transform);
+static void session_send_transform(struct wlr_ext_screencopy_session_v1 *session) {
+	enum wl_output_transform transform = session->output->transform;
+	ext_screencopy_session_v1_send_transform(session->resource, transform);
 }
 
-static void surface_add_cursor_damage(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_add_cursor_damage(
+		struct wlr_ext_screencopy_session_v1 *session,
 		const struct wlr_box *box)
 {
-	struct wlr_output *output = surface->output;
-	const struct wlr_box *last = &surface->last_cursor_box;
+	struct wlr_output *output = session->output;
+	const struct wlr_box *last = &session->last_cursor_box;
 
-	struct pixman_region32 *region = &surface->frame_damage;
+	struct pixman_region32 *region = &session->frame_damage;
 	pixman_region32_union_rect(region, region, box->x, box->y,
 			box->width, box->height);
 	pixman_region32_union_rect(region, region, last->x, last->y,
@@ -597,14 +597,14 @@ static void surface_add_cursor_damage(
 	pixman_region32_intersect_rect(region, region, 0, 0,
 		output->width, output->height);
 
-	surface->last_cursor_box = *box;
+	session->last_cursor_box = *box;
 }
 
-static bool surface_composite_cursor_buffer(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static bool session_composite_cursor_buffer(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_buffer *buffer, void *data, uint32_t drm_format,
 		size_t stride) {
-	struct wlr_output *output = surface->output;
+	struct wlr_output *output = session->output;
 	struct wlr_renderer *renderer = output->renderer;
 	struct wlr_output_cursor *cursor = output->hardware_cursor;
 	struct wlr_buffer *cursor_buffer = output->cursor_front_buffer;
@@ -659,7 +659,7 @@ static bool surface_composite_cursor_buffer(
 			cursor_box.y, // dst y
 			cursor_buffer->width, cursor_buffer->height);
 
-	surface_add_cursor_damage(surface, &cursor_box);
+	session_add_cursor_damage(session, &cursor_box);
 fail:
 	pixman_image_unref(src_image);
 	free(scratch_buffer);
@@ -710,12 +710,12 @@ static void matrix_to_pixman_transform(struct pixman_transform *transform,
 	pixman_transform_from_pixman_f_transform(transform, &ftr);
 }
 
-static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
+static bool session_copy_wl_shm(struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_buffer *dst_buffer, struct wlr_shm_attributes *attr,
 		struct wlr_buffer *src_buffer, uint32_t wl_shm_format,
 		struct pixman_region32 *damage,
 		enum wl_output_transform transform) {
-	struct wlr_output *output = surface->output;
+	struct wlr_output *output = session->output;
 	struct wlr_renderer *renderer = output->renderer;
 
 	if (dst_buffer->width < src_buffer->width ||
@@ -810,10 +810,10 @@ static bool surface_copy_wl_shm(struct wlr_ext_screencopy_surface_v1 *surface,
 		free(data);
 	}
 
-	if (surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS
+	if (session->session_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS
 			&& src_buffer != output->cursor_front_buffer
 			&& output->cursor_front_buffer != NULL) {
-		surface_composite_cursor_buffer(surface, dst_buffer, dst_data,
+		session_composite_cursor_buffer(session, dst_buffer, dst_data,
 				format, dst_stride);
 	}
 
@@ -855,13 +855,13 @@ static bool blit_dmabuf(struct wlr_renderer *renderer,
 	return true;
 }
 
-static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
+static bool session_copy_dmabuf(struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_buffer *dst_buffer, struct wlr_dmabuf_attributes *attr,
 		struct wlr_buffer *src_buffer, uint32_t format,
 		struct pixman_region32 *damage,
 		enum wl_output_transform transform) {
 	bool r = false;
-	struct wlr_output *output = surface->output;
+	struct wlr_output *output = session->output;
 	struct wlr_renderer *renderer = output->renderer;
 
 	if (dst_buffer->width < src_buffer->width ||
@@ -891,7 +891,7 @@ static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 	}
 
 	struct wlr_buffer *cursor_buffer =
-		surface->surface_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS ?
+		session->session_options & EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS ?
 		output->cursor_front_buffer : NULL;
 
 	if (cursor_buffer && src_buffer != cursor_buffer) {
@@ -909,7 +909,7 @@ static bool surface_copy_dmabuf(struct wlr_ext_screencopy_surface_v1 *surface,
 			goto failure;
 		}
 
-		surface_add_cursor_damage(surface, &box);
+		session_add_cursor_damage(session, &box);
 	}
 
 	r = true;
@@ -918,8 +918,8 @@ failure:
 	return r;
 }
 
-static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
-		struct wlr_ext_screencopy_surface_v1_buffer *surface_buffer,
+static bool session_copy(struct wlr_ext_screencopy_session_v1 *session,
+		struct wlr_ext_screencopy_session_v1_buffer *session_buffer,
 		struct wlr_buffer *src_buffer, uint32_t wl_shm_format,
 		uint32_t dmabuf_format, struct pixman_region32 *damage,
 		enum wl_output_transform transform) {
@@ -929,14 +929,14 @@ static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
 	}
 
 	struct wlr_buffer *dst_buffer =
-		wlr_buffer_from_resource(surface_buffer->resource);
+		wlr_buffer_from_resource(session_buffer->resource);
 	if (!dst_buffer) {
 		goto failure;
 	}
 
 	struct wlr_shm_attributes shm_attr = { 0 };
 	if (wlr_buffer_get_shm(dst_buffer, &shm_attr)) {
-		if (!surface_copy_wl_shm(surface, dst_buffer, &shm_attr,
+		if (!session_copy_wl_shm(session, dst_buffer, &shm_attr,
 					src_buffer, wl_shm_format, damage,
 					transform)) {
 			goto failure;
@@ -945,7 +945,7 @@ static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
 
 	struct wlr_dmabuf_attributes dmabuf_attr = { 0 };
 	if (wlr_buffer_get_dmabuf(dst_buffer, &dmabuf_attr)) {
-		if (!surface_copy_dmabuf(surface, dst_buffer, &dmabuf_attr,
+		if (!session_copy_dmabuf(session, dst_buffer, &dmabuf_attr,
 					src_buffer, dmabuf_format, damage,
 					transform)) {
 			goto failure;
@@ -955,20 +955,20 @@ static bool surface_copy(struct wlr_ext_screencopy_surface_v1 *surface,
 	return true;
 
 failure:
-	if (surface->output && src_buffer == surface->output->cursor_front_buffer) {
-		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_INVALID_CURSOR_BUFFER);
+	if (session->output && src_buffer == session->output->cursor_front_buffer) {
+		ext_screencopy_session_v1_send_failed(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_INVALID_CURSOR_BUFFER);
 	} else {
-		ext_screencopy_surface_v1_send_failed(surface->resource,
-				EXT_SCREENCOPY_SURFACE_V1_FAILURE_REASON_INVALID_MAIN_BUFFER);
+		ext_screencopy_session_v1_send_failed(session->resource,
+				EXT_SCREENCOPY_SESSION_V1_FAILURE_REASON_INVALID_MAIN_BUFFER);
 	}
 	return false;
 }
 
-static void surface_send_damage(struct wlr_ext_screencopy_surface_v1 *surface) {
+static void session_send_damage(struct wlr_ext_screencopy_session_v1 *session) {
 	int n_rects = 0;
 	struct pixman_box32 *rects =
-		pixman_region32_rectangles(&surface->frame_damage, &n_rects);
+		pixman_region32_rectangles(&session->frame_damage, &n_rects);
 
 	for (int i = 0; i < n_rects; ++i) {
 		int damage_x = rects[i].x1;
@@ -976,26 +976,26 @@ static void surface_send_damage(struct wlr_ext_screencopy_surface_v1 *surface) {
 		int damage_width = rects[i].x2 - rects[i].x1;
 		int damage_height = rects[i].y2 - rects[i].y1;
 
-		ext_screencopy_surface_v1_send_damage(surface->resource,
+		ext_screencopy_session_v1_send_damage(session->resource,
 			damage_x, damage_y, damage_width, damage_height);
 	}
 }
 
-static void surface_send_commit_time(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_send_commit_time(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct timespec *when)
 {
 	time_t tv_sec = when->tv_sec;
 	uint32_t tv_sec_hi = (sizeof(tv_sec) > 4) ? tv_sec >> 32 : 0;
 	uint32_t tv_sec_lo = tv_sec & 0xFFFFFFFF;
-	ext_screencopy_surface_v1_send_commit_time(surface->resource,
+	ext_screencopy_session_v1_send_commit_time(session->resource,
 			tv_sec_hi, tv_sec_lo, when->tv_nsec);
 }
 
-static void surface_handle_output_commit_ready(
-		struct wlr_ext_screencopy_surface_v1 *surface,
+static void session_handle_output_commit_ready(
+		struct wlr_ext_screencopy_session_v1 *session,
 		struct wlr_output_event_commit *event) {
-	struct wlr_output *output = surface_check_output(surface);
+	struct wlr_output *output = session_check_output(session);
 	if (!output) {
 		return;
 	}
@@ -1004,31 +1004,31 @@ static void surface_handle_output_commit_ready(
 		return;
 	}
 
-	if (!surface->committed) {
+	if (!session->committed) {
 		return;
 	}
 
-	if (surface->have_cursor && !surface_is_cursor_visible(surface)) {
-		ext_screencopy_surface_v1_send_cursor_leave(surface->resource,
+	if (session->have_cursor && !session_is_cursor_visible(session)) {
+		ext_screencopy_session_v1_send_cursor_leave(session->resource,
 				"default",
-				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
-		surface->have_cursor = false;
-	} else if (!surface->have_cursor && surface_is_cursor_visible(surface)) {
-		ext_screencopy_surface_v1_send_cursor_enter(surface->resource,
+				EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER);
+		session->have_cursor = false;
+	} else if (!session->have_cursor && session_is_cursor_visible(session)) {
+		ext_screencopy_session_v1_send_cursor_enter(session->resource,
 				"default",
-				EXT_SCREENCOPY_SURFACE_V1_INPUT_TYPE_POINTER);
-		surface->have_cursor = true;
+				EXT_SCREENCOPY_SESSION_V1_INPUT_TYPE_POINTER);
+		session->have_cursor = true;
 	}
 
-	if (surface->current_buffer.resource) {
+	if (session->current_buffer.resource) {
 		struct pixman_region32 damage;
 		pixman_region32_init(&damage);
-		pixman_region32_union(&damage, &surface->frame_damage,
-				&surface->current_buffer.damage);
+		pixman_region32_union(&damage, &session->frame_damage,
+				&session->current_buffer.damage);
 
-		bool ok = surface_copy(surface, &surface->current_buffer,
-				event->buffer, surface->wl_shm_format,
-				surface->dmabuf_format, &damage,
+		bool ok = session_copy(session, &session->current_buffer,
+				event->buffer, session->wl_shm_format,
+				session->dmabuf_format, &damage,
 				WL_OUTPUT_TRANSFORM_NORMAL);
 		pixman_region32_fini(&damage);
 		if (!ok) {
@@ -1036,20 +1036,20 @@ static void surface_handle_output_commit_ready(
 		}
 	}
 
-	if (surface->current_cursor_buffer.resource &&
-			surface_is_cursor_visible(surface)) {
+	if (session->current_cursor_buffer.resource &&
+			session_is_cursor_visible(session)) {
 		struct pixman_region32 damage;
 		pixman_region32_init(&damage);
-		pixman_region32_union(&damage, &surface->cursor_damage,
-				&surface->current_cursor_buffer.damage);
+		pixman_region32_union(&damage, &session->cursor_damage,
+				&session->current_cursor_buffer.damage);
 
 		enum wl_output_transform transform;
 		transform = wlr_output_transform_invert(output->transform);
 
-		bool ok = surface_copy(surface, &surface->current_cursor_buffer,
+		bool ok = session_copy(session, &session->current_cursor_buffer,
 				output->cursor_front_buffer,
-				surface->cursor_wl_shm_format,
-				surface->cursor_dmabuf_format, &damage,
+				session->cursor_wl_shm_format,
+				session->cursor_dmabuf_format, &damage,
 				transform);
 		pixman_region32_fini(&damage);
 		if (!ok) {
@@ -1057,48 +1057,48 @@ static void surface_handle_output_commit_ready(
 		}
 	}
 
-	surface_send_transform(surface);
-	surface_send_damage(surface);
-	surface_send_cursor_info(surface);
-	surface_send_commit_time(surface, event->when);
-	ext_screencopy_surface_v1_send_ready(surface->resource);
+	session_send_transform(session);
+	session_send_damage(session);
+	session_send_cursor_info(session);
+	session_send_commit_time(session, event->when);
+	ext_screencopy_session_v1_send_ready(session->resource);
 
-	pixman_region32_clear(&surface->current_buffer.damage);
-	pixman_region32_clear(&surface->current_cursor_buffer.damage);
-	pixman_region32_clear(&surface->frame_damage);
-	pixman_region32_clear(&surface->cursor_damage);
+	pixman_region32_clear(&session->current_buffer.damage);
+	pixman_region32_clear(&session->current_cursor_buffer.damage);
+	pixman_region32_clear(&session->frame_damage);
+	pixman_region32_clear(&session->cursor_damage);
 
-	if (surface->current_buffer.resource) {
-		wl_list_remove(&surface->current_buffer.destroy.link);
+	if (session->current_buffer.resource) {
+		wl_list_remove(&session->current_buffer.destroy.link);
 	}
 
-	if (surface->current_cursor_buffer.resource) {
-		wl_list_remove(&surface->current_cursor_buffer.destroy.link);
+	if (session->current_cursor_buffer.resource) {
+		wl_list_remove(&session->current_cursor_buffer.destroy.link);
 	}
 
-	surface->current_buffer.resource = NULL;
-	surface->current_cursor_buffer.resource = NULL;
-	surface->committed = false;
+	session->current_buffer.resource = NULL;
+	session->current_cursor_buffer.resource = NULL;
+	session->committed = false;
 	return;
 
 failure:
-	surface_destroy(surface);
+	session_destroy(session);
 }
 
-static void surface_handle_output_commit(struct wl_listener *listener,
+static void session_handle_output_commit(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, output_commit);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, output_commit);
 	struct wlr_output_event_commit *event = data;
 
-	assert(surface->output);
+	assert(session->output);
 
-	switch(surface->state) {
-	case WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_WAITING_FOR_BUFFER_FORMATS:
-		surface_handle_output_commit_formats(surface, event);
+	switch(session->state) {
+	case WLR_EXT_SCREENCOPY_SESSION_V1_STATE_WAITING_FOR_BUFFER_FORMATS:
+		session_handle_output_commit_formats(session, event);
 		break;
-	case WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_READY:
-		surface_handle_output_commit_ready(surface, event);
+	case WLR_EXT_SCREENCOPY_SESSION_V1_STATE_READY:
+		session_handle_output_commit_ready(session, event);
 		break;
 	default:
 		abort();
@@ -1106,89 +1106,89 @@ static void surface_handle_output_commit(struct wl_listener *listener,
 	}
 }
 
-static void surface_handle_output_set_cursor(struct wl_listener *listener,
+static void session_handle_output_set_cursor(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, output_set_cursor);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, output_set_cursor);
 
-	pixman_region32_union_rect(&surface->cursor_damage,
-			&surface->cursor_damage, 0, 0,
-			surface->cursor_width, surface->cursor_height);
+	pixman_region32_union_rect(&session->cursor_damage,
+			&session->cursor_damage, 0, 0,
+			session->cursor_width, session->cursor_height);
 
-	wlr_output_schedule_frame(surface->output);
+	wlr_output_schedule_frame(session->output);
 }
 
-static void surface_handle_output_move_cursor(struct wl_listener *listener,
+static void session_handle_output_move_cursor(struct wl_listener *listener,
 		void *data) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		wl_container_of(listener, surface, output_move_cursor);
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, output_move_cursor);
 
-	wlr_output_schedule_frame(surface->output);
+	wlr_output_schedule_frame(session->output);
 }
 
 static void capture_output(struct wl_client *client, uint32_t version,
 		struct wlr_ext_screencopy_manager_v1 *manager,
-		uint32_t surface_id, struct wlr_output *output,
+		uint32_t session_id, struct wlr_output *output,
 		uint32_t options) {
-	struct wlr_ext_screencopy_surface_v1 *surface =
-		calloc(1, sizeof(struct wlr_ext_screencopy_surface_v1));
-	if (!surface) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		calloc(1, sizeof(struct wlr_ext_screencopy_session_v1));
+	if (!session) {
 		wl_client_post_no_memory(client);
 		return;
 	}
 
-	surface->surface_options = options;
+	session->session_options = options;
 
-	surface->wl_shm_format = DRM_FORMAT_INVALID;
-	surface->dmabuf_format = DRM_FORMAT_INVALID;
-	surface->cursor_wl_shm_format = DRM_FORMAT_INVALID;
-	surface->cursor_dmabuf_format = DRM_FORMAT_INVALID;
+	session->wl_shm_format = DRM_FORMAT_INVALID;
+	session->dmabuf_format = DRM_FORMAT_INVALID;
+	session->cursor_wl_shm_format = DRM_FORMAT_INVALID;
+	session->cursor_dmabuf_format = DRM_FORMAT_INVALID;
 
-	surface->resource = wl_resource_create(client,
-			&ext_screencopy_surface_v1_interface, version,
-			surface_id);
-	if (!surface->resource) {
-		free(surface);
+	session->resource = wl_resource_create(client,
+			&ext_screencopy_session_v1_interface, version,
+			session_id);
+	if (!session->resource) {
+		free(session);
 		wl_client_post_no_memory(client);
 		return;
 	}
-	wl_resource_set_implementation(surface->resource, &surface_impl,
-			surface, surface_handle_resource_destroy);
+	wl_resource_set_implementation(session->resource, &session_impl,
+			session, session_handle_resource_destroy);
 
-	wl_list_init(&surface->output_precommit.link);
-	wl_list_init(&surface->output_commit.link);
-	wl_list_init(&surface->output_destroy.link);
+	wl_list_init(&session->output_precommit.link);
+	wl_list_init(&session->output_commit.link);
+	wl_list_init(&session->output_destroy.link);
 
-	surface->output = output;
+	session->output = output;
 
-	wl_signal_add(&surface->output->events.destroy,
-			&surface->output_destroy);
-	surface->output_destroy.notify = surface_handle_output_destroy;
+	wl_signal_add(&session->output->events.destroy,
+			&session->output_destroy);
+	session->output_destroy.notify = session_handle_output_destroy;
 
-	wl_signal_add(&surface->output->events.precommit,
-			&surface->output_precommit);
-	surface->output_precommit.notify = surface_handle_output_precommit;
+	wl_signal_add(&session->output->events.precommit,
+			&session->output_precommit);
+	session->output_precommit.notify = session_handle_output_precommit;
 
-	wl_signal_add(&surface->output->events.commit,
-			&surface->output_commit);
-	surface->output_commit.notify = surface_handle_output_commit;
+	wl_signal_add(&session->output->events.commit,
+			&session->output_commit);
+	session->output_commit.notify = session_handle_output_commit;
 
-	wl_signal_add(&surface->output->events.set_cursor,
-			&surface->output_set_cursor);
-	surface->output_set_cursor.notify = surface_handle_output_set_cursor;
+	wl_signal_add(&session->output->events.set_cursor,
+			&session->output_set_cursor);
+	session->output_set_cursor.notify = session_handle_output_set_cursor;
 
-	wl_signal_add(&surface->output->events.move_cursor,
-			&surface->output_move_cursor);
-	surface->output_move_cursor.notify = surface_handle_output_move_cursor;
+	wl_signal_add(&session->output->events.move_cursor,
+			&session->output_move_cursor);
+	session->output_move_cursor.notify = session_handle_output_move_cursor;
 
-	pixman_region32_init(&surface->current_buffer.damage);
-	pixman_region32_init(&surface->staged_buffer.damage);
-	pixman_region32_init(&surface->current_cursor_buffer.damage);
-	pixman_region32_init(&surface->staged_cursor_buffer.damage);
-	pixman_region32_init(&surface->frame_damage);
+	pixman_region32_init(&session->current_buffer.damage);
+	pixman_region32_init(&session->staged_buffer.damage);
+	pixman_region32_init(&session->current_cursor_buffer.damage);
+	pixman_region32_init(&session->staged_cursor_buffer.damage);
+	pixman_region32_init(&session->frame_damage);
 
-	pixman_region32_union_rect(&surface->frame_damage,
-			&surface->frame_damage, 0, 0, output->width,
+	pixman_region32_union_rect(&session->frame_damage,
+			&session->frame_damage, 0, 0, output->width,
 			output->height);
 
 	// We need a new frame to check the buffer formats
@@ -1196,14 +1196,14 @@ static void capture_output(struct wl_client *client, uint32_t version,
 }
 
 static void manager_capture_output(struct wl_client *client,
-		struct wl_resource *manager_resource, uint32_t surface_id,
+		struct wl_resource *manager_resource, uint32_t session_id,
 		struct wl_resource *output_resource, uint32_t options) {
 	struct wlr_ext_screencopy_manager_v1 *manager =
 		manager_from_resource(manager_resource);
 	uint32_t version = wl_resource_get_version(manager_resource);
 	struct wlr_output *output = wlr_output_from_resource(output_resource);
 
-	capture_output(client, version, manager, surface_id, output, options);
+	capture_output(client, version, manager, session_id, output, options);
 }
 
 static const struct ext_screencopy_manager_v1_interface manager_impl = {

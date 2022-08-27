@@ -29,21 +29,21 @@ struct wlr_ext_screencopy_manager_v1 {
 	void *data;
 };
 
-enum wlr_ext_screencopy_surface_v1_state {
-	WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_WAITING_FOR_BUFFER_FORMATS = 0,
-	WLR_EXT_SCREENCOPY_SURFACE_V1_STATE_READY,
+enum wlr_ext_screencopy_session_v1_state {
+	WLR_EXT_SCREENCOPY_SESSION_V1_STATE_WAITING_FOR_BUFFER_FORMATS = 0,
+	WLR_EXT_SCREENCOPY_SESSION_V1_STATE_READY,
 };
 
-struct wlr_ext_screencopy_surface_v1_buffer {
+struct wlr_ext_screencopy_session_v1_buffer {
 	struct wl_resource *resource;
 	struct pixman_region32 damage;
 	struct wl_listener destroy;
 };
 
-struct wlr_ext_screencopy_surface_v1 {
+struct wlr_ext_screencopy_session_v1 {
 	struct wl_resource *resource;
 
-	enum wlr_ext_screencopy_surface_v1_state state;
+	enum wlr_ext_screencopy_session_v1_state state;
 
 	struct wlr_buffer *buffer;
 
@@ -61,17 +61,17 @@ struct wlr_ext_screencopy_surface_v1 {
 
         struct wlr_box last_cursor_box;
 
-	uint32_t surface_options;
+	uint32_t session_options;
 
-	struct wlr_ext_screencopy_surface_v1_buffer staged_buffer;
-	struct wlr_ext_screencopy_surface_v1_buffer current_buffer;
+	struct wlr_ext_screencopy_session_v1_buffer staged_buffer;
+	struct wlr_ext_screencopy_session_v1_buffer current_buffer;
 
-	struct wlr_ext_screencopy_surface_v1_buffer staged_cursor_buffer;
-	struct wlr_ext_screencopy_surface_v1_buffer current_cursor_buffer;
+	struct wlr_ext_screencopy_session_v1_buffer staged_cursor_buffer;
+	struct wlr_ext_screencopy_session_v1_buffer current_cursor_buffer;
 
 	bool committed;
 
-	/* Accumulated damage for the surface */
+	/* Accumulated damage for the session */
 	struct pixman_region32 frame_damage;
 	struct pixman_region32 cursor_damage;
 
