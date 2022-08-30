@@ -15,7 +15,6 @@
 #include "render/gles2.h"
 #include "render/pixel_format.h"
 #include "types/wlr_buffer.h"
-#include "util/signal.h"
 
 static const struct wlr_texture_impl texture_impl;
 
@@ -27,11 +26,6 @@ struct wlr_gles2_texture *gles2_get_texture(
 		struct wlr_texture *wlr_texture) {
 	assert(wlr_texture_is_gles2(wlr_texture));
 	return (struct wlr_gles2_texture *)wlr_texture;
-}
-
-static bool gles2_texture_is_opaque(struct wlr_texture *wlr_texture) {
-	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
-	return !texture->has_alpha;
 }
 
 static bool check_stride(const struct wlr_pixel_format_info *fmt,
@@ -49,14 +43,24 @@ static bool check_stride(const struct wlr_pixel_format_info *fmt,
 	return true;
 }
 
-static bool gles2_texture_write_pixels(struct wlr_texture *wlr_texture,
-		uint32_t stride, uint32_t width, uint32_t height,
-		uint32_t src_x, uint32_t src_y, uint32_t dst_x, uint32_t dst_y,
-		const void *data) {
+static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
+		struct wlr_buffer *buffer, pixman_region32_t *damage) {
 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
 
 	if (texture->target != GL_TEXTURE_2D || texture->image != EGL_NO_IMAGE_KHR) {
-		wlr_log(WLR_ERROR, "Cannot write pixels to immutable texture");
+		return false;
+	}
+
+	void *data;
+	uint32_t format;
+	size_t stride;
+	if (!wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+		return false;
+	}
+
+	if (format != texture->drm_format) {
+		wlr_buffer_end_data_ptr_access(buffer);
 		return false;
 	}
 
@@ -68,7 +72,8 @@ static bool gles2_texture_write_pixels(struct wlr_texture *wlr_texture,
 		drm_get_pixel_format_info(texture->drm_format);
 	assert(drm_fmt);
 
-	if (!check_stride(drm_fmt, stride, width)) {
+	if (!check_stride(drm_fmt, stride, buffer->width)) {
+		wlr_buffer_end_data_ptr_access(buffer);
 		return false;
 	}
 
@@ -80,12 +85,21 @@ static bool gles2_texture_write_pixels(struct wlr_texture *wlr_texture,
 
 	glBindTexture(GL_TEXTURE_2D, texture->tex);
 
-	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / (drm_fmt->bpp / 8));
-	glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, src_x);
-	glPixelStorei(GL_UNPACK_SKIP_ROWS_EXT, src_y);
+	int rects_len = 0;
+	pixman_box32_t *rects = pixman_region32_rectangles(damage, &rects_len);
 
-	glTexSubImage2D(GL_TEXTURE_2D, 0, dst_x, dst_y, width, height,
-		fmt->gl_format, fmt->gl_type, data);
+	for (int i = 0; i < rects_len; i++) {
+		pixman_box32_t rect = rects[i];
+
+		glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / (drm_fmt->bpp / 8));
+		glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, rect.x1);
+		glPixelStorei(GL_UNPACK_SKIP_ROWS_EXT, rect.y1);
+
+		int width = rect.x2 - rect.x1;
+		int height = rect.y2 - rect.y1;
+		glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x1, rect.y1, width, height,
+			fmt->gl_format, fmt->gl_type, data);
+	}
 
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 	glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, 0);
@@ -96,6 +110,8 @@ static bool gles2_texture_write_pixels(struct wlr_texture *wlr_texture,
 	pop_gles2_debug(texture->renderer);
 
 	wlr_egl_restore_context(&prev_ctx);
+
+	wlr_buffer_end_data_ptr_access(buffer);
 
 	return true;
 }
@@ -161,8 +177,7 @@ static void gles2_texture_unref(struct wlr_texture *wlr_texture) {
 }
 
 static const struct wlr_texture_impl texture_impl = {
-	.is_opaque = gles2_texture_is_opaque,
-	.write_pixels = gles2_texture_write_pixels,
+	.update_from_buffer = gles2_texture_update_from_buffer,
 	.destroy = gles2_texture_unref,
 };
 
@@ -210,6 +225,11 @@ static struct wlr_texture *gles2_texture_from_pixels(
 	texture->has_alpha = fmt->has_alpha;
 	texture->drm_format = fmt->drm_format;
 
+	GLint internal_format = fmt->gl_internalformat;
+	if (!internal_format) {
+		internal_format = fmt->gl_format;
+	}
+
 	struct wlr_egl_context prev_ctx;
 	wlr_egl_save_context(&prev_ctx);
 	wlr_egl_make_current(renderer->egl);
@@ -222,7 +242,7 @@ static struct wlr_texture *gles2_texture_from_pixels(
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / (drm_fmt->bpp / 8));
-	glTexImage2D(GL_TEXTURE_2D, 0, fmt->gl_format, width, height, 0,
+	glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0,
 		fmt->gl_format, fmt->gl_type, data);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 

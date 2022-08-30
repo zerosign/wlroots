@@ -6,7 +6,6 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
-#include "util/signal.h"
 
 struct wlr_output_layout_output_state {
 	struct wlr_output_layout *layout;
@@ -37,7 +36,7 @@ struct wlr_output_layout *wlr_output_layout_create(void) {
 
 static void output_layout_output_destroy(
 		struct wlr_output_layout_output *l_output) {
-	wlr_signal_emit_safe(&l_output->events.destroy, l_output);
+	wl_signal_emit_mutable(&l_output->events.destroy, l_output);
 	wlr_output_destroy_global(l_output->output);
 	wl_list_remove(&l_output->state->mode.link);
 	wl_list_remove(&l_output->state->commit.link);
@@ -52,7 +51,7 @@ void wlr_output_layout_destroy(struct wlr_output_layout *layout) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&layout->events.destroy, layout);
+	wl_signal_emit_mutable(&layout->events.destroy, layout);
 
 	struct wlr_output_layout_output *l_output, *temp;
 	wl_list_for_each_safe(l_output, temp, &layout->outputs, link) {
@@ -115,7 +114,7 @@ static void output_layout_reconfigure(struct wlr_output_layout *layout) {
 		max_x += output_box.width;
 	}
 
-	wlr_signal_emit_safe(&layout->events.change, layout);
+	wl_signal_emit_mutable(&layout->events.change, layout);
 }
 
 static void output_update_global(struct wlr_output *output) {
@@ -211,7 +210,7 @@ void wlr_output_layout_add(struct wlr_output_layout *layout,
 	output_update_global(output);
 
 	if (is_new) {
-		wlr_signal_emit_safe(&layout->events.add, l_output);
+		wl_signal_emit_mutable(&layout->events.add, l_output);
 	}
 }
 
@@ -231,6 +230,9 @@ bool wlr_output_layout_contains_point(struct wlr_output_layout *layout,
 	if (reference) {
 		struct wlr_output_layout_output *l_output =
 			wlr_output_layout_get(layout, reference);
+		if (!l_output) {
+			return false;
+		}
 		struct wlr_box output_box;
 		output_layout_output_get_box(l_output, &output_box);
 		return wlr_box_contains_point(&output_box, lx, ly);
@@ -363,6 +365,8 @@ void wlr_output_layout_closest_point(struct wlr_output_layout *layout,
 
 void wlr_output_layout_get_box(struct wlr_output_layout *layout,
 		struct wlr_output *reference, struct wlr_box *dest_box) {
+	memset(dest_box, 0, sizeof(*dest_box));
+
 	struct wlr_output_layout_output *l_output;
 	if (reference) {
 		// output extents
@@ -370,8 +374,6 @@ void wlr_output_layout_get_box(struct wlr_output_layout *layout,
 
 		if (l_output) {
 			output_layout_output_get_box(l_output, dest_box);
-		} else {
-			dest_box->width = dest_box->height = 0;
 		}
 	} else {
 		// layout extents
@@ -422,7 +424,7 @@ void wlr_output_layout_add_auto(struct wlr_output_layout *layout,
 	output_update_global(output);
 
 	if (is_new) {
-		wlr_signal_emit_safe(&layout->events.add, l_output);
+		wl_signal_emit_mutable(&layout->events.add, l_output);
 	}
 }
 
@@ -457,6 +459,10 @@ static struct wlr_output *wlr_output_layout_output_in_direction(
 
 	struct wlr_box ref_box;
 	wlr_output_layout_get_box(layout, reference, &ref_box);
+	if (wlr_box_empty(&ref_box)) {
+		// The output doesn't belong to the layout
+		return NULL;
+	}
 
 	double min_distance = (distance_method == NEAREST) ? DBL_MAX : DBL_MIN;
 	struct wlr_output *closest_output = NULL;

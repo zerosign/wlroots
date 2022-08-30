@@ -15,6 +15,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_seat.h>
 #include <xcb/xcb.h>
+#include <xcb/xcb_icccm.h>
 
 struct wlr_xwm;
 struct wlr_xwayland_cursor;
@@ -23,6 +24,8 @@ struct wlr_xwayland_server_options {
 	bool lazy;
 	bool enable_wm;
 	bool no_touch_pointer_emulation;
+	bool force_xrandr_emulation;
+	int terminate_delay; // in seconds, 0 to terminate immediately
 };
 
 struct wlr_xwayland_server {
@@ -96,30 +99,6 @@ enum wlr_xwayland_surface_decorations {
 	WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE = 2,
 };
 
-struct wlr_xwayland_surface_hints {
-	uint32_t flags;
-	uint32_t input;
-	int32_t initial_state;
-	xcb_pixmap_t icon_pixmap;
-	xcb_window_t icon_window;
-	int32_t icon_x, icon_y;
-	xcb_pixmap_t icon_mask;
-	xcb_window_t window_group;
-};
-
-struct wlr_xwayland_surface_size_hints {
-	uint32_t flags;
-	int32_t x, y;
-	int32_t width, height;
-	int32_t min_width, min_height;
-	int32_t max_width, max_height;
-	int32_t width_inc, height_inc;
-	int32_t base_width, base_height;
-	int32_t min_aspect_num, min_aspect_den;
-	int32_t max_aspect_num, max_aspect_den;
-	uint32_t win_gravity;
-};
-
 /**
  * This represents the input focus described as follows:
  *
@@ -176,9 +155,8 @@ struct wlr_xwayland_surface {
 	size_t protocols_len;
 
 	uint32_t decorations;
-	struct wlr_xwayland_surface_hints *hints;
-	uint32_t hints_urgency;
-	struct wlr_xwayland_surface_size_hints *size_hints;
+	xcb_icccm_wm_hints_t *hints;
+	xcb_size_hints_t *size_hints;
 
 	bool pinging;
 	struct wl_event_source *ping_timer;
@@ -295,8 +273,17 @@ void wlr_xwayland_surface_set_fullscreen(struct wlr_xwayland_surface *surface,
 void wlr_xwayland_set_seat(struct wlr_xwayland *xwayland,
 	struct wlr_seat *seat);
 
+/**
+ * Returns true if the surface has the xwayland surface role.
+ */
 bool wlr_surface_is_xwayland_surface(struct wlr_surface *surface);
 
+/**
+ * Get a struct wlr_xwayland_surface from a struct wlr_surface.
+ * Asserts that the surface has the xwayland surface role.
+ * May return NULL even if the surface has the xwayland surface role if the
+ * corresponding xwayland surface has been destroyed.
+ */
 struct wlr_xwayland_surface *wlr_xwayland_surface_from_wlr_surface(
 	struct wlr_surface *surface);
 

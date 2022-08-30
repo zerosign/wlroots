@@ -5,11 +5,9 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
-#include <wlr/types/wlr_input_device.h>
 #include <wlr/util/log.h>
 #include "types/wlr_data_device.h"
 #include "types/wlr_seat.h"
-#include "util/signal.h"
 
 static void default_keyboard_enter(struct wlr_seat_keyboard_grab *grab,
 		struct wlr_surface *surface, uint32_t keycodes[], size_t num_keycodes,
@@ -119,11 +117,10 @@ static void handle_keyboard_destroy(struct wl_listener *listener, void *data) {
 }
 
 void wlr_seat_set_keyboard(struct wlr_seat *seat,
-		struct wlr_input_device *device) {
+		struct wlr_keyboard *keyboard) {
 	// TODO call this on device key event before the event reaches the
 	// compositor and set a pending keyboard and then send the new keyboard
 	// state on the next keyboard notify event.
-	struct wlr_keyboard *keyboard = (device ? device->keyboard : NULL);
 	if (seat->keyboard_state.keyboard == keyboard) {
 		return;
 	}
@@ -136,16 +133,15 @@ void wlr_seat_set_keyboard(struct wlr_seat *seat,
 	}
 
 	if (keyboard) {
-		assert(device->type == WLR_INPUT_DEVICE_KEYBOARD);
 		seat->keyboard_state.keyboard = keyboard;
 
-		wl_signal_add(&device->events.destroy,
+		wl_signal_add(&keyboard->base.events.destroy,
 			&seat->keyboard_state.keyboard_destroy);
 		seat->keyboard_state.keyboard_destroy.notify = handle_keyboard_destroy;
-		wl_signal_add(&device->keyboard->events.keymap,
+		wl_signal_add(&keyboard->events.keymap,
 			&seat->keyboard_state.keyboard_keymap);
 		seat->keyboard_state.keyboard_keymap.notify = handle_keyboard_keymap;
-		wl_signal_add(&device->keyboard->events.repeat_info,
+		wl_signal_add(&keyboard->events.repeat_info,
 			&seat->keyboard_state.keyboard_repeat_info);
 		seat->keyboard_state.keyboard_repeat_info.notify =
 			handle_keyboard_repeat_info;
@@ -171,7 +167,7 @@ void wlr_seat_keyboard_start_grab(struct wlr_seat *wlr_seat,
 	grab->seat = wlr_seat;
 	wlr_seat->keyboard_state.grab = grab;
 
-	wlr_signal_emit_safe(&wlr_seat->events.keyboard_grab_begin, grab);
+	wl_signal_emit_mutable(&wlr_seat->events.keyboard_grab_begin, grab);
 }
 
 void wlr_seat_keyboard_end_grab(struct wlr_seat *wlr_seat) {
@@ -179,7 +175,7 @@ void wlr_seat_keyboard_end_grab(struct wlr_seat *wlr_seat) {
 
 	if (grab != wlr_seat->keyboard_state.default_grab) {
 		wlr_seat->keyboard_state.grab = wlr_seat->keyboard_state.default_grab;
-		wlr_signal_emit_safe(&wlr_seat->events.keyboard_grab_end, grab);
+		wl_signal_emit_mutable(&wlr_seat->events.keyboard_grab_end, grab);
 		if (grab->interface->cancel) {
 			grab->interface->cancel(grab);
 		}
@@ -306,7 +302,7 @@ void wlr_seat_keyboard_enter(struct wlr_seat *seat,
 		.old_surface = focused_surface,
 		.new_surface = surface,
 	};
-	wlr_signal_emit_safe(&seat->keyboard_state.events.focus_change, &event);
+	wl_signal_emit_mutable(&seat->keyboard_state.events.focus_change, &event);
 }
 
 void wlr_seat_keyboard_notify_enter(struct wlr_seat *seat,

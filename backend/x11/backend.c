@@ -30,7 +30,6 @@
 
 #include "backend/x11.h"
 #include "render/drm_format_set.h"
-#include "util/signal.h"
 
 // See dri2_format_for_depth in mesa
 const struct wlr_x11_format formats[] = {
@@ -164,7 +163,7 @@ static bool backend_start(struct wlr_backend *backend) {
 
 	wlr_log(WLR_INFO, "Starting X11 backend");
 
-	wlr_signal_emit_safe(&x11->backend.events.new_input, &x11->keyboard.base);
+	wl_signal_emit_mutable(&x11->backend.events.new_input, &x11->keyboard.base);
 
 	for (size_t i = 0; i < x11->requested_outputs; ++i) {
 		wlr_x11_output_create(&x11->backend);
@@ -185,7 +184,7 @@ static void backend_destroy(struct wlr_backend *backend) {
 		wlr_output_destroy(&output->wlr_output);
 	}
 
-	wlr_keyboard_destroy(&x11->keyboard);
+	wlr_keyboard_finish(&x11->keyboard);
 
 	wlr_backend_finish(backend);
 
@@ -637,7 +636,8 @@ struct wlr_backend *wlr_x11_backend_create(struct wl_display *display,
 	}
 #endif
 
-	wlr_keyboard_init(&x11->keyboard, &x11_keyboard_impl, "x11-keyboard");
+	wlr_keyboard_init(&x11->keyboard, &x11_keyboard_impl,
+		x11_keyboard_impl.name);
 
 	x11->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &x11->display_destroy);

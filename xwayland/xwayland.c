@@ -14,7 +14,6 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 #include "sockets.h"
-#include "util/signal.h"
 #include "xwayland/xwm.h"
 
 struct wlr_xwayland_cursor {
@@ -29,6 +28,8 @@ struct wlr_xwayland_cursor {
 static void handle_server_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_xwayland *xwayland =
 		wl_container_of(listener, xwayland, server_destroy);
+	// Server is being destroyed so avoid destroying it once again.
+	xwayland->server = NULL;
 	wlr_xwayland_destroy(xwayland);
 }
 
@@ -52,7 +53,7 @@ static void handle_server_ready(struct wl_listener *listener, void *data) {
 			cur->height, cur->hotspot_x, cur->hotspot_y);
 	}
 
-	wlr_signal_emit_safe(&xwayland->events.ready, NULL);
+	wl_signal_emit_mutable(&xwayland->events.ready, NULL);
 }
 
 void wlr_xwayland_destroy(struct wlr_xwayland *xwayland) {
@@ -86,6 +87,9 @@ struct wlr_xwayland *wlr_xwayland_create(struct wl_display *wl_display,
 	struct wlr_xwayland_server_options options = {
 		.lazy = lazy,
 		.enable_wm = true,
+#if HAS_XCB_XFIXES_SET_CLIENT_DISCONNECT_MODE
+		.terminate_delay = lazy ? 10 : 0,
+#endif
 	};
 	xwayland->server = wlr_xwayland_server_create(wl_display, &options);
 	if (xwayland->server == NULL) {

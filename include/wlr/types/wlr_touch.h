@@ -20,43 +20,54 @@ struct wlr_touch {
 
 	const struct wlr_touch_impl *impl;
 
+	char *output_name;
+	double width_mm, height_mm;
+
 	struct {
-		struct wl_signal down; // struct wlr_event_touch_down
-		struct wl_signal up; // struct wlr_event_touch_up
-		struct wl_signal motion; // struct wlr_event_touch_motion
-		struct wl_signal cancel; // struct wlr_event_touch_cancel
+		struct wl_signal down; // struct wlr_touch_down_event
+		struct wl_signal up; // struct wlr_touch_up_event
+		struct wl_signal motion; // struct wlr_touch_motion_event
+		struct wl_signal cancel; // struct wlr_touch_cancel_event
 		struct wl_signal frame;
 	} events;
 
 	void *data;
 };
 
-struct wlr_event_touch_down {
-	struct wlr_input_device *device;
+struct wlr_touch_down_event {
+	struct wlr_touch *touch;
 	uint32_t time_msec;
 	int32_t touch_id;
 	// From 0..1
 	double x, y;
 };
 
-struct wlr_event_touch_up {
-	struct wlr_input_device *device;
+struct wlr_touch_up_event {
+	struct wlr_touch *touch;
 	uint32_t time_msec;
 	int32_t touch_id;
 };
 
-struct wlr_event_touch_motion {
-	struct wlr_input_device *device;
+struct wlr_touch_motion_event {
+	struct wlr_touch *touch;
 	uint32_t time_msec;
 	int32_t touch_id;
 	// From 0..1
 	double x, y;
 };
 
-struct wlr_event_touch_cancel {
-	struct wlr_input_device *device;
+struct wlr_touch_cancel_event {
+	struct wlr_touch *touch;
 	uint32_t time_msec;
 	int32_t touch_id;
 };
+
+/**
+ * Get a struct wlr_touch from a struct wlr_input_device.
+ *
+ * Asserts that the input device is a touch device.
+ */
+struct wlr_touch *wlr_touch_from_input_device(
+	struct wlr_input_device *input_device);
 
 #endif

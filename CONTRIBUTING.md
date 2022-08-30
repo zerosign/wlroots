@@ -13,7 +13,7 @@ If you already have your own merge request habits, feel free to use them. If you
 don't, however, allow me to make a suggestion: feature branches pulled from
 upstream. Try this:
 
-1. Fork wlroots
+1. Fork wlroots (make the fork public to allow the CI to run)
 2. `git clone git@gitlab.freedesktop.org:<username>/wlroots.git && cd wlroots`
 3. `git remote add upstream https://gitlab.freedesktop.org/wlroots/wlroots.git`
 
@@ -167,7 +167,6 @@ if (condition1 && condition2 && ...
 
 Try to break the line in the place which you think is the most appropriate.
 
-
 ### Line Length
 
 Try to keep your lines under 80 columns, but you can go up to 100 if it
@@ -190,16 +189,18 @@ Functions that are responsible for constructing objects should take one of the
 two following forms:
 
 * `init`: for functions which accept a pointer to a pre-allocated object (e.g.
-a member of a struct) and initialize it.
+a member of a struct) and initialize it. Such functions must call `memset()`
+to zero out the memory before initializing it to avoid leaving unset fields.
 * `create`: for functions which allocate the memory for an object, initialize
-it, and return a pointer.
+it, and return a pointer. Such functions should allocate the memory with
+`calloc()` to avoid leaving unset fields.
 
 Likewise, functions that are responsible for destructing objects should take
 one of the two following forms:
 
 * `finish`: for functions which accept a pointer to an object and deinitialize
-it. Such functions should always be able to accept an already deinitialized
-object.
+it. If a finished object isn't destroyed but kept for future use, it must be
+reinitialized to be used again.
 * `destroy`: for functions which accept a pointer to an object, deinitialize
 it, and free the memory. Such functions should always be able to accept a NULL
 pointer.
@@ -214,6 +215,19 @@ indicate whether they succeeded or not.
 Try to keep the use of macros to a minimum, especially if a function can do the
 job.  If you do need to use them, try to keep them close to where they're being
 used and `#undef` them after.
+
+### Documentation
+
+* Documentation comments for declarations start with `/**` and end with `*/`.
+* Cross-reference other declarations by ending function names with `()`, and
+  writing `struct`, `union`, `enum` or `typedef` before types.
+* Document fields which can be NULL with a `// may be NULL` comment, optionally
+  with more details describing when this can happen.
+* Document the bits of a bitfield with a `// enum bar` comment.
+* Document the `data` argument of a `struct wl_signal` with a `// struct foo`
+  comment.
+* Document the contents and container of a `struct wl_list` with a
+  `// content.link` and `// container.list` comment.
 
 ### Example
 

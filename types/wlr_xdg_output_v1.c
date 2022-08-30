@@ -6,7 +6,6 @@
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/util/log.h>
 #include "xdg-output-unstable-v1-protocol.h"
-#include "util/signal.h"
 
 #define OUTPUT_MANAGER_VERSION 3
 #define OUTPUT_DONE_DEPRECATED_SINCE_VERSION 3
@@ -128,11 +127,11 @@ static void output_manager_handle_get_xdg_output(struct wl_client *client,
 		wl_resource_get_link(xdg_output_resource));
 
 	// Name and description should only be sent once per output
-	uint32_t version = wl_resource_get_version(xdg_output_resource);
-	if (version >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION) {
+	uint32_t xdg_version = wl_resource_get_version(xdg_output_resource);
+	if (xdg_version >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION) {
 		zxdg_output_v1_send_name(xdg_output_resource, output->name);
 	}
-	if (version >= ZXDG_OUTPUT_V1_DESCRIPTION_SINCE_VERSION &&
+	if (xdg_version >= ZXDG_OUTPUT_V1_DESCRIPTION_SINCE_VERSION &&
 			output->description != NULL) {
 		zxdg_output_v1_send_description(xdg_output_resource,
 			output->description);
@@ -140,7 +139,11 @@ static void output_manager_handle_get_xdg_output(struct wl_client *client,
 
 	output_send_details(xdg_output, xdg_output_resource);
 
-	wl_output_send_done(output_resource);
+	uint32_t wl_version = wl_resource_get_version(output_resource);
+	if (wl_version >= WL_OUTPUT_DONE_SINCE_VERSION && 
+			xdg_version >= OUTPUT_DONE_DEPRECATED_SINCE_VERSION) {
+		wl_output_send_done(output_resource);
+	}
 }
 
 static const struct zxdg_output_manager_v1_interface
@@ -231,7 +234,7 @@ static void manager_destroy(struct wlr_xdg_output_manager_v1 *manager) {
 	wl_list_for_each_safe(output, tmp, &manager->outputs, link) {
 		output_destroy(output);
 	}
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wl_signal_emit_mutable(&manager->events.destroy, manager);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_list_remove(&manager->layout_add.link);
 	wl_list_remove(&manager->layout_change.link);

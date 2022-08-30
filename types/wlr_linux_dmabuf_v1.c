@@ -4,13 +4,13 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/util/log.h>
 #include "linux-dmabuf-unstable-v1-protocol.h"
 #include "render/drm_format_set.h"
-#include "util/signal.h"
 #include "util/shm.h"
 
 #define LINUX_DMABUF_VERSION 4
@@ -474,14 +474,10 @@ static ssize_t get_drm_format_set_index(const struct wlr_drm_format_set *set,
 			format_found = true;
 			break;
 		}
-		idx += 1 + fmt->len;
+		idx += fmt->len;
 	}
 	if (!format_found) {
 		return -1;
-	}
-
-	if (modifier == DRM_FORMAT_MOD_INVALID) {
-		return idx;
 	}
 
 	for (size_t i = 0; i < fmt->len; i++) {
@@ -505,7 +501,7 @@ static struct wlr_linux_dmabuf_feedback_v1_compiled *feedback_compile(
 	size_t table_len = 0;
 	for (size_t i = 0; i < fallback_tranche->formats->len; i++) {
 		const struct wlr_drm_format *fmt = fallback_tranche->formats->formats[i];
-		table_len += 1 + fmt->len;
+		table_len += fmt->len;
 	}
 	assert(table_len > 0);
 
@@ -531,12 +527,6 @@ static struct wlr_linux_dmabuf_feedback_v1_compiled *feedback_compile(
 	size_t n = 0;
 	for (size_t i = 0; i < fallback_tranche->formats->len; i++) {
 		const struct wlr_drm_format *fmt = fallback_tranche->formats->formats[i];
-
-		table[n] = (struct wlr_linux_dmabuf_feedback_v1_table_entry){
-			.format = fmt->format,
-			.modifier = DRM_FORMAT_MOD_INVALID,
-		};
-		n++;
 
 		for (size_t k = 0; k < fmt->len; k++) {
 			table[n] = (struct wlr_linux_dmabuf_feedback_v1_table_entry){
@@ -583,20 +573,6 @@ static struct wlr_linux_dmabuf_feedback_v1_compiled *feedback_compile(
 		uint16_t *indices = compiled_tranche->indices.data;
 		for (size_t j = 0; j < tranche->formats->len; j++) {
 			const struct wlr_drm_format *fmt = tranche->formats->formats[j];
-
-			ssize_t index = get_drm_format_set_index(
-				fallback_tranche->formats, fmt->format,
-				DRM_FORMAT_MOD_INVALID);
-			if (index < 0) {
-				wlr_log(WLR_ERROR, "Format 0x%" PRIX32 " and modifier "
-					"INVALID are in tranche #%zu but are missing "
-					"from the fallback tranche",
-					fmt->format, i);
-				goto error_compiled;
-			}
-			indices[n] = index;
-			n++;
-
 			for (size_t k = 0; k < fmt->len; k++) {
 				ssize_t index = get_drm_format_set_index(
 					fallback_tranche->formats, fmt->format, fmt->modifiers[k]);
@@ -910,7 +886,7 @@ static void linux_dmabuf_bind(struct wl_client *client, void *data,
 }
 
 static void linux_dmabuf_v1_destroy(struct wlr_linux_dmabuf_v1 *linux_dmabuf) {
-	wlr_signal_emit_safe(&linux_dmabuf->events.destroy, linux_dmabuf);
+	wl_signal_emit_mutable(&linux_dmabuf->events.destroy, linux_dmabuf);
 
 	struct wlr_linux_dmabuf_v1_surface *surface, *surface_tmp;
 	wl_list_for_each_safe(surface, surface_tmp, &linux_dmabuf->surfaces, link) {

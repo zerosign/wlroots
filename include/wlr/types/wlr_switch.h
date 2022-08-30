@@ -28,21 +28,27 @@ struct wlr_switch {
 };
 
 enum wlr_switch_type {
-	WLR_SWITCH_TYPE_LID = 1,
+	WLR_SWITCH_TYPE_LID,
 	WLR_SWITCH_TYPE_TABLET_MODE,
 };
 
 enum wlr_switch_state {
 	WLR_SWITCH_STATE_OFF = 0,
 	WLR_SWITCH_STATE_ON,
-	WLR_SWITCH_STATE_TOGGLE
 };
 
-struct wlr_event_switch_toggle {
-	struct wlr_input_device *device;
+struct wlr_switch_toggle_event {
 	uint32_t time_msec;
 	enum wlr_switch_type switch_type;
 	enum wlr_switch_state switch_state;
 };
+
+/**
+ * Get a struct wlr_switch from a struct wlr_input_device.
+ *
+ * Asserts that the input device is a switch.
+ */
+struct wlr_switch *wlr_switch_from_input_device(
+	struct wlr_input_device *input_device);
 
 #endif

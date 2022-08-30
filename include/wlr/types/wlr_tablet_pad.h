@@ -30,14 +30,14 @@ struct wlr_tablet_pad {
 		struct wl_signal button;
 		struct wl_signal ring;
 		struct wl_signal strip;
-		struct wl_signal attach_tablet; //struct wlr_tablet_tool
+		struct wl_signal attach_tablet; // struct wlr_tablet_tool
 	} events;
 
 	size_t button_count;
 	size_t ring_count;
 	size_t strip_count;
 
-	struct wl_list groups; // wlr_tablet_pad_group::link
+	struct wl_list groups; // wlr_tablet_pad_group.link
 	struct wl_array paths; // char *
 
 	void *data;
@@ -58,7 +58,7 @@ struct wlr_tablet_pad_group {
 	unsigned int mode_count;
 };
 
-struct wlr_event_tablet_pad_button {
+struct wlr_tablet_pad_button_event {
 	uint32_t time_msec;
 	uint32_t button;
 	enum wlr_button_state state;
@@ -71,7 +71,7 @@ enum wlr_tablet_pad_ring_source {
 	WLR_TABLET_PAD_RING_SOURCE_FINGER,
 };
 
-struct wlr_event_tablet_pad_ring {
+struct wlr_tablet_pad_ring_event {
 	uint32_t time_msec;
 	enum wlr_tablet_pad_ring_source source;
 	uint32_t ring;
@@ -84,12 +84,20 @@ enum wlr_tablet_pad_strip_source {
 	WLR_TABLET_PAD_STRIP_SOURCE_FINGER,
 };
 
-struct wlr_event_tablet_pad_strip {
+struct wlr_tablet_pad_strip_event {
 	uint32_t time_msec;
 	enum wlr_tablet_pad_strip_source source;
 	uint32_t strip;
 	double position;
 	unsigned int mode;
 };
+
+/**
+ * Get a struct wlr_tablet_pad from a struct wlr_input_device.
+ *
+ * Asserts that the input device is a tablet pad.
+ */
+struct wlr_tablet_pad *wlr_tablet_pad_from_input_device(
+	struct wlr_input_device *);
 
 #endif

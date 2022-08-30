@@ -5,12 +5,18 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_keyboard.h>
-#include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
+#include "interfaces/wlr_input_device.h"
 #include "types/wlr_keyboard.h"
-#include "util/array.h"
+#include "util/set.h"
 #include "util/shm.h"
-#include "util/signal.h"
+#include "util/time.h"
+
+struct wlr_keyboard *wlr_keyboard_from_input_device(
+		struct wlr_input_device *input_device) {
+	assert(input_device->type == WLR_INPUT_DEVICE_KEYBOARD);
+	return wl_container_of(input_device, (struct wlr_keyboard *)NULL, base);
+}
 
 void keyboard_led_update(struct wlr_keyboard *keyboard) {
 	if (keyboard->xkb_state == NULL) {
@@ -60,7 +66,7 @@ bool keyboard_modifier_update(struct wlr_keyboard *keyboard) {
 }
 
 void keyboard_key_update(struct wlr_keyboard *keyboard,
-		struct wlr_event_keyboard_key *event) {
+		struct wlr_keyboard_key_event *event) {
 	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		set_add(keyboard->keycodes, &keyboard->num_keycodes,
 			WLR_KEYBOARD_KEYS_CAP, event->keycode);
@@ -84,16 +90,16 @@ void wlr_keyboard_notify_modifiers(struct wlr_keyboard *keyboard,
 
 	bool updated = keyboard_modifier_update(keyboard);
 	if (updated) {
-		wlr_signal_emit_safe(&keyboard->events.modifiers, keyboard);
+		wl_signal_emit_mutable(&keyboard->events.modifiers, keyboard);
 	}
 
 	keyboard_led_update(keyboard);
 }
 
 void wlr_keyboard_notify_key(struct wlr_keyboard *keyboard,
-		struct wlr_event_keyboard_key *event) {
+		struct wlr_keyboard_key_event *event) {
 	keyboard_key_update(keyboard, event);
-	wlr_signal_emit_safe(&keyboard->events.key, event);
+	wl_signal_emit_mutable(&keyboard->events.key, event);
 
 	if (keyboard->xkb_state == NULL) {
 		return;
@@ -107,7 +113,7 @@ void wlr_keyboard_notify_key(struct wlr_keyboard *keyboard,
 
 	bool updated = keyboard_modifier_update(keyboard);
 	if (updated) {
-		wlr_signal_emit_safe(&keyboard->events.modifiers, keyboard);
+		wl_signal_emit_mutable(&keyboard->events.modifiers, keyboard);
 	}
 
 	keyboard_led_update(keyboard);
@@ -115,15 +121,14 @@ void wlr_keyboard_notify_key(struct wlr_keyboard *keyboard,
 
 void wlr_keyboard_init(struct wlr_keyboard *kb,
 		const struct wlr_keyboard_impl *impl, const char *name) {
+	memset(kb, 0, sizeof(*kb));
 	wlr_input_device_init(&kb->base, WLR_INPUT_DEVICE_KEYBOARD, name);
-	kb->base.keyboard = kb;
 
 	kb->impl = impl;
 	wl_signal_init(&kb->events.key);
 	wl_signal_init(&kb->events.modifiers);
 	wl_signal_init(&kb->events.keymap);
 	wl_signal_init(&kb->events.repeat_info);
-	wl_signal_init(&kb->events.destroy);
 
 	kb->keymap_fd = -1;
 
@@ -132,24 +137,28 @@ void wlr_keyboard_init(struct wlr_keyboard *kb,
 	kb->repeat_info.delay = 600;
 }
 
-void wlr_keyboard_destroy(struct wlr_keyboard *kb) {
-	if (kb == NULL) {
-		return;
+void wlr_keyboard_finish(struct wlr_keyboard *kb) {
+	/* Release pressed keys */
+	size_t orig_num_keycodes = kb->num_keycodes;
+	for (size_t i = 0; i < orig_num_keycodes; ++i) {
+		assert(kb->num_keycodes == orig_num_keycodes - i);
+		struct wlr_keyboard_key_event event = {
+			.time_msec = get_current_time_msec(),
+			.keycode = kb->keycodes[orig_num_keycodes - i - 1],
+			.update_state = false,
+			.state = WL_KEYBOARD_KEY_STATE_RELEASED,
+		};
+		wlr_keyboard_notify_key(kb, &event);  // updates num_keycodes
 	}
-	wlr_signal_emit_safe(&kb->events.destroy, kb);
+
 	wlr_input_device_finish(&kb->base);
 
+	/* Finish xkbcommon resources */
 	xkb_state_unref(kb->xkb_state);
 	xkb_keymap_unref(kb->keymap);
 	free(kb->keymap_string);
 	if (kb->keymap_fd >= 0) {
 		close(kb->keymap_fd);
-	}
-	if (kb->impl && kb->impl->destroy) {
-		kb->impl->destroy(kb);
-	} else {
-		wl_list_remove(&kb->events.key.listener_list);
-		free(kb);
 	}
 }
 
@@ -236,7 +245,7 @@ bool wlr_keyboard_set_keymap(struct wlr_keyboard *kb,
 
 	keyboard_modifier_update(kb);
 
-	wlr_signal_emit_safe(&kb->events.keymap, kb);
+	wl_signal_emit_mutable(&kb->events.keymap, kb);
 	return true;
 
 err:
@@ -256,7 +265,7 @@ void wlr_keyboard_set_repeat_info(struct wlr_keyboard *kb, int32_t rate,
 	}
 	kb->repeat_info.rate = rate;
 	kb->repeat_info.delay = delay;
-	wlr_signal_emit_safe(&kb->events.repeat_info, kb);
+	wl_signal_emit_mutable(&kb->events.repeat_info, kb);
 }
 
 uint32_t wlr_keyboard_get_modifiers(struct wlr_keyboard *kb) {

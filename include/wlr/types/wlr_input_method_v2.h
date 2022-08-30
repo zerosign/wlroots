@@ -51,10 +51,10 @@ struct wlr_input_method_v2 {
 	struct wl_listener seat_client_destroy;
 
 	struct {
-		struct wl_signal commit; // (struct wlr_input_method_v2*)
-		struct wl_signal new_popup_surface; // (struct wlr_input_popup_surface_v2*)
-		struct wl_signal grab_keyboard; // (struct wlr_input_method_keyboard_grab_v2*)
-		struct wl_signal destroy; // (struct wlr_input_method_v2*)
+		struct wl_signal commit; // struct wlr_input_method_v2 *
+		struct wl_signal new_popup_surface; // struct wlr_input_popup_surface_v2 *
+		struct wl_signal grab_keyboard; // struct wlr_input_method_keyboard_grab_v2 *
+		struct wl_signal destroy; // struct wlr_input_method_v2 *
 	} events;
 };
 
@@ -87,19 +87,19 @@ struct wlr_input_method_keyboard_grab_v2 {
 	struct wl_listener keyboard_destroy;
 
 	struct {
-		struct wl_signal destroy; // (struct wlr_input_method_keyboard_grab_v2*)
+		struct wl_signal destroy; // struct wlr_input_method_keyboard_grab_v2 *
 	} events;
 };
 
 struct wlr_input_method_manager_v2 {
 	struct wl_global *global;
-	struct wl_list input_methods; // struct wlr_input_method_v2*::link
+	struct wl_list input_methods; // struct wlr_input_method_v2.link
 
 	struct wl_listener display_destroy;
 
 	struct {
-		struct wl_signal input_method; // (struct wlr_input_method_v2*)
-		struct wl_signal destroy; // (struct wlr_input_method_manager_v2*)
+		struct wl_signal input_method; // struct wlr_input_method_v2 *
+		struct wl_signal destroy; // struct wlr_input_method_manager_v2 *
 	} events;
 };
 
@@ -122,9 +122,20 @@ void wlr_input_method_v2_send_done(struct wlr_input_method_v2 *input_method);
 void wlr_input_method_v2_send_unavailable(
 	struct wlr_input_method_v2 *input_method);
 
+/**
+ * Returns true if the surface has the input popup surface role.
+ */
 bool wlr_surface_is_input_popup_surface_v2(struct wlr_surface *surface);
+
+/**
+ * Get a struct wlr_input_popup_surface_v2 from a struct wlr_surface.
+ * Asserts that the surface has the input popup surface role.
+ * May return NULL even if the surface has the input popup surface role if the
+ * corresponding input popup surface has been destroyed.
+ */
 struct wlr_input_popup_surface_v2 *wlr_input_popup_surface_v2_from_wlr_surface(
 	struct wlr_surface *surface);
+
 void wlr_input_popup_surface_v2_send_text_input_rectangle(
     struct wlr_input_popup_surface_v2 *popup_surface, struct wlr_box *sbox);
 

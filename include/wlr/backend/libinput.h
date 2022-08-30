@@ -13,11 +13,14 @@
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/backend/session.h>
-#include <wlr/types/wlr_input_device.h>
+
+struct wlr_input_device;
 
 struct wlr_backend *wlr_libinput_backend_create(struct wl_display *display,
 		struct wlr_session *session);
-/** Gets the underlying libinput_device handle for the given wlr_input_device */
+/**
+ * Gets the underlying struct libinput_device handle for the given input device.
+ */
 struct libinput_device *wlr_libinput_get_device_handle(
 		struct wlr_input_device *dev);
 

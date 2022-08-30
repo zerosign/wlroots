@@ -2,9 +2,6 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "tablet-unstable-v2-protocol.h"
-#include "util/array.h"
-#include "util/time.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <types/wlr_tablet_v2.h>
@@ -13,6 +10,9 @@
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/util/log.h>
+#include "util/set.h"
+#include "util/time.h"
+#include "tablet-unstable-v2-protocol.h"
 
 static const struct wlr_tablet_tool_v2_grab_interface default_tool_grab_interface;
 
@@ -46,7 +46,7 @@ static void handle_tablet_tool_v2_set_cursor(struct wl_client *client,
 		.seat_client = tool->seat->seat_client,
 	};
 
-	wl_signal_emit(&tool->tool->events.set_cursor, &evt);
+	wl_signal_emit_mutable(&tool->tool->events.set_cursor, &evt);
 }
 
 static void handle_tablet_tool_v2_destroy(struct wl_client *client,
@@ -257,50 +257,26 @@ struct wlr_tablet_tool_client_v2 *tablet_tool_client_from_resource(struct wl_res
 	return wl_resource_get_user_data(resource);
 }
 
-
-/* Actual protocol foo */
-
-// Button 0 is KEY_RESERVED in input-event-codes on linux (and freebsd)
 static ssize_t tablet_tool_button_update(struct wlr_tablet_v2_tablet_tool *tool,
 		uint32_t button, enum zwp_tablet_pad_v2_button_state state) {
-	bool found = false;
-	size_t i = 0;
-	for (; i < tool->num_buttons; ++i) {
-		if (tool->pressed_buttons[i] == button) {
-			found = true;
-			wlr_log(WLR_DEBUG, "Found the button \\o/: %u", button);
-			break;
-
-		}
-	}
-
-	if (state == ZWP_TABLET_PAD_V2_BUTTON_STATE_PRESSED && found) {
-		/* Already have the button saved, durr */
-		return -1;
-	}
-
-	if (state == ZWP_TABLET_PAD_V2_BUTTON_STATE_PRESSED && !found) {
-		if (tool->num_buttons < WLR_TABLET_V2_TOOL_BUTTONS_CAP) {
-			i = tool->num_buttons++;
-			tool->pressed_buttons[i] = button;
+	ssize_t i;
+	if (state == ZWP_TABLET_PAD_V2_BUTTON_STATE_PRESSED) {
+		i = set_add(tool->pressed_buttons, &tool->num_buttons,
+			WLR_TABLET_V2_TOOL_BUTTONS_CAP, button);
+		if (i != -1) {
 			tool->pressed_serials[i] = -1;
 		} else {
-			i = -1;
-			wlr_log(WLR_ERROR, "You pressed more than %d tablet tool buttons. "
-				"This is currently not supported by wlroots. Please report this "
-				"with a description of your tablet, since this is either a "
-				"bug, or fancy hardware", WLR_TABLET_V2_TOOL_BUTTONS_CAP);
+			wlr_log(WLR_ERROR, "Failed to add tablet tool button %x", button);
+		}
+	} else {
+		i = set_remove(tool->pressed_buttons, &tool->num_buttons,
+			WLR_TABLET_V2_TOOL_BUTTONS_CAP, button);
+		if (i != -1) {
+			tool->pressed_serials[i] = tool->pressed_serials[tool->num_buttons];
+		} else {
+			wlr_log(WLR_ERROR, "Failed to remove tablet tool button %x", button);
 		}
 	}
-	if (state == ZWP_TABLET_PAD_V2_BUTTON_STATE_RELEASED && found) {
-		wlr_log(WLR_DEBUG, "Removed the button \\o/: %u", button);
-		tool->pressed_buttons[i] = 0;
-		tool->pressed_serials[i] = 0;
-		tool->num_buttons = push_zeroes_to_end(tool->pressed_buttons, WLR_TABLET_V2_TOOL_BUTTONS_CAP);
-		tool->num_buttons = push_zeroes_to_end(tool->pressed_serials, WLR_TABLET_V2_TOOL_BUTTONS_CAP);
-	}
-
-	assert(tool->num_buttons <= WLR_TABLET_V2_TOOL_BUTTONS_CAP);
 	return i;
 }
 

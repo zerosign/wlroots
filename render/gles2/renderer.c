@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <drm_fourcc.h>
-#include <gbm.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <stdint.h>
@@ -18,6 +17,7 @@
 #include "render/egl.h"
 #include "render/gles2.h"
 #include "render/pixel_format.h"
+#include "types/wlr_matrix.h"
 
 static const GLfloat verts[] = {
 	1, 0, // top right
@@ -204,8 +204,8 @@ static void gles2_begin(struct wlr_renderer *wlr_renderer, uint32_t width,
 	renderer->viewport_height = height;
 
 	// refresh projection matrix
-	wlr_matrix_projection(renderer->projection, width, height,
-			WL_OUTPUT_TRANSFORM_NORMAL);
+	matrix_projection(renderer->projection, width, height,
+		WL_OUTPUT_TRANSFORM_FLIPPED_180);
 
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -246,12 +246,6 @@ static void gles2_scissor(struct wlr_renderer *wlr_renderer,
 	pop_gles2_debug(renderer);
 }
 
-static const float flip_180[9] = {
-	1.0f, 0.0f, 0.0f,
-	0.0f, -1.0f, 0.0f,
-	0.0f, 0.0f, 1.0f,
-};
-
 static bool gles2_render_subtexture_with_matrix(
 		struct wlr_renderer *wlr_renderer, struct wlr_texture *wlr_texture,
 		const struct wlr_fbox *box, const float matrix[static 9],
@@ -287,7 +281,6 @@ static bool gles2_render_subtexture_with_matrix(
 
 	float gl_matrix[9];
 	wlr_matrix_multiply(gl_matrix, renderer->projection, matrix);
-	wlr_matrix_multiply(gl_matrix, flip_180, gl_matrix);
 
 	// OpenGL ES 2 requires the glUniformMatrix3fv transpose parameter to be set
 	// to GL_FALSE
@@ -347,7 +340,6 @@ static void gles2_render_quad_with_matrix(struct wlr_renderer *wlr_renderer,
 
 	float gl_matrix[9];
 	wlr_matrix_multiply(gl_matrix, renderer->projection, matrix);
-	wlr_matrix_multiply(gl_matrix, flip_180, gl_matrix);
 
 	// OpenGL ES 2 requires the glUniformMatrix3fv transpose parameter to be set
 	// to GL_FALSE
@@ -403,15 +395,10 @@ static uint32_t gles2_preferred_read_format(
 
 	push_gles2_debug(renderer);
 
-	GLint gl_format = -1, gl_type = -1;
+	GLint gl_format = -1, gl_type = -1, alpha_size = -1;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &gl_format);
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &gl_type);
-
-	EGLint alpha_size = -1;
-	glBindRenderbuffer(GL_RENDERBUFFER, renderer->current_buffer->rbo);
-	glGetRenderbufferParameteriv(GL_RENDERBUFFER,
-		GL_RENDERBUFFER_ALPHA_SIZE, &alpha_size);
-	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+	glGetIntegerv(GL_ALPHA_BITS, &alpha_size);
 
 	pop_gles2_debug(renderer);
 
@@ -764,6 +751,9 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 
 	renderer->exts.OES_texture_half_float_linear =
 		check_gl_ext(exts_str, "GL_OES_texture_half_float_linear");
+
+	renderer->exts.EXT_texture_norm16 =
+		check_gl_ext(exts_str, "GL_EXT_texture_norm16");
 
 	if (check_gl_ext(exts_str, "GL_KHR_debug")) {
 		renderer->exts.KHR_debug = true;

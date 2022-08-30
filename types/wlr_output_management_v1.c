@@ -3,10 +3,9 @@
 #include <stdlib.h>
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/util/log.h>
-#include "util/signal.h"
 #include "wlr-output-management-unstable-v1-protocol.h"
 
-#define OUTPUT_MANAGER_VERSION 2
+#define OUTPUT_MANAGER_VERSION 3
 
 enum {
 	HEAD_STATE_ENABLED = 1 << 0,
@@ -19,19 +18,23 @@ enum {
 static const uint32_t HEAD_STATE_ALL = HEAD_STATE_ENABLED | HEAD_STATE_MODE |
 	HEAD_STATE_POSITION | HEAD_STATE_TRANSFORM | HEAD_STATE_SCALE;
 
+static const struct zwlr_output_head_v1_interface head_impl;
 
 // Can return NULL if the head is inert
 static struct wlr_output_head_v1 *head_from_resource(
 		struct wl_resource *resource) {
 	assert(wl_resource_instance_of(resource,
-		&zwlr_output_head_v1_interface, NULL));
+		&zwlr_output_head_v1_interface, &head_impl));
 	return wl_resource_get_user_data(resource);
 }
 
+static const struct zwlr_output_mode_v1_interface output_mode_impl;
+
+// Can return NULL if the mode is inert
 static struct wlr_output_mode *mode_from_resource(
 		struct wl_resource *resource) {
 	assert(wl_resource_instance_of(resource,
-		&zwlr_output_mode_v1_interface, NULL));
+		&zwlr_output_mode_v1_interface, &output_mode_impl));
 	return wl_resource_get_user_data(resource);
 }
 
@@ -42,11 +45,15 @@ static void head_destroy(struct wlr_output_head_v1 *head) {
 	struct wl_resource *resource, *tmp;
 	wl_resource_for_each_safe(resource, tmp, &head->mode_resources) {
 		zwlr_output_mode_v1_send_finished(resource);
-		wl_resource_destroy(resource);
+		wl_list_remove(wl_resource_get_link(resource));
+		wl_list_init(wl_resource_get_link(resource));
+		wl_resource_set_user_data(resource, NULL);
 	}
 	wl_resource_for_each_safe(resource, tmp, &head->resources) {
 		zwlr_output_head_v1_send_finished(resource);
-		wl_resource_destroy(resource);
+		wl_list_remove(wl_resource_get_link(resource));
+		wl_list_init(wl_resource_get_link(resource));
+		wl_resource_set_user_data(resource, NULL);
 	}
 	wl_list_remove(&head->link);
 	wl_list_remove(&head->output_destroy.link);
@@ -413,7 +420,7 @@ static void config_handle_apply(struct wl_client *client,
 		return;
 	}
 
-	wlr_signal_emit_safe(&config->manager->events.apply, config);
+	wl_signal_emit_mutable(&config->manager->events.apply, config);
 }
 
 static void config_handle_test(struct wl_client *client,
@@ -432,7 +439,7 @@ static void config_handle_test(struct wl_client *client,
 		return;
 	}
 
-	wlr_signal_emit_safe(&config->manager->events.test, config);
+	wl_signal_emit_mutable(&config->manager->events.test, config);
 }
 
 static void config_handle_destroy(struct wl_client *client,
@@ -589,7 +596,7 @@ static void manager_handle_display_destroy(struct wl_listener *listener,
 		void *data) {
 	struct wlr_output_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wl_signal_emit_mutable(&manager->events.destroy, manager);
 	wl_list_remove(&manager->display_destroy.link);
 	struct wlr_output_head_v1 *head, *tmp;
 	wl_list_for_each_safe(head, tmp, &manager->heads, link) {
@@ -649,9 +656,18 @@ static void send_mode_state(struct wl_resource *mode_resource,
 	}
 }
 
-static void mode_handle_resource_destroy(struct wl_resource *resource) {
+static void output_mode_handle_resource_destroy(struct wl_resource *resource) {
 	wl_list_remove(wl_resource_get_link(resource));
 }
+
+static void output_mode_handle_release(struct wl_client *client,
+		struct wl_resource *resource) {
+	wl_resource_destroy(resource);
+}
+
+static const struct zwlr_output_mode_v1_interface output_mode_impl = {
+	.release = output_mode_handle_release,
+};
 
 static struct wl_resource *head_send_mode(struct wlr_output_head_v1 *head,
 		struct wl_resource *head_resource, struct wlr_output_mode *mode) {
@@ -663,8 +679,8 @@ static struct wl_resource *head_send_mode(struct wlr_output_head_v1 *head,
 		wl_resource_post_no_memory(head_resource);
 		return NULL;
 	}
-	wl_resource_set_implementation(mode_resource, NULL, mode,
-		mode_handle_resource_destroy);
+	wl_resource_set_implementation(mode_resource, &output_mode_impl, mode,
+		output_mode_handle_resource_destroy);
 	wl_list_insert(&head->mode_resources, wl_resource_get_link(mode_resource));
 
 	zwlr_output_head_v1_send_mode(head_resource, mode_resource);
@@ -740,6 +756,15 @@ static void head_handle_resource_destroy(struct wl_resource *resource) {
 	wl_list_remove(wl_resource_get_link(resource));
 }
 
+static void head_handle_release(struct wl_client *client,
+		struct wl_resource *resource) {
+	wl_resource_destroy(resource);
+}
+
+static const struct zwlr_output_head_v1_interface head_impl = {
+	.release = head_handle_release,
+};
+
 static void manager_send_head(struct wlr_output_manager_v1 *manager,
 		struct wlr_output_head_v1 *head, struct wl_resource *manager_resource) {
 	struct wlr_output *output = head->state.output;
@@ -752,7 +777,7 @@ static void manager_send_head(struct wlr_output_manager_v1 *manager,
 		wl_resource_post_no_memory(manager_resource);
 		return;
 	}
-	wl_resource_set_implementation(head_resource, NULL, head,
+	wl_resource_set_implementation(head_resource, &head_impl, head,
 		head_handle_resource_destroy);
 	wl_list_insert(&head->resources, wl_resource_get_link(head_resource));
 
@@ -767,13 +792,13 @@ static void manager_send_head(struct wlr_output_manager_v1 *manager,
 			output->phys_width, output->phys_height);
 	}
 
-	if (version >= ZWLR_OUTPUT_HEAD_V1_MAKE_SINCE_VERSION && output->make[0] != '\0') {
+	if (version >= ZWLR_OUTPUT_HEAD_V1_MAKE_SINCE_VERSION && output->make != NULL) {
 		zwlr_output_head_v1_send_make(head_resource, output->make);
 	}
-	if (version >= ZWLR_OUTPUT_HEAD_V1_MODEL_SINCE_VERSION && output->model[0] != '\0') {
+	if (version >= ZWLR_OUTPUT_HEAD_V1_MODEL_SINCE_VERSION && output->model != NULL) {
 		zwlr_output_head_v1_send_model(head_resource, output->model);
 	}
-	if (version >= ZWLR_OUTPUT_HEAD_V1_SERIAL_NUMBER_SINCE_VERSION && output->serial[0] != '\0') {
+	if (version >= ZWLR_OUTPUT_HEAD_V1_SERIAL_NUMBER_SINCE_VERSION && output->serial != NULL) {
 		zwlr_output_head_v1_send_serial_number(head_resource, output->serial);
 	}
 
@@ -906,4 +931,26 @@ void wlr_output_manager_v1_set_configuration(
 			manager->serial);
 	}
 	manager->current_configuration_dirty = false;
+}
+
+void wlr_output_head_v1_state_apply(
+		const struct wlr_output_head_v1_state *head_state,
+		struct wlr_output_state *output_state) {
+	wlr_output_state_set_enabled(output_state, head_state->enabled);
+
+	if (!head_state->enabled) {
+		return;
+	}
+
+	if (head_state->mode != NULL) {
+		wlr_output_state_set_mode(output_state, head_state->mode);
+	} else {
+		wlr_output_state_set_custom_mode(output_state,
+			head_state->custom_mode.width,
+			head_state->custom_mode.height,
+			head_state->custom_mode.refresh);
+	}
+
+	wlr_output_state_set_scale(output_state, head_state->scale);
+	wlr_output_state_set_transform(output_state, head_state->transform);
 }

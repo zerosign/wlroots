@@ -11,6 +11,7 @@
 #include <wlr/util/region.h>
 #include <xf86drm.h>
 #include "render/egl.h"
+#include "util/env.h"
 
 static enum wlr_log_importance egl_log_importance_to_wlr(EGLint type) {
 	switch (type) {
@@ -284,8 +285,7 @@ static bool egl_init_display(struct wlr_egl *egl, EGLDisplay *display) {
 		}
 
 		if (check_egl_ext(device_exts_str, "EGL_MESA_device_software")) {
-			const char *allow_software = getenv("WLR_RENDERER_ALLOW_SOFTWARE");
-			if (allow_software != NULL && strcmp(allow_software, "1") == 0) {
+			if (env_parse_bool("WLR_RENDERER_ALLOW_SOFTWARE")) {
 				wlr_log(WLR_INFO, "Using software rendering");
 			} else {
 				wlr_log(WLR_ERROR, "Software rendering detected, please use "
@@ -440,6 +440,7 @@ static EGLDeviceEXT get_egl_device_from_drm_fd(struct wlr_egl *egl,
 		}
 	}
 
+	drmFreeDevice(&device);
 	free(devices);
 
 	return egl_device;
@@ -551,6 +552,7 @@ struct wlr_egl *wlr_egl_create_with_context(EGLDisplay display,
 	}
 
 	if (!egl_init_display(egl, display)) {
+		free(egl);
 		return NULL;
 	}
 
@@ -580,6 +582,14 @@ void wlr_egl_destroy(struct wlr_egl *egl) {
 	}
 
 	free(egl);
+}
+
+EGLDisplay wlr_egl_get_display(struct wlr_egl *egl) {
+	return egl->display;
+}
+
+EGLContext wlr_egl_get_context(struct wlr_egl *egl) {
+	return egl->context;
 }
 
 bool wlr_egl_destroy_image(struct wlr_egl *egl, EGLImage image) {

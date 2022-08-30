@@ -4,7 +4,6 @@
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/util/log.h>
 #include "backend/headless.h"
-#include "util/signal.h"
 
 static const uint32_t SUPPORTED_OUTPUT_STATE =
 	WLR_OUTPUT_STATE_BACKEND_OPTIONAL |
@@ -29,46 +28,49 @@ static bool output_set_custom_mode(struct wlr_headless_output *output,
 	return true;
 }
 
-static bool output_test(struct wlr_output *wlr_output) {
-	uint32_t unsupported =
-		wlr_output->pending.committed & ~SUPPORTED_OUTPUT_STATE;
+static bool output_test(struct wlr_output *wlr_output,
+		const struct wlr_output_state *state) {
+	uint32_t unsupported = state->committed & ~SUPPORTED_OUTPUT_STATE;
 	if (unsupported != 0) {
 		wlr_log(WLR_DEBUG, "Unsupported output state fields: 0x%"PRIx32,
 			unsupported);
 		return false;
 	}
 
-	if (wlr_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
-		assert(wlr_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
+	if (state->committed & WLR_OUTPUT_STATE_MODE) {
+		assert(state->mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
 	}
 
 	return true;
 }
 
-static bool output_commit(struct wlr_output *wlr_output) {
+static bool output_commit(struct wlr_output *wlr_output,
+		const struct wlr_output_state *state) {
 	struct wlr_headless_output *output =
 		headless_output_from_output(wlr_output);
 
-	if (!output_test(wlr_output)) {
+	if (!output_test(wlr_output, state)) {
 		return false;
 	}
 
-	if (wlr_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
+	if (state->committed & WLR_OUTPUT_STATE_MODE) {
 		if (!output_set_custom_mode(output,
-				wlr_output->pending.custom_mode.width,
-				wlr_output->pending.custom_mode.height,
-				wlr_output->pending.custom_mode.refresh)) {
+				state->custom_mode.width,
+				state->custom_mode.height,
+				state->custom_mode.refresh)) {
 			return false;
 		}
 	}
 
-	if (wlr_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) {
+	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
 		struct wlr_output_event_present present_event = {
 			.commit_seq = wlr_output->commit_seq + 1,
 			.presented = true,
 		};
 		wlr_output_send_present(wlr_output, &present_event);
 	}
+
+	wl_event_source_timer_update(output->frame_timer, output->frame_delay);
 
 	return true;
 }
@@ -93,7 +95,6 @@ bool wlr_output_is_headless(struct wlr_output *wlr_output) {
 static int signal_frame(void *data) {
 	struct wlr_headless_output *output = data;
 	wlr_output_send_frame(&output->wlr_output);
-	wl_event_source_timer_update(output->frame_timer, output->frame_delay);
 	return 0;
 }
 
@@ -114,8 +115,6 @@ struct wlr_output *wlr_headless_add_output(struct wlr_backend *wlr_backend,
 	struct wlr_output *wlr_output = &output->wlr_output;
 
 	output_set_custom_mode(output, width, height, 0);
-	strncpy(wlr_output->make, "headless", sizeof(wlr_output->make));
-	strncpy(wlr_output->model, "headless", sizeof(wlr_output->model));
 
 	char name[64];
 	snprintf(name, sizeof(name), "HEADLESS-%zu", ++backend->last_output_num);
@@ -134,7 +133,7 @@ struct wlr_output *wlr_headless_add_output(struct wlr_backend *wlr_backend,
 	if (backend->started) {
 		wl_event_source_timer_update(output->frame_timer, output->frame_delay);
 		wlr_output_update_enabled(wlr_output, true);
-		wlr_signal_emit_safe(&backend->backend.events.new_output, wlr_output);
+		wl_signal_emit_mutable(&backend->backend.events.new_output, wlr_output);
 	}
 
 	return wlr_output;

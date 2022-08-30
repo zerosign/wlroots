@@ -9,6 +9,7 @@
 #ifndef WLR_RENDER_WLR_TEXTURE_H
 #define WLR_RENDER_WLR_TEXTURE_H
 
+#include <pixman.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/render/dmabuf.h>
@@ -25,9 +26,6 @@ struct wlr_texture {
 /**
  * Create a new texture from raw pixel data. `stride` is in bytes. The returned
  * texture is mutable.
- *
- * Should not be called in a rendering block like renderer_begin()/end() or
- * between attaching a renderer to an output and committing it.
  */
 struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
 	uint32_t fmt, uint32_t stride, uint32_t width, uint32_t height,
@@ -35,40 +33,30 @@ struct wlr_texture *wlr_texture_from_pixels(struct wlr_renderer *renderer,
 
 /**
  * Create a new texture from a DMA-BUF. The returned texture is immutable.
- *
- * Should not be called in a rendering block like renderer_begin()/end() or
- * between attaching a renderer to an output and committing it.
  */
 struct wlr_texture *wlr_texture_from_dmabuf(struct wlr_renderer *renderer,
 	struct wlr_dmabuf_attributes *attribs);
 
 /**
- * Returns true if this texture is using a fully opaque format.
- */
-bool wlr_texture_is_opaque(struct wlr_texture *texture);
-
-/**
-  * Update a texture with raw pixels. The texture must be mutable, and the input
-  * data must have the same pixel format that the texture was created with.
+  * Update a texture with a struct wlr_buffer's contents.
   *
-  * Should not be called in a rendering block like renderer_begin()/end() or
-  * between attaching a renderer to an output and committing it.
+  * The update might be rejected (in case the texture is immutable, the buffer
+  * has an unsupported type/format, etc), so callers must be prepared to fall
+  * back to re-creating the texture from scratch via wlr_texture_from_buffer().
+  *
+  * The damage can be used by the renderer as an optimization: only the supplied
+  * region needs to be updated.
   */
-bool wlr_texture_write_pixels(struct wlr_texture *texture,
-	uint32_t stride, uint32_t width, uint32_t height,
-	uint32_t src_x, uint32_t src_y, uint32_t dst_x, uint32_t dst_y,
-	const void *data);
+bool wlr_texture_update_from_buffer(struct wlr_texture *texture,
+	struct wlr_buffer *buffer, pixman_region32_t *damage);
 
 /**
- * Destroys this wlr_texture.
+ * Destroys the texture.
  */
 void wlr_texture_destroy(struct wlr_texture *texture);
 
 /**
  * Create a new texture from a buffer.
- *
- * Should not be called in a rendering block like renderer_begin()/end() or
- * between attaching a renderer to an output and committing it.
  */
 struct wlr_texture *wlr_texture_from_buffer(struct wlr_renderer *renderer,
 	struct wlr_buffer *buffer);

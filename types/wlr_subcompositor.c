@@ -4,7 +4,6 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include "types/wlr_region.h"
-#include "util/signal.h"
 
 #define SUBCOMPOSITOR_VERSION 1
 
@@ -37,7 +36,7 @@ static void subsurface_destroy(struct wlr_subsurface *subsurface) {
 
 	subsurface_unmap(subsurface);
 
-	wlr_signal_emit_safe(&subsurface->events.destroy, subsurface);
+	wl_signal_emit_mutable(&subsurface->events.destroy, subsurface);
 
 	wl_list_remove(&subsurface->surface_destroy.link);
 	wl_list_remove(&subsurface->surface_client_commit.link);
@@ -229,8 +228,8 @@ static void subsurface_consider_map(struct wlr_subsurface *subsurface,
 	}
 
 	// Now we can map the subsurface
-	wlr_signal_emit_safe(&subsurface->events.map, subsurface);
 	subsurface->mapped = true;
+	wl_signal_emit_mutable(&subsurface->events.map, subsurface);
 
 	// Try mapping all children too
 	struct wlr_subsurface *child;
@@ -249,8 +248,8 @@ static void subsurface_unmap(struct wlr_subsurface *subsurface) {
 		return;
 	}
 
-	wlr_signal_emit_safe(&subsurface->events.unmap, subsurface);
 	subsurface->mapped = false;
+	wl_signal_emit_mutable(&subsurface->events.unmap, subsurface);
 
 	// Unmap all children
 	struct wlr_subsurface *child;
@@ -374,6 +373,8 @@ static struct wlr_subsurface *subsurface_create(struct wlr_surface *surface,
 
 	surface->role_data = subsurface;
 
+	subsurface_consider_map(subsurface, true);
+
 	return subsurface;
 }
 
@@ -456,7 +457,7 @@ static void subcompositor_handle_display_destroy(
 		struct wl_listener *listener, void *data) {
 	struct wlr_subcompositor *subcompositor =
 		wl_container_of(listener, subcompositor, display_destroy);
-	wlr_signal_emit_safe(&subcompositor->events.destroy, NULL);
+	wl_signal_emit_mutable(&subcompositor->events.destroy, NULL);
 	wl_list_remove(&subcompositor->display_destroy.link);
 	wl_global_destroy(subcompositor->global);
 	free(subcompositor);

@@ -70,7 +70,7 @@ struct sample_output {
 
 struct sample_keyboard {
 	struct sample_state *state;
-	struct wlr_input_device *device;
+	struct wlr_keyboard *wlr_keyboard;
 	struct wl_listener key;
 	struct wl_listener destroy;
 };
@@ -112,8 +112,8 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 static void handle_cursor_motion(struct wl_listener *listener, void *data) {
 	struct sample_state *sample =
 		wl_container_of(listener, sample, cursor_motion);
-	struct wlr_event_pointer_motion *event = data;
-	wlr_cursor_move(sample->cursor, event->device, event->delta_x,
+	struct wlr_pointer_motion_event *event = data;
+	wlr_cursor_move(sample->cursor, &event->pointer->base, event->delta_x,
 			event->delta_y);
 }
 
@@ -121,19 +121,19 @@ static void handle_cursor_motion_absolute(struct wl_listener *listener,
 		void *data) {
 	struct sample_state *sample =
 		wl_container_of(listener, sample, cursor_motion_absolute);
-	struct wlr_event_pointer_motion_absolute *event = data;
+	struct wlr_pointer_motion_absolute_event *event = data;
 
 	sample->cur_x = event->x;
 	sample->cur_y = event->y;
 
-	wlr_cursor_warp_absolute(sample->cursor, event->device, sample->cur_x,
-		sample->cur_y);
+	wlr_cursor_warp_absolute(sample->cursor, &event->pointer->base,
+		sample->cur_x, sample->cur_y);
 }
 
 static void handle_cursor_button(struct wl_listener *listener, void *data) {
 	struct sample_state *sample =
 		wl_container_of(listener, sample, cursor_button);
-	struct wlr_event_pointer_button *event = data;
+	struct wlr_pointer_button_event *event = data;
 
 	float (*color)[4];
 	if (event->state == WLR_BUTTON_RELEASED) {
@@ -150,7 +150,7 @@ static void handle_cursor_button(struct wl_listener *listener, void *data) {
 static void handle_cursor_axis(struct wl_listener *listener, void *data) {
 	struct sample_state *sample =
 		wl_container_of(listener, sample, cursor_axis);
-	struct wlr_event_pointer_axis *event = data;
+	struct wlr_pointer_axis_event *event = data;
 
 	for (size_t i = 0; i < 3; ++i) {
 		sample->default_color[i] += event->delta > 0 ? -0.05f : 0.05f;
@@ -168,7 +168,7 @@ static void handle_cursor_axis(struct wl_listener *listener, void *data) {
 
 static void handle_touch_up(struct wl_listener *listener, void *data) {
 	struct sample_state *sample = wl_container_of(listener, sample, touch_up);
-	struct wlr_event_touch_up *event = data;
+	struct wlr_touch_up_event  *event = data;
 
 	struct touch_point *point, *tmp;
 	wl_list_for_each_safe(point, tmp, &sample->touch_points, link) {
@@ -178,25 +178,25 @@ static void handle_touch_up(struct wl_listener *listener, void *data) {
 		}
 	}
 
-	warp_to_touch(sample, event->device);
+	warp_to_touch(sample, &event->touch->base);
 }
 
 static void handle_touch_down(struct wl_listener *listener, void *data) {
 	struct sample_state *sample = wl_container_of(listener, sample, touch_down);
-	struct wlr_event_touch_down *event = data;
+	struct wlr_touch_down_event  *event = data;
 	struct touch_point *point = calloc(1, sizeof(struct touch_point));
 	point->touch_id = event->touch_id;
 	point->x = event->x;
 	point->y = event->y;
 	wl_list_insert(&sample->touch_points, &point->link);
 
-	warp_to_touch(sample, event->device);
+	warp_to_touch(sample, &event->touch->base);
 }
 
 static void handle_touch_motion(struct wl_listener *listener, void *data) {
 	struct sample_state *sample =
 		wl_container_of(listener, sample, touch_motion);
-	struct wlr_event_touch_motion *event = data;
+	struct wlr_touch_motion_event  *event = data;
 
 	struct touch_point *point;
 	wl_list_for_each(point, &sample->touch_points, link) {
@@ -207,7 +207,7 @@ static void handle_touch_motion(struct wl_listener *listener, void *data) {
 		}
 	}
 
-	warp_to_touch(sample, event->device);
+	warp_to_touch(sample, &event->touch->base);
 }
 
 static void handle_touch_cancel(struct wl_listener *listener, void *data) {
@@ -217,21 +217,21 @@ static void handle_touch_cancel(struct wl_listener *listener, void *data) {
 static void handle_tablet_tool_axis(struct wl_listener *listener, void *data) {
 	struct sample_state *sample =
 		wl_container_of(listener, sample, tablet_tool_axis);
-	struct wlr_event_tablet_tool_axis *event = data;
+	struct wlr_tablet_tool_axis_event *event = data;
 	if ((event->updated_axes & WLR_TABLET_TOOL_AXIS_X) &&
 			(event->updated_axes & WLR_TABLET_TOOL_AXIS_Y)) {
-		wlr_cursor_warp_absolute(sample->cursor,
-				event->device, event->x, event->y);
+		wlr_cursor_warp_absolute(sample->cursor, &event->tablet->base,
+			event->x, event->y);
 	}
 }
 
 static void keyboard_key_notify(struct wl_listener *listener, void *data) {
 	struct sample_keyboard *keyboard = wl_container_of(listener, keyboard, key);
 	struct sample_state *sample = keyboard->state;
-	struct wlr_event_keyboard_key *event = data;
+	struct wlr_keyboard_key_event *event = data;
 	uint32_t keycode = event->keycode + 8;
 	const xkb_keysym_t *syms;
-	int nsyms = xkb_state_key_get_syms(keyboard->device->keyboard->xkb_state,
+	int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state,
 			keycode, &syms);
 	for (int i = 0; i < nsyms; i++) {
 		xkb_keysym_t sym = syms[i];
@@ -297,11 +297,11 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 
 	case WLR_INPUT_DEVICE_KEYBOARD:;
 		struct sample_keyboard *keyboard = calloc(1, sizeof(struct sample_keyboard));
-		keyboard->device = device;
+		keyboard->wlr_keyboard = wlr_keyboard_from_input_device(device);
 		keyboard->state = state;
 		wl_signal_add(&device->events.destroy, &keyboard->destroy);
 		keyboard->destroy.notify = keyboard_destroy_notify;
-		wl_signal_add(&device->keyboard->events.key, &keyboard->key);
+		wl_signal_add(&keyboard->wlr_keyboard->events.key, &keyboard->key);
 		keyboard->key.notify = keyboard_key_notify;
 		struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 		if (!context) {
@@ -314,7 +314,7 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 			wlr_log(WLR_ERROR, "Failed to create XKB keymap");
 			exit(1);
 		}
-		wlr_keyboard_set_keymap(device->keyboard, keymap);
+		wlr_keyboard_set_keymap(keyboard->wlr_keyboard, keymap);
 		xkb_keymap_unref(keymap);
 		xkb_context_unref(context);
 		break;

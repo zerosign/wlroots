@@ -17,6 +17,7 @@
 
 struct wlr_xdg_shell {
 	struct wl_global *global;
+	uint32_t version;
 	struct wl_list clients;
 	struct wl_list popup_grabs;
 	uint32_t ping_timeout;
@@ -43,7 +44,7 @@ struct wlr_xdg_client {
 	struct wl_client *client;
 	struct wl_list surfaces;
 
-	struct wl_list link; // wlr_xdg_shell::clients
+	struct wl_list link; // wlr_xdg_shell.clients
 
 	uint32_t ping_serial;
 	struct wl_event_source *ping_timer;
@@ -55,9 +56,14 @@ struct wlr_xdg_positioner_rules {
 	enum xdg_positioner_gravity gravity;
 	enum xdg_positioner_constraint_adjustment constraint_adjustment;
 
+	bool reactive;
+
+	bool has_parent_configure_serial;
+	uint32_t parent_configure_serial;
+
 	struct {
 		int32_t width, height;
-	} size;
+	} size, parent_size;
 
 	struct {
 		int32_t x, y;
@@ -69,6 +75,25 @@ struct wlr_xdg_positioner {
 	struct wlr_xdg_positioner_rules rules;
 };
 
+struct wlr_xdg_popup_state {
+	// Position of the popup relative to the upper left corner of
+	// the window geometry of the parent surface
+	struct wlr_box geometry;
+
+	bool reactive;
+};
+
+enum wlr_xdg_popup_configure_field {
+	WLR_XDG_POPUP_CONFIGURE_REPOSITION_TOKEN = 1 << 0,
+};
+
+struct wlr_xdg_popup_configure {
+	uint32_t fields; // enum wlr_xdg_popup_configure_field
+	struct wlr_box geometry;
+	struct wlr_xdg_positioner_rules rules;
+	uint32_t reposition_token;
+};
+
 struct wlr_xdg_popup {
 	struct wlr_xdg_surface *base;
 	struct wl_list link;
@@ -78,13 +103,15 @@ struct wlr_xdg_popup {
 	struct wlr_surface *parent;
 	struct wlr_seat *seat;
 
-	// Position of the popup relative to the upper left corner of the window
-	// geometry of the parent surface
-	struct wlr_box geometry;
+	struct wlr_xdg_popup_configure scheduled;
 
-	struct wlr_xdg_positioner_rules positioner_rules;
+	struct wlr_xdg_popup_state current, pending;
 
-	struct wl_list grab_link; // wlr_xdg_popup_grab::popups
+	struct {
+		struct wl_signal reposition;
+	} events;
+
+	struct wl_list grab_link; // wlr_xdg_popup_grab.popups
 };
 
 // each seat gets a popup grab
@@ -95,7 +122,7 @@ struct wlr_xdg_popup_grab {
 	struct wlr_seat_touch_grab touch_grab;
 	struct wlr_seat *seat;
 	struct wl_list popups;
-	struct wl_list link; // wlr_xdg_shell::popup_grabs
+	struct wl_list link; // wlr_xdg_shell.popup_grabs
 	struct wl_listener seat_destroy;
 };
 
@@ -113,10 +140,27 @@ struct wlr_xdg_toplevel_state {
 	uint32_t min_width, min_height;
 };
 
+enum wlr_xdg_toplevel_wm_capabilities {
+	WLR_XDG_TOPLEVEL_WM_CAPABILITIES_WINDOW_MENU = 1 << 0,
+	WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE = 1 << 1,
+	WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN = 1 << 2,
+	WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE = 1 << 3,
+};
+
+enum wlr_xdg_toplevel_configure_field {
+	WLR_XDG_TOPLEVEL_CONFIGURE_BOUNDS = 1 << 0,
+	WLR_XDG_TOPLEVEL_CONFIGURE_WM_CAPABILITIES = 1 << 1,
+};
+
 struct wlr_xdg_toplevel_configure {
+	uint32_t fields; // enum wlr_xdg_toplevel_configure_field
 	bool maximized, fullscreen, resizing, activated;
 	uint32_t tiled; // enum wlr_edges
 	uint32_t width, height;
+	struct {
+		uint32_t width, height;
+	} bounds;
+	uint32_t wm_capabilities; // enum wlr_xdg_toplevel_wm_capabilities
 };
 
 struct wlr_xdg_toplevel_requested {
@@ -140,15 +184,23 @@ struct wlr_xdg_toplevel {
 
 	// Properties that the client has requested. Intended to be checked
 	// by the compositor on surface map and state change requests (such as
-	// xdg_toplevel::set_fullscreen) and handled accordingly.
+	// xdg_toplevel.set_fullscreen) and handled accordingly.
 	struct wlr_xdg_toplevel_requested requested;
 
 	char *title;
 	char *app_id;
 
 	struct {
+		// Note: as per xdg-shell protocol, the compositor has to
+		// handle state requests by sending a configure event,
+		// even if it didn't actually change the state. Therefore,
+		// every compositor implementing xdg-shell support *must*
+		// listen to these signals and schedule a configure event
+		// immediately or at some time in the future; not doing so
+		// is a protocol violation.
 		struct wl_signal request_maximize;
 		struct wl_signal request_fullscreen;
+
 		struct wl_signal request_minimize;
 		struct wl_signal request_move;
 		struct wl_signal request_resize;
@@ -161,10 +213,13 @@ struct wlr_xdg_toplevel {
 
 struct wlr_xdg_surface_configure {
 	struct wlr_xdg_surface *surface;
-	struct wl_list link; // wlr_xdg_surface::configure_list
+	struct wl_list link; // wlr_xdg_surface.configure_list
 	uint32_t serial;
 
-	struct wlr_xdg_toplevel_configure *toplevel_configure;
+	union {
+		struct wlr_xdg_toplevel_configure *toplevel_configure;
+		struct wlr_xdg_popup_configure *popup_configure;
+	};
 };
 
 struct wlr_xdg_surface_state {
@@ -186,7 +241,7 @@ struct wlr_xdg_surface {
 	struct wlr_xdg_client *client;
 	struct wl_resource *resource;
 	struct wlr_surface *surface;
-	struct wl_list link; // wlr_xdg_client::surfaces
+	struct wl_list link; // wlr_xdg_client.surfaces
 	enum wlr_xdg_surface_role role;
 
 	union {
@@ -194,7 +249,7 @@ struct wlr_xdg_surface {
 		struct wlr_xdg_popup *popup;
 	};
 
-	struct wl_list popups; // wlr_xdg_popup::link
+	struct wl_list popups; // wlr_xdg_popup.link
 
 	bool added, configured, mapped;
 	struct wl_event_source *configure_idle;
@@ -228,8 +283,8 @@ struct wlr_xdg_surface {
 		struct wl_signal unmap;
 
 		// for protocol extensions
-		struct wl_signal configure; // wlr_xdg_surface_configure
-		struct wl_signal ack_configure; // wlr_xdg_surface_configure
+		struct wl_signal configure; // struct wlr_xdg_surface_configure
+		struct wl_signal ack_configure; // struct wlr_xdg_surface_configure
 	} events;
 
 	void *data;
@@ -255,9 +310,13 @@ struct wlr_xdg_toplevel_show_window_menu_event {
 	uint32_t x, y;
 };
 
-struct wlr_xdg_shell *wlr_xdg_shell_create(struct wl_display *display);
+/**
+ * Create the xdg_wm_base global with the specified version.
+ */
+struct wlr_xdg_shell *wlr_xdg_shell_create(struct wl_display *display,
+	uint32_t version);
 
-/** Get the corresponding wlr_xdg_surface from a resource.
+/** Get the corresponding struct wlr_xdg_surface from a resource.
  *
  * Aborts if the resource doesn't have the correct type. Returns NULL if the
  * resource is inert.
@@ -265,7 +324,7 @@ struct wlr_xdg_shell *wlr_xdg_shell_create(struct wl_display *display);
 struct wlr_xdg_surface *wlr_xdg_surface_from_resource(
 		struct wl_resource *resource);
 
-/** Get the corresponding wlr_xdg_popup from a resource.
+/** Get the corresponding struct wlr_xdg_popup from a resource.
  *
  * Aborts if the resource doesn't have the correct type. Returns NULL if the
  * resource is inert.
@@ -273,7 +332,7 @@ struct wlr_xdg_surface *wlr_xdg_surface_from_resource(
 struct wlr_xdg_popup *wlr_xdg_popup_from_resource(
 		struct wl_resource *resource);
 
-/** Get the corresponding wlr_xdg_toplevel from a resource.
+/** Get the corresponding struct wlr_xdg_toplevel from a resource.
  *
  * Aborts if the resource doesn't have the correct type. Returns NULL if the
  * resource is inert.
@@ -281,7 +340,7 @@ struct wlr_xdg_popup *wlr_xdg_popup_from_resource(
 struct wlr_xdg_toplevel *wlr_xdg_toplevel_from_resource(
 		struct wl_resource *resource);
 
-/** Get the corresponding wlr_xdg_positioner from a resource.
+/** Get the corresponding struct wlr_xdg_positioner from a resource.
  *
  * Aborts if the resource doesn't have the correct type.
  */
@@ -332,10 +391,25 @@ uint32_t wlr_xdg_toplevel_set_resizing(struct wlr_xdg_toplevel *toplevel,
 /**
  * Request that this toplevel consider itself in a tiled layout and some
  * edges are adjacent to another part of the tiling grid. `tiled_edges` is a
- * bitfield of `enum wlr_edges`. Returns the associated configure serial.
+ * bitfield of enum wlr_edges. Returns the associated configure serial.
  */
 uint32_t wlr_xdg_toplevel_set_tiled(struct wlr_xdg_toplevel *toplevel,
 		uint32_t tiled_edges);
+
+/**
+ * Configure the recommended bounds for the client's window geometry size.
+ * Returns the associated configure serial.
+ */
+uint32_t wlr_xdg_toplevel_set_bounds(struct wlr_xdg_toplevel *toplevel,
+		int32_t width, int32_t height);
+
+/**
+ * Configure the window manager capabilities for this toplevel. `caps` is a
+ * bitfield of `enum wlr_xdg_toplevel_wm_capabilities`. Returns the associated
+ * configure serial.
+ */
+uint32_t wlr_xdg_toplevel_set_wm_capabilities(struct wlr_xdg_toplevel *toplevel,
+		uint32_t caps);
 
 /**
  * Request that this toplevel closes.
@@ -405,17 +479,27 @@ struct wlr_surface *wlr_xdg_surface_popup_surface_at(
 		struct wlr_xdg_surface *surface, double sx, double sy,
 		double *sub_x, double *sub_y);
 
+/**
+ * Returns true if the surface has the xdg surface role.
+ */
 bool wlr_surface_is_xdg_surface(struct wlr_surface *surface);
 
+/**
+ * Get a struct wlr_xdg_surface from a struct wlr_surface.
+ * Asserts that the surface has the xdg surface role.
+ * May return NULL even if the surface has the xdg surface role if the
+ * corresponding xdg surface has been destroyed.
+ */
 struct wlr_xdg_surface *wlr_xdg_surface_from_wlr_surface(
 		struct wlr_surface *surface);
 
 /**
  * Get the surface geometry.
+ *
  * This is either the geometry as set by the client, or defaulted to the bounds
  * of the surface + the subsurfaces (as specified by the protocol).
  *
- * The x and y value can be <0
+ * The x and y value can be < 0.
  */
 void wlr_xdg_surface_get_geometry(struct wlr_xdg_surface *surface,
 		struct wlr_box *box);

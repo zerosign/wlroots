@@ -5,15 +5,14 @@
 #include <time.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_data_device.h>
-#include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/util/log.h>
 #include "types/wlr_seat.h"
 #include "util/global.h"
-#include "util/signal.h"
 
-#define SEAT_VERSION 7
+#define SEAT_VERSION 8
 
 static void seat_handle_get_pointer(struct wl_client *client,
 		struct wl_resource *seat_resource, uint32_t id) {
@@ -67,7 +66,7 @@ static void seat_client_handle_resource_destroy(
 		return;
 	}
 
-	wlr_signal_emit_safe(&client->events.destroy, client);
+	wl_signal_emit_mutable(&client->events.destroy, client);
 
 	if (client == client->seat->pointer_state.focused_client) {
 		client->seat->pointer_state.focused_client = NULL;
@@ -143,6 +142,20 @@ static void seat_handle_bind(struct wl_client *client, void *_wlr_seat,
 		wl_signal_init(&seat_client->events.destroy);
 
 		wl_list_insert(&wlr_seat->clients, &seat_client->link);
+
+		struct wlr_surface *pointer_focus =
+			wlr_seat->pointer_state.focused_surface;
+		if (pointer_focus != NULL &&
+				wl_resource_get_client(pointer_focus->resource) == client) {
+			wlr_seat->pointer_state.focused_client = seat_client;
+		}
+
+		struct wlr_surface *keyboard_focus =
+			wlr_seat->keyboard_state.focused_surface;
+		if (keyboard_focus != NULL &&
+				wl_resource_get_client(keyboard_focus->resource) == client) {
+			wlr_seat->keyboard_state.focused_client = seat_client;
+		}
 	}
 
 	wl_resource_set_implementation(wl_resource, &seat_impl,
@@ -167,7 +180,7 @@ void wlr_seat_destroy(struct wlr_seat *seat) {
 		wlr_seat_touch_point_clear_focus(seat, 0, point->touch_id);
 	}
 
-	wlr_signal_emit_safe(&seat->events.destroy, seat);
+	wl_signal_emit_mutable(&seat->events.destroy, seat);
 
 	wl_list_remove(&seat->display_destroy.link);
 

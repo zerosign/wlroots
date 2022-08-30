@@ -8,44 +8,10 @@
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
-#include "util/signal.h"
-#include "util/time.h"
 #include "virtual-keyboard-unstable-v1-protocol.h"
 
-/**
- * Send release event for each pressed key to bring the keyboard back to
- * neutral state.
- *
- * This may be needed for virtual keyboards. For physical devices, kernel
- * or libinput will deal with the removal of devices.
- */
-static void keyboard_release_pressed_keys(struct wlr_keyboard *keyboard) {
-	size_t orig_num_keycodes = keyboard->num_keycodes;
-	for (size_t i = 0; i < orig_num_keycodes; ++i) {
-		assert(keyboard->num_keycodes == orig_num_keycodes - i);
-		struct wlr_event_keyboard_key event = {
-			.time_msec = get_current_time_msec(),
-			.keycode = keyboard->keycodes[orig_num_keycodes - i - 1],
-			.update_state = false,
-			.state = WL_KEYBOARD_KEY_STATE_RELEASED,
-		};
-		wlr_keyboard_notify_key(keyboard, &event);  // updates num_keycodes
-	}
-}
-
-static void keyboard_destroy(struct wlr_keyboard *wlr_kb) {
-	struct wlr_virtual_keyboard_v1 *keyboard =
-		(struct wlr_virtual_keyboard_v1 *)wlr_kb;
-
-	keyboard_release_pressed_keys(&keyboard->keyboard);
-	wl_resource_set_user_data(keyboard->resource, NULL);
-	wlr_signal_emit_safe(&keyboard->events.destroy, keyboard);
-	wl_list_remove(&keyboard->link);
-	free(keyboard);
-}
-
 static const struct wlr_keyboard_impl keyboard_impl = {
-	.destroy = keyboard_destroy,
+	.name = "virtual-keyboard",
 };
 
 static const struct zwp_virtual_keyboard_v1_interface virtual_keyboard_impl;
@@ -59,11 +25,15 @@ static struct wlr_virtual_keyboard_v1 *virtual_keyboard_from_resource(
 
 struct wlr_virtual_keyboard_v1 *wlr_input_device_get_virtual_keyboard(
 		struct wlr_input_device *wlr_dev) {
-	if (wlr_dev->type != WLR_INPUT_DEVICE_KEYBOARD
-			|| wlr_dev->keyboard->impl != &keyboard_impl) {
+	if (wlr_dev->type != WLR_INPUT_DEVICE_KEYBOARD) {
 		return NULL;
 	}
-	return (struct wlr_virtual_keyboard_v1 *)wlr_dev->keyboard;
+	struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(wlr_dev);
+	if (wlr_keyboard->impl != &keyboard_impl) {
+		return NULL;
+	}
+	return wl_container_of(wlr_keyboard,
+		(struct wlr_virtual_keyboard_v1 *)NULL, keyboard);
 }
 
 static void virtual_keyboard_keymap(struct wl_client *client,
@@ -111,7 +81,7 @@ static void virtual_keyboard_key(struct wl_client *client,
 			"Cannot send a keypress before defining a keymap");
 		return;
 	}
-	struct wlr_event_keyboard_key event = {
+	struct wlr_keyboard_key_event event = {
 		.time_msec = time,
 		.keycode = key,
 		.update_state = false,
@@ -138,9 +108,15 @@ static void virtual_keyboard_modifiers(struct wl_client *client,
 static void virtual_keyboard_destroy_resource(struct wl_resource *resource) {
 	struct wlr_virtual_keyboard_v1 *keyboard =
 		virtual_keyboard_from_resource(resource);
-	if (keyboard != NULL) {
-		wlr_keyboard_destroy(&keyboard->keyboard);
+	if (keyboard == NULL) {
+		return;
 	}
+
+	wlr_keyboard_finish(&keyboard->keyboard);
+
+	wl_resource_set_user_data(keyboard->resource, NULL);
+	wl_list_remove(&keyboard->link);
+	free(keyboard);
 }
 
 static void virtual_keyboard_destroy(struct wl_client *client,
@@ -178,7 +154,7 @@ static void virtual_keyboard_manager_create_virtual_keyboard(
 	}
 
 	wlr_keyboard_init(&virtual_keyboard->keyboard, &keyboard_impl,
-		"virtual-keyboard");
+		"wlr_virtual_keyboard_v1");
 
 	struct wl_resource *keyboard_resource = wl_resource_create(client,
 		&zwp_virtual_keyboard_v1_interface, wl_resource_get_version(resource),
@@ -196,11 +172,10 @@ static void virtual_keyboard_manager_create_virtual_keyboard(
 
 	virtual_keyboard->resource = keyboard_resource;
 	virtual_keyboard->seat = seat_client->seat;
-	wl_signal_init(&virtual_keyboard->events.destroy);
 
 	wl_list_insert(&manager->virtual_keyboards, &virtual_keyboard->link);
 
-	wlr_signal_emit_safe(&manager->events.new_virtual_keyboard,
+	wl_signal_emit_mutable(&manager->events.new_virtual_keyboard,
 		virtual_keyboard);
 }
 
@@ -225,7 +200,7 @@ static void virtual_keyboard_manager_bind(struct wl_client *client, void *data,
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_virtual_keyboard_manager_v1 *manager =
 		wl_container_of(listener, manager, display_destroy);
-	wlr_signal_emit_safe(&manager->events.destroy, manager);
+	wl_signal_emit_mutable(&manager->events.destroy, manager);
 	wl_list_remove(&manager->display_destroy.link);
 	wl_global_destroy(manager->global);
 	free(manager);

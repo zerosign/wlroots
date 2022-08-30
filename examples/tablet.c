@@ -43,7 +43,7 @@ struct sample_state {
 
 struct tablet_tool_state {
 	struct sample_state *sample;
-	struct wlr_input_device *device;
+	struct wlr_tablet *wlr_tablet;
 	struct wl_listener destroy;
 	struct wl_listener axis;
 	struct wl_listener proximity;
@@ -55,7 +55,7 @@ struct tablet_tool_state {
 
 struct tablet_pad_state {
 	struct sample_state *sample;
-	struct wlr_input_device *device;
+	struct wlr_tablet_pad *wlr_tablet_pad;
 	struct wl_listener destroy;
 	struct wl_listener button;
 	struct wl_listener ring;
@@ -72,7 +72,7 @@ struct sample_output {
 
 struct sample_keyboard {
 	struct sample_state *sample;
-	struct wlr_input_device *device;
+	struct wlr_keyboard *wlr_keyboard;
 	struct wl_listener key;
 	struct wl_listener destroy;
 };
@@ -136,7 +136,7 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
 static void tablet_tool_axis_notify(struct wl_listener *listener, void *data) {
 	struct tablet_tool_state *tstate = wl_container_of(listener, tstate, axis);
-	struct wlr_event_tablet_tool_axis *event = data;
+	struct wlr_tablet_tool_axis_event *event = data;
 	struct sample_state *sample = tstate->sample;
 	if ((event->updated_axes & WLR_TABLET_TOOL_AXIS_X)) {
 		sample->x = event->x;
@@ -160,14 +160,14 @@ static void tablet_tool_axis_notify(struct wl_listener *listener, void *data) {
 
 static void tablet_tool_proximity_notify(struct wl_listener *listener, void *data) {
 	struct tablet_tool_state *tstate = wl_container_of(listener, tstate, proximity);
-	struct wlr_event_tablet_tool_proximity *event = data;
+	struct wlr_tablet_tool_proximity_event *event = data;
 	struct sample_state *sample = tstate->sample;
 	sample->proximity = event->state == WLR_TABLET_TOOL_PROXIMITY_IN;
 }
 
 static void tablet_tool_button_notify(struct wl_listener *listener, void *data) {
 	struct tablet_tool_state *tstate = wl_container_of(listener, tstate, button);
-	struct wlr_event_tablet_tool_button *event = data;
+	struct wlr_tablet_tool_button_event *event = data;
 	struct sample_state *sample = tstate->sample;
 	if (event->state == WLR_BUTTON_RELEASED) {
 		sample->button = false;
@@ -185,7 +185,7 @@ static void tablet_tool_button_notify(struct wl_listener *listener, void *data) 
 
 static void tablet_pad_button_notify(struct wl_listener *listener, void *data) {
 	struct tablet_pad_state *pstate = wl_container_of(listener, pstate, button);
-	struct wlr_event_tablet_pad_button *event = data;
+	struct wlr_tablet_pad_button_event *event = data;
 	struct sample_state *sample = pstate->sample;
 	float default_color[4] = { 0.5, 0.5, 0.5, 1.0 };
 	if (event->state == WLR_BUTTON_RELEASED) {
@@ -203,7 +203,7 @@ static void tablet_pad_button_notify(struct wl_listener *listener, void *data) {
 
 static void tablet_pad_ring_notify(struct wl_listener *listener, void *data) {
 	struct tablet_pad_state *pstate = wl_container_of(listener, pstate, ring);
-	struct wlr_event_tablet_pad_ring *event = data;
+	struct wlr_tablet_pad_ring_event *event = data;
 	struct sample_state *sample = pstate->sample;
 	if (event->position != -1) {
 		sample->ring = -(event->position * (M_PI / 180.0));
@@ -261,10 +261,10 @@ static void new_output_notify(struct wl_listener *listener, void *data) {
 static void keyboard_key_notify(struct wl_listener *listener, void *data) {
 	struct sample_keyboard *keyboard = wl_container_of(listener, keyboard, key);
 	struct sample_state *sample = keyboard->sample;
-	struct wlr_event_keyboard_key *event = data;
+	struct wlr_keyboard_key_event *event = data;
 	uint32_t keycode = event->keycode + 8;
 	const xkb_keysym_t *syms;
-	int nsyms = xkb_state_key_get_syms(keyboard->device->keyboard->xkb_state,
+	int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state,
 			keycode, &syms);
 	for (int i = 0; i < nsyms; i++) {
 		xkb_keysym_t sym = syms[i];
@@ -287,11 +287,11 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:;
 		struct sample_keyboard *keyboard = calloc(1, sizeof(struct sample_keyboard));
-		keyboard->device = device;
+		keyboard->wlr_keyboard = wlr_keyboard_from_input_device(device);
 		keyboard->sample = sample;
 		wl_signal_add(&device->events.destroy, &keyboard->destroy);
 		keyboard->destroy.notify = keyboard_destroy_notify;
-		wl_signal_add(&device->keyboard->events.key, &keyboard->key);
+		wl_signal_add(&keyboard->wlr_keyboard->events.key, &keyboard->key);
 		keyboard->key.notify = keyboard_key_notify;
 		struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 		if (!context) {
@@ -304,46 +304,46 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 			wlr_log(WLR_ERROR, "Failed to create XKB keymap");
 			exit(1);
 		}
-		wlr_keyboard_set_keymap(device->keyboard, keymap);
+		wlr_keyboard_set_keymap(keyboard->wlr_keyboard, keymap);
 		xkb_keymap_unref(keymap);
 		xkb_context_unref(context);
 		break;
 	case WLR_INPUT_DEVICE_TABLET_PAD:;
 		struct tablet_pad_state *pstate = calloc(sizeof(struct tablet_pad_state), 1);
-		pstate->device = device;
+		pstate->wlr_tablet_pad = wlr_tablet_pad_from_input_device(device);
 		pstate->sample = sample;
 		pstate->destroy.notify = tablet_pad_destroy_notify;
 		wl_signal_add(&device->events.destroy, &pstate->destroy);
 		pstate->button.notify = tablet_pad_button_notify;
-		wl_signal_add(&device->tablet_pad->events.button, &pstate->button);
+		wl_signal_add(&pstate->wlr_tablet_pad->events.button, &pstate->button);
 		pstate->ring.notify = tablet_pad_ring_notify;
-		wl_signal_add(&device->tablet_pad->events.ring, &pstate->ring);
+		wl_signal_add(&pstate->wlr_tablet_pad->events.ring, &pstate->ring);
 		wl_list_insert(&sample->tablet_pads, &pstate->link);
 		break;
-	case WLR_INPUT_DEVICE_TABLET_TOOL:
-		sample->width_mm = device->width_mm == 0 ?
-			20 : device->width_mm;
-		sample->height_mm = device->height_mm == 0 ?
-			10 : device->height_mm;
+	case WLR_INPUT_DEVICE_TABLET_TOOL:;
+		struct wlr_tablet *tablet = wlr_tablet_from_input_device(device);
+		sample->width_mm = tablet->width_mm == 0 ?
+			20 : tablet->width_mm;
+		sample->height_mm = tablet->height_mm == 0 ?
+			10 : tablet->height_mm;
 
 		struct tablet_tool_state *tstate = calloc(sizeof(struct tablet_tool_state), 1);
-		tstate->device = device;
+		tstate->wlr_tablet = tablet;
 		tstate->sample = sample;
 		tstate->destroy.notify = tablet_tool_destroy_notify;
 		wl_signal_add(&device->events.destroy, &tstate->destroy);
 		tstate->axis.notify = tablet_tool_axis_notify;
-		wl_signal_add(&device->tablet->events.axis, &tstate->axis);
+		wl_signal_add(&tablet->events.axis, &tstate->axis);
 		tstate->proximity.notify = tablet_tool_proximity_notify;
-		wl_signal_add(&device->tablet->events.proximity, &tstate->proximity);
+		wl_signal_add(&tablet->events.proximity, &tstate->proximity);
 		tstate->button.notify = tablet_tool_button_notify;
-		wl_signal_add(&device->tablet->events.button, &tstate->button);
+		wl_signal_add(&tablet->events.button, &tstate->button);
 		wl_list_insert(&sample->tablet_tools, &tstate->link);
 		break;
 	default:
 		break;
 	}
 }
-
 
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);

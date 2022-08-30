@@ -7,14 +7,19 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <wlr/render/wlr_texture.h>
+#include <wlr/render/vulkan.h>
 #include <wlr/util/log.h>
 #include "render/pixel_format.h"
 #include "render/vulkan.h"
 
 static const struct wlr_texture_impl texture_impl;
 
+bool wlr_texture_is_vk(struct wlr_texture *wlr_texture) {
+	return wlr_texture->impl == &texture_impl;
+}
+
 struct wlr_vk_texture *vulkan_get_texture(struct wlr_texture *wlr_texture) {
-	assert(wlr_texture->impl == &texture_impl);
+	assert(wlr_texture_is_vk(wlr_texture));
 	return (struct wlr_vk_texture *)wlr_texture;
 }
 
@@ -26,14 +31,6 @@ static VkImageAspectFlagBits mem_plane_aspect(unsigned i) {
 	case 3: return VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT;
 	default: abort(); // unreachable
 	}
-}
-
-static bool vulkan_texture_is_opaque(struct wlr_texture *wlr_texture) {
-	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
-	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(
-			texture->format->drm_format);
-	assert(format_info);
-	return !format_info->has_alpha;
 }
 
 // Will transition the texture to shaderReadOnlyOptimal layout for reading
@@ -139,12 +136,45 @@ static bool write_pixels(struct wlr_texture *wlr_texture,
 	return true;
 }
 
-static bool vulkan_texture_write_pixels(struct wlr_texture *wlr_texture,
-		uint32_t stride, uint32_t width, uint32_t height, uint32_t src_x,
-		uint32_t src_y, uint32_t dst_x, uint32_t dst_y, const void *vdata) {
-	return write_pixels(wlr_texture, stride, width, height, src_x, src_y,
-		dst_x, dst_y, vdata, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+static bool vulkan_texture_update_from_buffer(struct wlr_texture *wlr_texture,
+		struct wlr_buffer *buffer, pixman_region32_t *damage) {
+	struct wlr_vk_texture *texture = vulkan_get_texture(wlr_texture);
+
+	void *data;
+	uint32_t format;
+	size_t stride;
+	if (!wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+		return false;
+	}
+
+	bool ok = true;
+
+	if (format != texture->format->drm_format) {
+		ok = false;
+		goto out;
+	}
+
+	int rects_len = 0;
+	pixman_box32_t *rects = pixman_region32_rectangles(damage, &rects_len);
+
+	for (int i = 0; i < rects_len; i++) {
+		pixman_box32_t rect = rects[i];
+		uint32_t width = rect.x2 - rect.x1;
+		uint32_t height = rect.y2 - rect.y1;
+
+		// TODO: only map memory once
+		ok = write_pixels(wlr_texture, stride, width, height, rect.x1, rect.y1,
+			rect.x1, rect.y1, data, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+		if (!ok) {
+			goto out;
+		}
+	}
+
+out:
+	wlr_buffer_end_data_ptr_access(buffer);
+	return ok;
 }
 
 void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
@@ -194,8 +224,7 @@ static void vulkan_texture_unref(struct wlr_texture *wlr_texture) {
 }
 
 static const struct wlr_texture_impl texture_impl = {
-	.is_opaque = vulkan_texture_is_opaque,
-	.write_pixels = vulkan_texture_write_pixels,
+	.update_from_buffer = vulkan_texture_update_from_buffer,
 	.destroy = vulkan_texture_unref,
 };
 
@@ -241,8 +270,6 @@ static struct wlr_texture *vulkan_texture_from_pixels(struct wlr_renderer *wlr_r
 	texture->format = &fmt->format;
 
 	// create image
-	unsigned mem_bits = 0xFFFFFFFF;
-
 	VkImageCreateInfo img_info = {0};
 	img_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	img_info.imageType = VK_IMAGE_TYPE_2D;
@@ -257,8 +284,6 @@ static struct wlr_texture *vulkan_texture_from_pixels(struct wlr_renderer *wlr_r
 
 	img_info.tiling = VK_IMAGE_TILING_OPTIMAL;
 	img_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	mem_bits = vulkan_find_mem_type(renderer->dev,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mem_bits);
 	VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	res = vkCreateImage(dev, &img_info, NULL, &texture->image);
@@ -274,7 +299,15 @@ static struct wlr_texture *vulkan_texture_from_pixels(struct wlr_renderer *wlr_r
 	VkMemoryAllocateInfo mem_info = {0};
 	mem_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	mem_info.allocationSize = mem_reqs.size;
-	mem_info.memoryTypeIndex = mem_bits & mem_reqs.memoryTypeBits;
+
+	int mem_type_index = vulkan_find_mem_type(renderer->dev,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mem_reqs.memoryTypeBits);
+	if (mem_type_index == -1) {
+		wlr_log(WLR_ERROR, "failed to find suitable vulkan memory type");
+		goto error;
+	}
+	mem_info.memoryTypeIndex = mem_type_index;
+
 	res = vkAllocateMemory(dev, &mem_info, NULL, &texture->memories[0]);
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("vkAllocatorMemory failed", res);

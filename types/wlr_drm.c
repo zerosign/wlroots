@@ -4,13 +4,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <xf86drm.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_drm.h>
 #include <wlr/util/log.h>
 #include "drm-protocol.h"
-#include "util/signal.h"
 
 #define WLR_DRM_VERSION 2
 
@@ -171,7 +171,7 @@ static void drm_bind(struct wl_client *client, void *data,
 }
 
 static void drm_destroy(struct wlr_drm *drm) {
-	wlr_signal_emit_safe(&drm->events.destroy, NULL);
+	wl_signal_emit_mutable(&drm->events.destroy, NULL);
 
 	wl_list_remove(&drm->display_destroy.link);
 	wl_list_remove(&drm->renderer_destroy.link);

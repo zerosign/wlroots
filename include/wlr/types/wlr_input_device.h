@@ -25,26 +25,10 @@ enum wlr_input_device_type {
 	WLR_INPUT_DEVICE_SWITCH,
 };
 
-struct wlr_input_device_impl;
-
 struct wlr_input_device {
 	enum wlr_input_device_type type;
 	unsigned int vendor, product;
 	char *name;
-	// Or 0 if not applicable to this device
-	double width_mm, height_mm;
-	char *output_name;
-
-	/* wlr_input_device.type determines which of these is valid */
-	union {
-		void *_device;
-		struct wlr_keyboard *keyboard;
-		struct wlr_pointer *pointer;
-		struct wlr_switch *switch_device;
-		struct wlr_touch *touch;
-		struct wlr_tablet *tablet;
-		struct wlr_tablet_pad *tablet_pad;
-	};
 
 	struct {
 		struct wl_signal destroy;
@@ -52,20 +36,5 @@ struct wlr_input_device {
 
 	void *data;
 };
-
-void wlr_input_device_init(struct wlr_input_device *wlr_device,
-	enum wlr_input_device_type type, const char *name);
-
-/**
- * Clean up all of the provided wlr_input_device resources
- */
-void wlr_input_device_finish(struct wlr_input_device *wlr_device);
-
-/**
- * Calls the specialized input device destroy function.
- * If the wlr_input_device is not owned by a specialized input device, the
- * function will finish the wlr_input_device and free it.
- */
-void wlr_input_device_destroy(struct wlr_input_device *dev);
 
 #endif

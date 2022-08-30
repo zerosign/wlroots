@@ -16,11 +16,10 @@
 #include <wlr/util/log.h>
 
 #include "backend/x11.h"
-#include "util/signal.h"
 
 static void send_key_event(struct wlr_x11_backend *x11, uint32_t key,
 		enum wl_keyboard_key_state st, xcb_timestamp_t time) {
-	struct wlr_event_keyboard_key ev = {
+	struct wlr_keyboard_key_event ev = {
 		.time_msec = time,
 		.keycode = key,
 		.state = st,
@@ -31,20 +30,20 @@ static void send_key_event(struct wlr_x11_backend *x11, uint32_t key,
 
 static void send_button_event(struct wlr_x11_output *output, uint32_t key,
 		enum wlr_button_state st, xcb_timestamp_t time) {
-	struct wlr_event_pointer_button ev = {
-		.device = &output->pointer.base,
+	struct wlr_pointer_button_event ev = {
+		.pointer = &output->pointer,
 		.time_msec = time,
 		.button = key,
 		.state = st,
 	};
-	wlr_signal_emit_safe(&output->pointer.events.button, &ev);
-	wlr_signal_emit_safe(&output->pointer.events.frame, &output->pointer);
+	wl_signal_emit_mutable(&output->pointer.events.button, &ev);
+	wl_signal_emit_mutable(&output->pointer.events.frame, &output->pointer);
 }
 
 static void send_axis_event(struct wlr_x11_output *output, int32_t delta,
 		xcb_timestamp_t time) {
-	struct wlr_event_pointer_axis ev = {
-		.device = &output->pointer.base,
+	struct wlr_pointer_axis_event ev = {
+		.pointer = &output->pointer,
 		.time_msec = time,
 		.source = WLR_AXIS_SOURCE_WHEEL,
 		.orientation = WLR_AXIS_ORIENTATION_VERTICAL,
@@ -52,57 +51,57 @@ static void send_axis_event(struct wlr_x11_output *output, int32_t delta,
 		.delta = delta * 15,
 		.delta_discrete = delta,
 	};
-	wlr_signal_emit_safe(&output->pointer.events.axis, &ev);
-	wlr_signal_emit_safe(&output->pointer.events.frame, &output->pointer);
+	wl_signal_emit_mutable(&output->pointer.events.axis, &ev);
+	wl_signal_emit_mutable(&output->pointer.events.frame, &output->pointer);
 }
 
 static void send_pointer_position_event(struct wlr_x11_output *output,
 		int16_t x, int16_t y, xcb_timestamp_t time) {
-	struct wlr_event_pointer_motion_absolute ev = {
-		.device = &output->pointer.base,
+	struct wlr_pointer_motion_absolute_event ev = {
+		.pointer = &output->pointer,
 		.time_msec = time,
 		.x = (double)x / output->wlr_output.width,
 		.y = (double)y / output->wlr_output.height,
 	};
-	wlr_signal_emit_safe(&output->pointer.events.motion_absolute, &ev);
-	wlr_signal_emit_safe(&output->pointer.events.frame, &output->pointer);
+	wl_signal_emit_mutable(&output->pointer.events.motion_absolute, &ev);
+	wl_signal_emit_mutable(&output->pointer.events.frame, &output->pointer);
 }
 
 static void send_touch_down_event(struct wlr_x11_output *output,
 		int16_t x, int16_t y, int32_t touch_id, xcb_timestamp_t time) {
-	struct wlr_event_touch_down ev = {
-		.device = &output->touch.base,
+	struct wlr_touch_down_event ev = {
+		.touch = &output->touch,
 		.time_msec = time,
 		.x = (double)x / output->wlr_output.width,
 		.y = (double)y / output->wlr_output.height,
 		.touch_id = touch_id,
 	};
-	wlr_signal_emit_safe(&output->touch.events.down, &ev);
-	wlr_signal_emit_safe(&output->touch.events.frame, NULL);
+	wl_signal_emit_mutable(&output->touch.events.down, &ev);
+	wl_signal_emit_mutable(&output->touch.events.frame, NULL);
 }
 
 static void send_touch_motion_event(struct wlr_x11_output *output,
 		int16_t x, int16_t y, int32_t touch_id, xcb_timestamp_t time) {
-	struct wlr_event_touch_motion ev = {
-		.device = &output->touch.base,
+	struct wlr_touch_motion_event ev = {
+		.touch = &output->touch,
 		.time_msec = time,
 		.x = (double)x / output->wlr_output.width,
 		.y = (double)y / output->wlr_output.height,
 		.touch_id = touch_id,
 	};
-	wlr_signal_emit_safe(&output->touch.events.motion, &ev);
-	wlr_signal_emit_safe(&output->touch.events.frame, NULL);
+	wl_signal_emit_mutable(&output->touch.events.motion, &ev);
+	wl_signal_emit_mutable(&output->touch.events.frame, NULL);
 }
 
 static void send_touch_up_event(struct wlr_x11_output *output,
 		int32_t touch_id, xcb_timestamp_t time) {
-	struct wlr_event_touch_up ev = {
-		.device = &output->touch.base,
+	struct wlr_touch_up_event ev = {
+		.touch = &output->touch,
 		.time_msec = time,
 		.touch_id = touch_id,
 	};
-	wlr_signal_emit_safe(&output->touch.events.up, &ev);
-	wlr_signal_emit_safe(&output->touch.events.frame, NULL);
+	wl_signal_emit_mutable(&output->touch.events.up, &ev);
+	wl_signal_emit_mutable(&output->touch.events.frame, NULL);
 }
 
 static struct wlr_x11_touchpoint *get_touchpoint_from_x11_touch_id(
@@ -285,28 +284,16 @@ void handle_x11_xinput_event(struct wlr_x11_backend *x11,
 	}
 }
 
-static void keyboard_destroy(struct wlr_keyboard *wlr_keyboard) {
-	// Don't free the keyboard, it's on the stack
-}
-
 const struct wlr_keyboard_impl x11_keyboard_impl = {
-	.destroy = keyboard_destroy,
+	.name = "x11-keyboard",
 };
-
-static void pointer_destroy(struct wlr_pointer *wlr_pointer) {
-	// Don't free the pointer, it's on the stack
-}
 
 const struct wlr_pointer_impl x11_pointer_impl = {
-	.destroy = pointer_destroy,
+	.name = "x11-pointer",
 };
 
-static void touch_destroy(struct wlr_touch *wlr_touch) {
-	// Don't free the touch, it's on the stack
-}
-
 const struct wlr_touch_impl x11_touch_impl = {
-	.destroy = touch_destroy,
+	.name = "x11-touch",
 };
 
 void update_x11_pointer_position(struct wlr_x11_output *output,
@@ -329,11 +316,11 @@ void update_x11_pointer_position(struct wlr_x11_output *output,
 bool wlr_input_device_is_x11(struct wlr_input_device *wlr_dev) {
 	switch (wlr_dev->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:
-		return wlr_dev->keyboard->impl == &x11_keyboard_impl;
+		return wlr_keyboard_from_input_device(wlr_dev)->impl == &x11_keyboard_impl;
 	case WLR_INPUT_DEVICE_POINTER:
-		return wlr_dev->pointer->impl == &x11_pointer_impl;
+		return wlr_pointer_from_input_device(wlr_dev)->impl == &x11_pointer_impl;
 	case WLR_INPUT_DEVICE_TOUCH:
-		return wlr_dev->touch->impl == &x11_touch_impl;
+		return wlr_touch_from_input_device(wlr_dev)->impl == &x11_touch_impl;
 	default:
 		return false;
 	}

@@ -1,10 +1,47 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
+#include <stdio.h>
 #include <wlr/util/log.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 #include "backend/drm/drm.h"
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
+
+static char *atomic_commit_flags_str(uint32_t flags) {
+	const char *const l[] = {
+		(flags & DRM_MODE_PAGE_FLIP_EVENT) ? "PAGE_FLIP_EVENT" : NULL,
+		(flags & DRM_MODE_PAGE_FLIP_ASYNC) ? "PAGE_FLIP_ASYNC" : NULL,
+		(flags & DRM_MODE_ATOMIC_TEST_ONLY) ? "ATOMIC_TEST_ONLY" : NULL,
+		(flags & DRM_MODE_ATOMIC_NONBLOCK) ? "ATOMIC_NONBLOCK" : NULL,
+		(flags & DRM_MODE_ATOMIC_ALLOW_MODESET) ? "ATOMIC_ALLOW_MODESET" : NULL,
+	};
+
+	char *buf = NULL;
+	size_t size = 0;
+	FILE *f = open_memstream(&buf, &size);
+	if (f == NULL) {
+		return NULL;
+	}
+
+	for (size_t i = 0; i < sizeof(l) / sizeof(l[0]); i++) {
+		if (l[i] == NULL) {
+			continue;
+		}
+		if (ftell(f) > 0) {
+			fprintf(f, " | ");
+		}
+		fprintf(f, "%s", l[i]);
+	}
+
+	if (ftell(f) == 0) {
+		fprintf(f, "none");
+	}
+
+	fclose(f);
+
+	return buf;
+}
 
 struct atomic {
 	drmModeAtomicReq *req;
@@ -33,9 +70,11 @@ static bool atomic_commit(struct atomic *atom,
 	if (ret != 0) {
 		wlr_drm_conn_log_errno(conn,
 			(flags & DRM_MODE_ATOMIC_TEST_ONLY) ? WLR_DEBUG : WLR_ERROR,
-			"Atomic %s failed (%s)",
-			(flags & DRM_MODE_ATOMIC_TEST_ONLY) ? "test" : "commit",
-			(flags & DRM_MODE_ATOMIC_ALLOW_MODESET) ? "modeset" : "pageflip");
+			"Atomic commit failed");
+		char *flags_str = atomic_commit_flags_str(flags);
+		wlr_log(WLR_DEBUG, "(Atomic commit flags: %s)",
+			flags_str ? flags_str : "<error>");
+		free(flags_str);
 		return false;
 	}
 
@@ -217,8 +256,10 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 	bool prev_vrr_enabled =
 		output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
 	bool vrr_enabled = prev_vrr_enabled;
-	if ((state->base->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) &&
-			drm_connector_supports_vrr(conn)) {
+	if ((state->base->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED)) {
+		if (!drm_connector_supports_vrr(conn)) {
+			return false;
+		}
 		vrr_enabled = state->base->adaptive_sync_enabled;
 	}
 
@@ -227,7 +268,12 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 	}
 	if (modeset) {
 		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
-	} else if (!test_only) {
+	} else if (!test_only && (state->base->committed & WLR_OUTPUT_STATE_BUFFER)) {
+		// The wlr_output API requires non-modeset commits with a new buffer to
+		// wait for the frame event. However compositors often perform
+		// non-modesets commits without a new buffer without waiting for the
+		// frame event. In that case we need to make the KMS commit blocking,
+		// otherwise the kernel will error out with EBUSY.
 		flags |= DRM_MODE_ATOMIC_NONBLOCK;
 	}
 
@@ -237,6 +283,13 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 	if (modeset && active && conn->props.link_status != 0) {
 		atomic_add(&atom, conn->id, conn->props.link_status,
 			DRM_MODE_LINK_STATUS_GOOD);
+	}
+	if (active && conn->props.content_type != 0) {
+		atomic_add(&atom, conn->id, conn->props.content_type,
+			DRM_MODE_CONTENT_TYPE_GRAPHICS);
+	}
+	if (active && conn->props.max_bpc != 0 && conn->max_bpc > 0) {
+		atomic_add(&atom, conn->id, conn->props.max_bpc, conn->max_bpc);
 	}
 	atomic_add(&atom, crtc->id, crtc->props.mode_id, mode_id);
 	atomic_add(&atom, crtc->id, crtc->props.active, active);

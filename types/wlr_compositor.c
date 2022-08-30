@@ -10,11 +10,11 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
+#include "types/wlr_buffer.h"
 #include "types/wlr_region.h"
-#include "util/signal.h"
 #include "util/time.h"
 
-#define COMPOSITOR_VERSION 4
+#define COMPOSITOR_VERSION 5
 #define CALLBACK_VERSION 1
 
 static int min(int fst, int snd) {
@@ -43,6 +43,14 @@ static void surface_handle_attach(struct wl_client *client,
 		struct wl_resource *buffer_resource, int32_t dx, int32_t dy) {
 	struct wlr_surface *surface = wlr_surface_from_resource(resource);
 
+	if (wl_resource_get_version(resource) >= WL_SURFACE_OFFSET_SINCE_VERSION &&
+			(dx != 0 || dy != 0)) {
+		wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_OFFSET,
+			"Offset must be zero on wl_surface.attach version >= %"PRIu32,
+			WL_SURFACE_OFFSET_SINCE_VERSION);
+		return;
+	}
+
 	struct wlr_buffer *buffer = NULL;
 	if (buffer_resource != NULL) {
 		buffer = wlr_buffer_from_resource(buffer_resource);
@@ -53,11 +61,15 @@ static void surface_handle_attach(struct wl_client *client,
 	}
 
 	surface->pending.committed |= WLR_SURFACE_STATE_BUFFER;
-	surface->pending.dx = dx;
-	surface->pending.dy = dy;
 
 	wlr_buffer_unlock(surface->pending.buffer);
 	surface->pending.buffer = buffer;
+
+	if (wl_resource_get_version(resource) < WL_SURFACE_OFFSET_SINCE_VERSION) {
+		surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
+		surface->pending.dx = dx;
+		surface->pending.dy = dy;
+	}
 }
 
 static void surface_handle_damage(struct wl_client *client,
@@ -176,12 +188,21 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 	if (!pending->viewport.has_src &&
 			(pending->buffer_width % pending->scale != 0 ||
 			pending->buffer_height % pending->scale != 0)) {
-		// TODO: send WL_SURFACE_ERROR_INVALID_SIZE error once this issue is
-		// resolved:
+		// TODO: send WL_SURFACE_ERROR_INVALID_SIZE error to cursor surfaces
+		// once this issue is resolved:
 		// https://gitlab.freedesktop.org/wayland/wayland/-/issues/194
-		wlr_log(WLR_DEBUG, "Client bug: submitted a buffer whose size (%dx%d) "
-			"is not divisible by scale (%d)", pending->buffer_width,
-			pending->buffer_height, pending->scale);
+		if (!surface->role
+				|| strcmp(surface->role->name, "wl_pointer-cursor") == 0
+				|| strcmp(surface->role->name, "wp_tablet_tool-cursor") == 0) {
+			wlr_log(WLR_DEBUG, "Client bug: submitted a buffer whose size (%dx%d) "
+				"is not divisible by scale (%d)", pending->buffer_width,
+				pending->buffer_height, pending->scale);
+		} else {
+			wl_resource_post_error(surface->resource,
+				WL_SURFACE_ERROR_INVALID_SIZE,
+				"Buffer size (%dx%d) is not divisible by scale (%d)",
+				pending->buffer_width, pending->buffer_height, pending->scale);
+		}
 	}
 
 	if (pending->viewport.has_dst) {
@@ -209,10 +230,7 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 
 	if (pending->width != current->width ||
 			pending->height != current->height ||
-			pending->viewport.src.x != current->viewport.src.x ||
-			pending->viewport.src.y != current->viewport.src.y ||
-			pending->viewport.src.width != current->viewport.src.width ||
-			pending->viewport.src.height != current->viewport.src.height) {
+			!wlr_fbox_equal(&pending->viewport.src, &current->viewport.src)) {
 		// Damage the whole buffer on resize or viewport source box change
 		pixman_region32_union_rect(buffer_damage, buffer_damage, 0, 0,
 			pending->buffer_width, pending->buffer_height);
@@ -269,11 +287,14 @@ static void surface_state_move(struct wlr_surface_state *state,
 	if (next->committed & WLR_SURFACE_STATE_TRANSFORM) {
 		state->transform = next->transform;
 	}
-	if (next->committed & WLR_SURFACE_STATE_BUFFER) {
+	if (next->committed & WLR_SURFACE_STATE_OFFSET) {
 		state->dx = next->dx;
 		state->dy = next->dy;
 		next->dx = next->dy = 0;
-
+	} else {
+		state->dx = state->dy = 0;
+	}
+	if (next->committed & WLR_SURFACE_STATE_BUFFER) {
 		wlr_buffer_unlock(state->buffer);
 		state->buffer = NULL;
 		if (next->buffer) {
@@ -281,8 +302,6 @@ static void surface_state_move(struct wlr_surface_state *state,
 		}
 		wlr_buffer_unlock(next->buffer);
 		next->buffer = NULL;
-	} else {
-		state->dx = state->dy = 0;
 	}
 	if (next->committed & WLR_SURFACE_STATE_SURFACE_DAMAGE) {
 		pixman_region32_copy(&state->surface_damage, &next->surface_damage);
@@ -327,8 +346,11 @@ static void surface_apply_damage(struct wlr_surface *surface) {
 			wlr_buffer_unlock(&surface->buffer->base);
 		}
 		surface->buffer = NULL;
+		surface->opaque = false;
 		return;
 	}
+
+	surface->opaque = buffer_is_opaque(surface->current.buffer);
 
 	if (surface->buffer != NULL) {
 		if (wlr_client_buffer_apply_damage(surface->buffer,
@@ -363,7 +385,8 @@ static void surface_update_opaque_region(struct wlr_surface *surface) {
 		return;
 	}
 
-	if (wlr_texture_is_opaque(texture)) {
+	if (surface->opaque) {
+		pixman_region32_fini(&surface->opaque_region);
 		pixman_region32_init_rect(&surface->opaque_region,
 			0, 0, surface->current.width, surface->current.height);
 		return;
@@ -466,7 +489,7 @@ static void surface_commit_state(struct wlr_surface *surface,
 		surface->role->commit(surface);
 	}
 
-	wlr_signal_emit_safe(&surface->events.commit, surface);
+	wl_signal_emit_mutable(&surface->events.commit, surface);
 }
 
 static void collect_subsurface_damage_iter(struct wlr_surface *surface,
@@ -505,7 +528,7 @@ static void subsurface_parent_commit(struct wlr_subsurface *subsurface) {
 
 	if (!subsurface->added) {
 		subsurface->added = true;
-		wlr_signal_emit_safe(&subsurface->parent->events.new_subsurface,
+		wl_signal_emit_mutable(&subsurface->parent->events.new_subsurface,
 			subsurface);
 	}
 }
@@ -515,7 +538,7 @@ static void surface_handle_commit(struct wl_client *client,
 	struct wlr_surface *surface = wlr_surface_from_resource(resource);
 	surface_finalize_pending(surface);
 
-	wlr_signal_emit_safe(&surface->events.client_commit, NULL);
+	wl_signal_emit_mutable(&surface->events.client_commit, NULL);
 
 	if (surface->pending.cached_state_locks > 0 || !wl_list_empty(&surface->cached)) {
 		surface_cache_pending(surface);
@@ -563,6 +586,15 @@ static void surface_handle_damage_buffer(struct wl_client *client,
 		x, y, width, height);
 }
 
+static void surface_handle_offset(struct wl_client *client,
+		struct wl_resource *resource, int32_t x, int32_t y) {
+	struct wlr_surface *surface = wlr_surface_from_resource(resource);
+
+	surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
+	surface->pending.dx = x;
+	surface->pending.dy = y;
+}
+
 static const struct wl_surface_interface surface_implementation = {
 	.destroy = surface_handle_destroy,
 	.attach = surface_handle_attach,
@@ -573,7 +605,8 @@ static const struct wl_surface_interface surface_implementation = {
 	.commit = surface_handle_commit,
 	.set_buffer_transform = surface_handle_set_buffer_transform,
 	.set_buffer_scale = surface_handle_set_buffer_scale,
-	.damage_buffer = surface_handle_damage_buffer
+	.damage_buffer = surface_handle_damage_buffer,
+	.offset = surface_handle_offset,
 };
 
 struct wlr_surface *wlr_surface_from_resource(struct wl_resource *resource) {
@@ -583,6 +616,8 @@ struct wlr_surface *wlr_surface_from_resource(struct wl_resource *resource) {
 }
 
 static void surface_state_init(struct wlr_surface_state *state) {
+	memset(state, 0, sizeof(*state));
+
 	state->scale = 1;
 	state->transform = WL_OUTPUT_TRANSFORM_NORMAL;
 
@@ -629,7 +664,7 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 		surface_output_destroy(surface_output);
 	}
 
-	wlr_signal_emit_safe(&surface->events.destroy, surface);
+	wl_signal_emit_mutable(&surface->events.destroy, surface);
 
 	wlr_addon_set_finish(&surface->addons);
 
@@ -1088,7 +1123,7 @@ static void compositor_create_surface(struct wl_client *client,
 		return;
 	}
 
-	wlr_signal_emit_safe(&compositor->events.new_surface, surface);
+	wl_signal_emit_mutable(&compositor->events.new_surface, surface);
 }
 
 static void compositor_create_region(struct wl_client *client,
@@ -1118,7 +1153,7 @@ static void compositor_handle_display_destroy(
 		struct wl_listener *listener, void *data) {
 	struct wlr_compositor *compositor =
 		wl_container_of(listener, compositor, display_destroy);
-	wlr_signal_emit_safe(&compositor->events.destroy, NULL);
+	wl_signal_emit_mutable(&compositor->events.destroy, NULL);
 	wl_list_remove(&compositor->display_destroy.link);
 	wl_global_destroy(compositor->global);
 	free(compositor);

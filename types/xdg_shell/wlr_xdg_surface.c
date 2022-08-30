@@ -4,7 +4,6 @@
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include "types/wlr_xdg_shell.h"
-#include "util/signal.h"
 
 bool wlr_surface_is_xdg_surface(struct wlr_surface *surface) {
 	return surface->role == &xdg_toplevel_surface_role ||
@@ -29,15 +28,17 @@ static void xdg_surface_configure_destroy(
 
 void unmap_xdg_surface(struct wlr_xdg_surface *surface) {
 	assert(surface->role != WLR_XDG_SURFACE_ROLE_NONE);
+	surface->configured = false;
+
+	// TODO: probably need to ungrab before this event
+	if (surface->mapped) {
+		surface->mapped = false;
+		wl_signal_emit_mutable(&surface->events.unmap, NULL);
+	}
 
 	struct wlr_xdg_popup *popup, *popup_tmp;
 	wl_list_for_each_safe(popup, popup_tmp, &surface->popups, link) {
 		wlr_xdg_popup_destroy(popup);
-	}
-
-	// TODO: probably need to ungrab before this event
-	if (surface->mapped) {
-		wlr_signal_emit_safe(&surface->events.unmap, NULL);
 	}
 
 	switch (surface->role) {
@@ -56,7 +57,6 @@ void unmap_xdg_surface(struct wlr_xdg_surface *surface) {
 		xdg_surface_configure_destroy(configure);
 	}
 
-	surface->configured = surface->mapped = false;
 	if (surface->configure_idle) {
 		wl_event_source_remove(surface->configure_idle);
 		surface->configure_idle = NULL;
@@ -97,7 +97,7 @@ static void xdg_surface_handle_ack_configure(struct wl_client *client,
 		if (configure->serial == serial) {
 			break;
 		}
-		wlr_signal_emit_safe(&surface->events.ack_configure, configure);
+		wl_signal_emit_mutable(&surface->events.ack_configure, configure);
 		xdg_surface_configure_destroy(configure);
 	}
 
@@ -107,16 +107,18 @@ static void xdg_surface_handle_ack_configure(struct wl_client *client,
 		break;
 	case WLR_XDG_SURFACE_ROLE_TOPLEVEL:
 		handle_xdg_toplevel_ack_configure(surface->toplevel,
-				configure->toplevel_configure);
+			configure->toplevel_configure);
 		break;
 	case WLR_XDG_SURFACE_ROLE_POPUP:
+		handle_xdg_popup_ack_configure(surface->popup,
+			configure->popup_configure);
 		break;
 	}
 
 	surface->configured = true;
 	surface->pending.configure_serial = serial;
 
-	wlr_signal_emit_safe(&surface->events.ack_configure, configure);
+	wl_signal_emit_mutable(&surface->events.ack_configure, configure);
 	xdg_surface_configure_destroy(configure);
 }
 
@@ -145,15 +147,12 @@ static void surface_send_configure(void *user_data) {
 			send_xdg_toplevel_configure(surface->toplevel);
 		break;
 	case WLR_XDG_SURFACE_ROLE_POPUP:
-		xdg_popup_send_configure(surface->popup->resource,
-			surface->popup->geometry.x,
-			surface->popup->geometry.y,
-			surface->popup->geometry.width,
-			surface->popup->geometry.height);
+		configure->popup_configure =
+			send_xdg_popup_configure(surface->popup);
 		break;
 	}
 
-	wlr_signal_emit_safe(&surface->events.configure, configure);
+	wl_signal_emit_mutable(&surface->events.configure, configure);
 
 	xdg_surface_send_configure(surface->resource, configure->serial);
 }
@@ -306,13 +305,13 @@ void xdg_surface_role_commit(struct wlr_surface *wlr_surface) {
 
 	if (!surface->added) {
 		surface->added = true;
-		wlr_signal_emit_safe(&surface->client->shell->events.new_surface,
+		wl_signal_emit_mutable(&surface->client->shell->events.new_surface,
 			surface);
 	}
 	if (surface->configured && wlr_surface_has_buffer(surface->surface) &&
 			!surface->mapped) {
 		surface->mapped = true;
-		wlr_signal_emit_safe(&surface->events.map, NULL);
+		wl_signal_emit_mutable(&surface->events.map, NULL);
 	}
 }
 
@@ -405,7 +404,7 @@ void reset_xdg_surface(struct wlr_xdg_surface *surface) {
 	}
 
 	if (surface->added) {
-		wlr_signal_emit_safe(&surface->events.destroy, NULL);
+		wl_signal_emit_mutable(&surface->events.destroy, NULL);
 		surface->added = false;
 	}
 
@@ -465,9 +464,9 @@ void wlr_xdg_popup_get_position(struct wlr_xdg_popup *popup,
 		wlr_xdg_surface_from_wlr_surface(popup->parent);
 	struct wlr_box parent_geo;
 	wlr_xdg_surface_get_geometry(parent, &parent_geo);
-	*popup_sx = parent_geo.x + popup->geometry.x -
+	*popup_sx = parent_geo.x + popup->current.geometry.x -
 		popup->base->current.geometry.x;
-	*popup_sy = parent_geo.y + popup->geometry.y -
+	*popup_sy = parent_geo.y + popup->current.geometry.y -
 		popup->base->current.geometry.y;
 }
 

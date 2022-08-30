@@ -19,7 +19,6 @@
 #include "backend/wayland.h"
 #include "render/drm_format_set.h"
 #include "render/pixel_format.h"
-#include "util/signal.h"
 
 #include "drm-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
@@ -346,8 +345,15 @@ static void registry_global(void *data, struct wl_registry *registry,
 		wl->compositor = wl_registry_bind(registry, name,
 			&wl_compositor_interface, 4);
 	} else if (strcmp(iface, wl_seat_interface.name) == 0) {
+		uint32_t target_version = version;
+		if (version < 5) {
+			target_version = 5;
+		}
+		if (version > 8) {
+			target_version = 8;
+		}
 		struct wl_seat *wl_seat = wl_registry_bind(registry, name,
-			&wl_seat_interface, 5);
+			&wl_seat_interface, target_version);
 		if (!create_wl_seat(wl_seat, wl)) {
 			wl_seat_destroy(wl_seat);
 		}
@@ -413,12 +419,16 @@ static bool backend_start(struct wlr_backend *backend) {
 
 	struct wlr_wl_seat *seat;
 	wl_list_for_each(seat, &wl->seats, link) {
-		if (seat->keyboard) {
-			create_wl_keyboard(seat);
+		if (seat->wl_keyboard) {
+			init_seat_keyboard(seat);
+		}
+
+		if (seat->wl_touch) {
+			init_seat_touch(seat);
 		}
 
 		if (wl->tablet_manager) {
-			wl_add_tablet_seat(wl->tablet_manager, seat);
+			init_seat_tablet(seat);
 		}
 	}
 
@@ -439,11 +449,6 @@ static void backend_destroy(struct wlr_backend *backend) {
 	struct wlr_wl_output *output, *tmp_output;
 	wl_list_for_each_safe(output, tmp_output, &wl->outputs, link) {
 		wlr_output_destroy(&output->wlr_output);
-	}
-
-	struct wlr_wl_input_device *input_device, *tmp_input_device;
-	wl_list_for_each_safe(input_device, tmp_input_device, &wl->devices, link) {
-		destroy_wl_input_device(input_device);
 	}
 
 	struct wlr_wl_buffer *buffer, *tmp_buffer;
@@ -538,7 +543,6 @@ struct wlr_backend *wlr_wl_backend_create(struct wl_display *display,
 	wlr_backend_init(&wl->backend, &backend_impl);
 
 	wl->local_display = display;
-	wl_list_init(&wl->devices);
 	wl_list_init(&wl->outputs);
 	wl_list_init(&wl->seats);
 	wl_list_init(&wl->buffers);
