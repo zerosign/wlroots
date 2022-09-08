@@ -33,6 +33,7 @@ wlr_files += files(
 	'buffer/dmabuf.c',
 	'buffer/readonly_data.c',
 	'buffer/resource.c',
+	'wlr_color_representation_v1.c',
 	'wlr_compositor.c',
 	'wlr_content_type_v1.c',
 	'wlr_cursor.c',
