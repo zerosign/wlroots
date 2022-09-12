@@ -435,7 +435,7 @@ static struct wlr_vk_render_buffer *create_render_buffer(
 		(const char*) &dmabuf.format, dmabuf.width, dmabuf.height);
 
 	buffer->image = vulkan_import_dmabuf(renderer, &dmabuf,
-		buffer->memories, &buffer->mem_count, true);
+		buffer->memories, &buffer->mem_count, WLR_VK_IMAGE_USAGE_RENDER);
 	if (!buffer->image) {
 		goto error_buffer;
 	}
@@ -887,13 +887,13 @@ static void vulkan_render_quad_with_matrix(struct wlr_renderer *wlr_renderer,
 static const struct wlr_drm_format_set *vulkan_get_dmabuf_texture_formats(
 		struct wlr_renderer *wlr_renderer) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
-	return &renderer->dev->dmabuf_texture_formats;
+	return &renderer->dev->dmabuf_formats[WLR_VK_IMAGE_USAGE_SAMPLED];
 }
 
 static const struct wlr_drm_format_set *vulkan_get_render_formats(
 		struct wlr_renderer *wlr_renderer) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
-	return &renderer->dev->dmabuf_render_formats;
+	return &renderer->dev->dmabuf_formats[WLR_VK_IMAGE_USAGE_RENDER];
 }
 
 static uint32_t vulkan_preferred_read_format(

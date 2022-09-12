@@ -535,8 +535,9 @@ void vulkan_device_destroy(struct wlr_vk_device *dev) {
 		close(dev->drm_fd);
 	}
 
-	wlr_drm_format_set_finish(&dev->dmabuf_render_formats);
-	wlr_drm_format_set_finish(&dev->dmabuf_texture_formats);
+	for (int i = 0; i < WLR_VK_IMAGE_USAGE_COUNT; i++) {
+		wlr_drm_format_set_finish(&dev->dmabuf_formats[i]);
+	}
 
 	for (unsigned i = 0u; i < dev->format_prop_count; ++i) {
 		vulkan_format_props_finish(&dev->format_props[i]);
