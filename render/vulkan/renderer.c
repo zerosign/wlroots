@@ -59,9 +59,9 @@ struct vert_pcr_data {
 
 // https://www.w3.org/Graphics/Color/srgb
 static float color_to_linear(float non_linear) {
-	return (non_linear > 0.04045) ?
-		pow((non_linear + 0.055) / 1.055, 2.4) :
-		non_linear / 12.92;
+	return (non_linear > 0.04045f) ?
+		powf((non_linear + 0.055f) / 1.055f, 2.4f) :
+		non_linear / 12.92f;
 }
 
 // renderer
@@ -776,10 +776,10 @@ static bool vulkan_render_subtexture_with_matrix(struct wlr_renderer *wlr_render
 	struct vert_pcr_data vert_pcr_data;
 	mat3_to_mat4(final_matrix, vert_pcr_data.mat4);
 
-	vert_pcr_data.uv_off[0] = box->x / wlr_texture->width;
-	vert_pcr_data.uv_off[1] = box->y / wlr_texture->height;
-	vert_pcr_data.uv_size[0] = box->width / wlr_texture->width;
-	vert_pcr_data.uv_size[1] = box->height / wlr_texture->height;
+	vert_pcr_data.uv_off[0] = (float)(box->x / wlr_texture->width);
+	vert_pcr_data.uv_off[1] = (float)(box->y / wlr_texture->height);
+	vert_pcr_data.uv_size[0] = (float)(box->width / wlr_texture->width);
+	vert_pcr_data.uv_size[1] = (float)(box->height / wlr_texture->height);
 
 	vkCmdPushConstants(cb, renderer->pipe_layout,
 		VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vert_pcr_data), &vert_pcr_data);

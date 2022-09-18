@@ -558,7 +558,7 @@ void wlr_layer_surface_v1_for_each_popup_surface(struct wlr_layer_surface_v1 *su
 			continue;
 		}
 
-		double popup_sx, popup_sy;
+		int popup_sx, popup_sy;
 		popup_sx = popup->current.geometry.x - popup->base->current.geometry.x;
 		popup_sy = popup->current.geometry.y - popup->base->current.geometry.y;
 

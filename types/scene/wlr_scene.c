@@ -601,7 +601,8 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	wlr_region_transform(&trans_damage, damage,
 		scene_buffer->transform, buffer->width, buffer->height);
 	pixman_region32_intersect_rect(&trans_damage, &trans_damage,
-		box.x, box.y, box.width, box.height);
+		(int)box.x, (int)box.y,
+		(unsigned int)box.width, (unsigned int)box.height);
 
 	struct wlr_scene *scene = scene_node_get_root(&scene_buffer->node);
 	struct wlr_scene_output *scene_output;
@@ -610,18 +611,21 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 		pixman_region32_t output_damage;
 		pixman_region32_init(&output_damage);
 		wlr_region_scale_xy(&output_damage, &trans_damage,
-			output_scale * scale_x, output_scale * scale_y);
+			(float)(output_scale * scale_x),
+			(float)(output_scale * scale_y));
 
 		pixman_region32_t cull_region;
 		pixman_region32_init(&cull_region);
 		wlr_region_scale(&cull_region, &scene_buffer->node.visible, output_scale);
-		pixman_region32_translate(&cull_region, -lx * output_scale, -ly * output_scale);
+		pixman_region32_translate(&cull_region,
+			(int)(-lx * output_scale),
+			(int)(-ly * output_scale));
 		pixman_region32_intersect(&output_damage, &output_damage, &cull_region);
 		pixman_region32_fini(&cull_region);
 
 		pixman_region32_translate(&output_damage,
-			(lx - scene_output->x) * output_scale,
-			(ly - scene_output->y) * output_scale);
+			(int)((lx - scene_output->x) * output_scale),
+			(int)((ly - scene_output->y) * output_scale));
 		if (wlr_damage_ring_add(&scene_output->damage_ring, &output_damage)) {
 			wlr_output_schedule_frame(scene_output->output);
 		}
@@ -740,14 +744,14 @@ static void scene_node_get_size(struct wlr_scene_node *node,
 }
 
 static int scale_length(int length, int offset, float scale) {
-	return round((offset + length) * scale) - round(offset * scale);
+	return (int)(round((offset + length) * scale) - round(offset * scale));
 }
 
 static void scale_box(struct wlr_box *box, float scale) {
 	box->width = scale_length(box->width, box->x, scale);
 	box->height = scale_length(box->height, box->y, scale);
-	box->x = round(box->x * scale);
-	box->y = round(box->y * scale);
+	box->x = (int)round(box->x * scale);
+	box->y = (int)round(box->y * scale);
 }
 
 void wlr_scene_node_set_enabled(struct wlr_scene_node *node, bool enabled) {
@@ -900,8 +904,8 @@ void wlr_scene_node_for_each_buffer(struct wlr_scene_node *node,
 }
 
 struct node_at_data {
-	double lx, ly;
-	double rx, ry;
+	int lx, ly;
+	int rx, ry;
 	struct wlr_scene_node *node;
 };
 
@@ -909,8 +913,8 @@ static bool scene_node_at_iterator(struct wlr_scene_node *node,
 		int lx, int ly, void *data) {
 	struct node_at_data *at_data = data;
 
-	double rx = at_data->lx - lx;
-	double ry = at_data->ly - ly;
+	int rx = at_data->lx - lx;
+	int ry = at_data->ly - ly;
 
 	if (node->type == WLR_SCENE_NODE_BUFFER) {
 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
@@ -930,15 +934,15 @@ static bool scene_node_at_iterator(struct wlr_scene_node *node,
 struct wlr_scene_node *wlr_scene_node_at(struct wlr_scene_node *node,
 		double lx, double ly, double *nx, double *ny) {
 	struct wlr_box box = {
-		.x = floor(lx),
-		.y = floor(ly),
+		.x = (int)floor(lx),
+		.y = (int)floor(ly),
 		.width = 1,
 		.height = 1
 	};
 
 	struct node_at_data data = {
-		.lx = lx,
-		.ly = ly
+		.lx = (int)lx,
+		.ly = (int)ly
 	};
 
 	if (scene_nodes_in_box(node, &box, scene_node_at_iterator, &data)) {
@@ -1545,7 +1549,7 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 			struct timespec time_diff;
 			timespec_sub(&time_diff, &now, &damage->when);
 			int64_t time_diff_ms = timespec_to_msec(&time_diff);
-			float alpha = 1.0 - (double)time_diff_ms / HIGHLIGHT_DAMAGE_FADEOUT_TIME;
+			float alpha = 1.0f - (float)time_diff_ms / HIGHLIGHT_DAMAGE_FADEOUT_TIME;
 
 			int nrects;
 			pixman_box32_t *rects = pixman_region32_rectangles(&damage->region, &nrects);
@@ -1557,7 +1561,7 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 					.height = rects[i].y2 - rects[i].y1,
 				};
 
-				float color[4] = { alpha * .5, 0.0, 0.0, alpha * .5 };
+				float color[4] = { alpha * 0.5f, 0.0f, 0.0f, alpha * 0.5f };
 				wlr_render_rect(renderer, &box, color, output->transform_matrix);
 			}
 		}

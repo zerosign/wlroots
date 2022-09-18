@@ -366,8 +366,8 @@ static struct tinywl_view *desktop_view_at(
 static void process_cursor_move(struct tinywl_server *server, uint32_t time) {
 	/* Move the grabbed view to the new position. */
 	struct tinywl_view *view = server->grabbed_view;
-	view->x = server->cursor->x - server->grab_x;
-	view->y = server->cursor->y - server->grab_y;
+	view->x = (int)(server->cursor->x - server->grab_x);
+	view->y = (int)(server->cursor->y - server->grab_y);
 	wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
 }
 
@@ -383,8 +383,8 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 	 * commit any movement that was prepared.
 	 */
 	struct tinywl_view *view = server->grabbed_view;
-	double border_x = server->cursor->x - server->grab_x;
-	double border_y = server->cursor->y - server->grab_y;
+	int border_x = (int)(server->cursor->x - server->grab_x);
+	int border_y = (int)(server->cursor->y - server->grab_y);
 	int new_left = server->grab_geobox.x;
 	int new_right = server->grab_geobox.x + server->grab_geobox.width;
 	int new_top = server->grab_geobox.y;

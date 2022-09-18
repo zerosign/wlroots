@@ -169,10 +169,10 @@ static void pixman_clear(struct wlr_renderer *wlr_renderer,
 	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
 
 	const struct pixman_color colour = {
-		.red = color[0] * 0xFFFF,
-		.green = color[1] * 0xFFFF,
-		.blue = color[2] * 0xFFFF,
-		.alpha = color[3] * 0xFFFF,
+		.red = (uint16_t)(color[0] * 0xFFFF),
+		.green = (uint16_t)(color[1] * 0xFFFF),
+		.blue = (uint16_t)(color[2] * 0xFFFF),
+		.alpha = (uint16_t)(color[3] * 0xFFFF),
 	};
 
 	pixman_image_t *fill = pixman_image_create_solid_fill(&colour);
@@ -247,12 +247,12 @@ static bool pixman_render_subtexture_with_matrix(
 
 	// TODO: don't create a mask if alpha == 1.0
 	struct pixman_color mask_colour = {0};
-	mask_colour.alpha = 0xFFFF * alpha;
+	mask_colour.alpha = (uint16_t)(0xFFFF * alpha);
 	pixman_image_t *mask = pixman_image_create_solid_fill(&mask_colour);
 
 	float m[9];
 	memcpy(m, matrix, sizeof(m));
-	wlr_matrix_scale(m, 1.0 / fbox->width, 1.0 / fbox->height);
+	wlr_matrix_scale(m, 1.0f / (float)fbox->width, 1.0f / (float)fbox->height);
 
 	struct pixman_transform transform = {0};
 	matrix_to_pixman_transform(&transform, m);
@@ -279,11 +279,11 @@ static void pixman_render_quad_with_matrix(struct wlr_renderer *wlr_renderer,
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
 	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
 
-	struct pixman_color colour = {
-		.red = color[0] * 0xFFFF,
-		.green = color[1] * 0xFFFF,
-		.blue = color[2] * 0xFFFF,
-		.alpha = color[3] * 0xFFFF,
+	const struct pixman_color colour = {
+		.red = (uint16_t)(color[0] * 0xFFFF),
+		.green = (uint16_t)(color[1] * 0xFFFF),
+		.blue = (uint16_t)(color[2] * 0xFFFF),
+		.alpha = (uint16_t)(color[3] * 0xFFFF),
 	};
 
 	pixman_image_t *fill = pixman_image_create_solid_fill(&colour);
@@ -294,21 +294,21 @@ static void pixman_render_quad_with_matrix(struct wlr_renderer *wlr_renderer,
 	// TODO get the width/height from the caller instead of extracting them
 	float width, height;
 	if (matrix[1] == 0.0 && matrix[3] == 0.0) {
-		width = fabs(matrix[0]);
-		height = fabs(matrix[4]);
+		width = fabsf(matrix[0]);
+		height = fabsf(matrix[4]);
 	} else {
-		width = sqrt(matrix[0] * matrix[0] + matrix[1] * matrix[1]);
-		height = sqrt(matrix[3] * matrix[3] + matrix[4] * matrix[4]);
+		width = sqrtf(matrix[0] * matrix[0] + matrix[1] * matrix[1]);
+		height = sqrtf(matrix[3] * matrix[3] + matrix[4] * matrix[4]);
 	}
 
-	wlr_matrix_scale(m, 1.0 / width, 1.0 / height);
+	wlr_matrix_scale(m, 1.0f / width, 1.0f / height);
 
-	pixman_image_t *image = pixman_image_create_bits(PIXMAN_a8r8g8b8, width,
-			height, NULL, 0);
+	pixman_image_t *image = pixman_image_create_bits(PIXMAN_a8r8g8b8,
+		(int)width, (int)height, NULL, 0);
 
 	// TODO find a way to fill the image without allocating 2 images
 	pixman_image_composite32(PIXMAN_OP_SRC, fill, NULL, image,
-		0, 0, 0, 0, 0, 0, width, height);
+		0, 0, 0, 0, 0, 0, (int)width, (int)height);
 	pixman_image_unref(fill);
 
 	struct pixman_transform transform = {0};

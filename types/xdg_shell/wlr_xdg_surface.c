@@ -528,16 +528,19 @@ static void xdg_surface_for_each_popup_surface(struct wlr_xdg_surface *surface,
 		double popup_sx, popup_sy;
 		wlr_xdg_popup_get_position(popup, &popup_sx, &popup_sy);
 
+		int sx = x + (int)popup_sx, sy = y + (int)popup_sy;
+
 		struct xdg_surface_iterator_data data = {
 			.user_iterator = iterator,
 			.user_data = user_data,
-			.x = x + popup_sx, .y = y + popup_sy,
+			.x = sx,
+			.y = sy,
 		};
 		wlr_surface_for_each_surface(popup->base->surface,
 			xdg_surface_iterator, &data);
 
 		xdg_surface_for_each_popup_surface(popup->base,
-			x + popup_sx, y + popup_sy, iterator, user_data);
+			sx, sy, iterator, user_data);
 	}
 }
 

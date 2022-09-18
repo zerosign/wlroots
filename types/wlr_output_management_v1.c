@@ -247,7 +247,7 @@ static void config_head_handle_set_scale(struct wl_client *client,
 		return;
 	}
 
-	float scale =  wl_fixed_to_double(scale_fixed);
+	float scale = (float)wl_fixed_to_double(scale_fixed);
 	if (scale <= 0) {
 		wl_resource_post_error(config_head_resource,
 			ZWLR_OUTPUT_CONFIGURATION_HEAD_V1_ERROR_INVALID_SCALE,

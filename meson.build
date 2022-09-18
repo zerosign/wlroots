@@ -46,6 +46,8 @@ add_project_arguments(cc.get_supported_arguments([
 	'-Wno-missing-braces',
 	'-Wno-missing-field-initializers',
 	'-Wno-unused-parameter',
+
+	'-Wfloat-conversion',
 ]), language: 'c')
 
 # Compute the relative path used by compiler invocations.

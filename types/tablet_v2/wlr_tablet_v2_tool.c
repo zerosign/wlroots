@@ -415,7 +415,7 @@ void wlr_send_tablet_v2_tablet_tool_pressure(
 		struct wlr_tablet_v2_tablet_tool *tool, double pressure) {
 	if (tool->current_client) {
 		zwp_tablet_tool_v2_send_pressure(tool->current_client->resource,
-			pressure * 65535);
+			(uint32_t)(pressure * 65535));
 
 		queue_tool_frame(tool->current_client);
 	}
@@ -425,7 +425,7 @@ void wlr_send_tablet_v2_tablet_tool_distance(
 		struct wlr_tablet_v2_tablet_tool *tool, double distance) {
 	if (tool->current_client) {
 		zwp_tablet_tool_v2_send_distance(tool->current_client->resource,
-			distance * 65535);
+			(uint32_t)(distance * 65535));
 
 		queue_tool_frame(tool->current_client);
 	}
@@ -462,7 +462,7 @@ void wlr_send_tablet_v2_tablet_tool_slider(
 	}
 
 	zwp_tablet_tool_v2_send_slider(tool->current_client->resource,
-		position * 65535);
+		(uint32_t)(position * 65535));
 
 	queue_tool_frame(tool->current_client);
 }
@@ -489,7 +489,7 @@ void wlr_send_tablet_v2_tablet_tool_wheel(
 	struct wlr_tablet_v2_tablet_tool *tool, double degrees, int32_t clicks) {
 	if (tool->current_client) {
 		zwp_tablet_tool_v2_send_wheel(tool->current_client->resource,
-			clicks, degrees);
+			wl_fixed_from_double(degrees), clicks);
 
 		queue_tool_frame(tool->current_client);
 	}

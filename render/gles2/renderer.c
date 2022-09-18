@@ -305,10 +305,10 @@ static bool gles2_render_subtexture_with_matrix(
 	glUniform1i(shader->tex, 0);
 	glUniform1f(shader->alpha, alpha);
 
-	const GLfloat x1 = box->x / wlr_texture->width;
-	const GLfloat y1 = box->y / wlr_texture->height;
-	const GLfloat x2 = (box->x + box->width) / wlr_texture->width;
-	const GLfloat y2 = (box->y + box->height) / wlr_texture->height;
+	const GLfloat x1 = (GLfloat)(box->x / wlr_texture->width);
+	const GLfloat y1 = (GLfloat)(box->y / wlr_texture->height);
+	const GLfloat x2 = (GLfloat)((box->x + box->width) / wlr_texture->width);
+	const GLfloat y2 = (GLfloat)((box->y + box->height) / wlr_texture->height);
 	const GLfloat texcoord[] = {
 		x2, y1, // top right
 		x1, y1, // top left

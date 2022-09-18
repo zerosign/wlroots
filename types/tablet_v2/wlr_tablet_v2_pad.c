@@ -505,7 +505,7 @@ void wlr_send_tablet_v2_tablet_pad_strip(struct wlr_tablet_v2_tablet_pad *pad,
 	if (position < 0) {
 		zwp_tablet_pad_strip_v2_send_stop(resource);
 	} else {
-		zwp_tablet_pad_strip_v2_send_position(resource, position * 65535);
+		zwp_tablet_pad_strip_v2_send_position(resource, (int)(position * 65535));
 	}
 	zwp_tablet_pad_strip_v2_send_frame(resource, time);
 }
@@ -526,7 +526,8 @@ void wlr_send_tablet_v2_tablet_pad_ring(struct wlr_tablet_v2_tablet_pad *pad,
 	if (position < 0) {
 		zwp_tablet_pad_ring_v2_send_stop(resource);
 	} else {
-		zwp_tablet_pad_ring_v2_send_angle(resource, position);
+		zwp_tablet_pad_ring_v2_send_angle(resource,
+			wl_fixed_from_double(position));
 	}
 	zwp_tablet_pad_ring_v2_send_frame(resource, time);
 }

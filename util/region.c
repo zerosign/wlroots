@@ -25,10 +25,10 @@ void wlr_region_scale_xy(pixman_region32_t *dst, pixman_region32_t *src,
 	}
 
 	for (int i = 0; i < nrects; ++i) {
-		dst_rects[i].x1 = floor(src_rects[i].x1 * scale_x);
-		dst_rects[i].x2 = ceil(src_rects[i].x2 * scale_x);
-		dst_rects[i].y1 = floor(src_rects[i].y1 * scale_y);
-		dst_rects[i].y2 = ceil(src_rects[i].y2 * scale_y);
+		dst_rects[i].x1 = (int)floorf(src_rects[i].x1 * scale_x);
+		dst_rects[i].x2 = (int)ceilf(src_rects[i].x2 * scale_x);
+		dst_rects[i].y1 = (int)floorf(src_rects[i].y1 * scale_y);
+		dst_rects[i].y2 = (int)ceilf(src_rects[i].y2 * scale_y);
 	}
 
 	pixman_region32_fini(dst);
@@ -152,32 +152,32 @@ void wlr_region_rotated_bounds(pixman_region32_t *dst, pixman_region32_t *src,
 	}
 
 	for (int i = 0; i < nrects; ++i) {
-		double x1 = src_rects[i].x1 - ox;
-		double y1 = src_rects[i].y1 - oy;
-		double x2 = src_rects[i].x2 - ox;
-		double y2 = src_rects[i].y2 - oy;
+		float x1 = src_rects[i].x1 - ox;
+		float y1 = src_rects[i].y1 - oy;
+		float x2 = src_rects[i].x2 - ox;
+		float y2 = src_rects[i].y2 - oy;
 
-		double rx1 = x1 * cos(rotation) - y1 * sin(rotation);
-		double ry1 = x1 * sin(rotation) + y1 * cos(rotation);
+		float rx1 = x1 * cosf(rotation) - y1 * sinf(rotation);
+		float ry1 = x1 * sinf(rotation) + y1 * cosf(rotation);
 
-		double rx2 = x2 * cos(rotation) - y1 * sin(rotation);
-		double ry2 = x2 * sin(rotation) + y1 * cos(rotation);
+		float rx2 = x2 * cosf(rotation) - y1 * sinf(rotation);
+		float ry2 = x2 * sinf(rotation) + y1 * cosf(rotation);
 
-		double rx3 = x2 * cos(rotation) - y2 * sin(rotation);
-		double ry3 = x2 * sin(rotation) + y2 * cos(rotation);
+		float rx3 = x2 * cosf(rotation) - y2 * sinf(rotation);
+		float ry3 = x2 * sinf(rotation) + y2 * cosf(rotation);
 
-		double rx4 = x1 * cos(rotation) - y2 * sin(rotation);
-		double ry4 = x1 * sin(rotation) + y2 * cos(rotation);
+		float rx4 = x1 * cosf(rotation) - y2 * sinf(rotation);
+		float ry4 = x1 * sinf(rotation) + y2 * cosf(rotation);
 
-		x1 = fmin(fmin(rx1, rx2), fmin(rx3, rx4));
-		y1 = fmin(fmin(ry1, ry2), fmin(ry3, ry4));
-		x2 = fmax(fmax(rx1, rx2), fmax(rx3, rx4));
-		y2 = fmax(fmax(ry1, ry2), fmax(ry3, ry4));
+		x1 = fminf(fminf(rx1, rx2), fminf(rx3, rx4));
+		y1 = fminf(fminf(ry1, ry2), fminf(ry3, ry4));
+		x2 = fmaxf(fmaxf(rx1, rx2), fmaxf(rx3, rx4));
+		y2 = fmaxf(fmaxf(ry1, ry2), fmaxf(ry3, ry4));
 
-		dst_rects[i].x1 = floor(ox + x1);
-		dst_rects[i].x2 = ceil(ox + x2);
-		dst_rects[i].y1 = floor(oy + y1);
-		dst_rects[i].y2 = ceil(oy + y2);
+		dst_rects[i].x1 = (int)floorf(ox + x1);
+		dst_rects[i].x2 = (int)ceilf(ox + x2);
+		dst_rects[i].y1 = (int)floorf(oy + y1);
+		dst_rects[i].y2 = (int)ceilf(oy + y2);
 	}
 
 	pixman_region32_fini(dst);
@@ -210,8 +210,8 @@ static void region_confine(pixman_region32_t *region, double x1, double y1, doub
 	double y = fmax(fmin(delta * dy + y1, box.y2 - 1), box.y1);
 
 	// Go one unit past the boundary to find an adjacent box.
-	int x_ext = floor(x) + (dx == 0 ? 0 : dx > 0 ? 1 : -1);
-	int y_ext = floor(y) + (dy == 0 ? 0 : dy > 0 ? 1 : -1);
+	int x_ext = (int)floor(x) + (dx == 0 ? 0 : dx > 0 ? 1 : -1);
+	int y_ext = (int)floor(y) + (dy == 0 ? 0 : dy > 0 ? 1 : -1);
 
 	if (pixman_region32_contains_point(region, x_ext, y_ext, &box)) {
 		return region_confine(region, x, y, x2, y2, x2_out, y2_out, box);
@@ -245,7 +245,8 @@ static void region_confine(pixman_region32_t *region, double x1, double y1, doub
 bool wlr_region_confine(pixman_region32_t *region, double x1, double y1, double x2,
 		double y2, double *x2_out, double *y2_out) {
 	pixman_box32_t box;
-	if (pixman_region32_contains_point(region, floor(x1), floor(y1), &box)) {
+	if (pixman_region32_contains_point(region,
+			(int)floor(x1), (int)floor(y1), &box)) {
 		region_confine(region, x1, y1, x2, y2, x2_out, y2_out, box);
 		return true;
 	} else {

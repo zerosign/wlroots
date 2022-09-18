@@ -50,10 +50,13 @@ bool wlr_box_intersection(struct wlr_box *dest, const struct wlr_box *box_a,
 		return false;
 	}
 
-	int x1 = fmax(box_a->x, box_b->x);
-	int y1 = fmax(box_a->y, box_b->y);
-	int x2 = fmin(box_a->x + box_a->width, box_b->x + box_b->width);
-	int y2 = fmin(box_a->y + box_a->height, box_b->y + box_b->height);
+	int x1 = box_a->x > box_b->x ? box_a->x : box_b->x;
+	int y1 = box_a->y > box_b->y ? box_a->y : box_b->y;
+
+	int x2a = box_a->x + box_a->width, x2b = box_b->x + box_b->width;
+	int y2a = box_a->y + box_a->height, y2b = box_b->y + box_b->height;
+	int x2 = x2a < x2b ? x2a : x2b;
+	int y2 = y2a < y2b ? y2a : y2b;
 
 	dest->x = x1;
 	dest->y = y1;

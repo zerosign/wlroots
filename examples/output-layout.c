@@ -82,25 +82,25 @@ static void animate_cat(struct sample_state *sample,
 		sample->x_offs = l_output->x + 20;
 		sample->y_offs = l_output->y + 20;
 	} else if (ur_collision && ul_collision) {
-		sample->y_vel = fabs(sample->y_vel);
+		sample->y_vel = fabsf(sample->y_vel);
 	} else if (lr_collision && ll_collision) {
-		sample->y_vel = -fabs(sample->y_vel);
+		sample->y_vel = -fabsf(sample->y_vel);
 	} else if (ll_collision && ul_collision) {
-		sample->x_vel = fabs(sample->x_vel);
+		sample->x_vel = fabsf(sample->x_vel);
 	} else if (ur_collision && lr_collision) {
-		sample->x_vel = -fabs(sample->x_vel);
+		sample->x_vel = -fabsf(sample->x_vel);
 	} else {
 		if (ur_collision || lr_collision) {
-			sample->x_vel = -fabs(sample->x_vel);
+			sample->x_vel = -fabsf(sample->x_vel);
 		}
 		if (ul_collision || ll_collision) {
-			sample->x_vel = fabs(sample->x_vel);
+			sample->x_vel = fabsf(sample->x_vel);
 		}
 		if (ul_collision || ur_collision) {
-			sample->y_vel = fabs(sample->y_vel);
+			sample->y_vel = fabsf(sample->y_vel);
 		}
 		if (ll_collision || lr_collision) {
-			sample->y_vel = -fabs(sample->y_vel);
+			sample->y_vel = -fabsf(sample->y_vel);
 		}
 	}
 
@@ -119,12 +119,12 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
 	wlr_output_attach_render(wlr_output, NULL);
 	wlr_renderer_begin(sample->renderer, wlr_output->width, wlr_output->height);
-	wlr_renderer_clear(sample->renderer, (float[]){0.25f, 0.25f, 0.25f, 1});
+	wlr_renderer_clear(sample->renderer, (float[]){0.25f, 0.25f, 0.25f, 1.0f});
 
 	animate_cat(sample, output->output);
 
 	struct wlr_box box = {
-		.x = sample->x_offs, .y = sample->y_offs,
+		.x = (int)sample->x_offs, .y = (int)sample->y_offs,
 		.width = 128, .height = 128,
 	};
 	if (wlr_output_layout_intersects(sample->layout, output->output, &box)) {
@@ -135,7 +135,8 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 			&local_x, &local_y);
 
 		wlr_render_texture(sample->renderer, sample->cat_texture,
-			wlr_output->transform_matrix, local_x, local_y, 1.0f);
+			wlr_output->transform_matrix,
+			(int)local_x, (int)local_y, 1.0f);
 	}
 
 	wlr_renderer_end(sample->renderer);
