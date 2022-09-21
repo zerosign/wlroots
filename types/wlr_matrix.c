@@ -63,9 +63,9 @@ void wlr_matrix_scale(float mat[static 9], float x, float y) {
 
 void wlr_matrix_rotate(float mat[static 9], float rad) {
 	float rotate[9] = {
-		cos(rad), -sin(rad), 0.0f,
-		sin(rad),  cos(rad), 0.0f,
-		0.0f,      0.0f,     1.0f,
+		cosf(rad), -sinf(rad), 0.0f,
+		sinf(rad),  cosf(rad), 0.0f,
+		0.0f,       0.0f,      1.0f,
 	};
 	wlr_matrix_multiply(mat, mat, rotate);
 }
@@ -133,8 +133,8 @@ void matrix_projection(float mat[static 9], int width, int height,
 	mat[4] = y * -t[4];
 
 	// Translation
-	mat[2] = -copysign(1.0f, mat[0] + mat[1]);
-	mat[5] = -copysign(1.0f, mat[3] + mat[4]);
+	mat[2] = -copysignf(1.0f, mat[0] + mat[1]);
+	mat[5] = -copysignf(1.0f, mat[3] + mat[4]);
 
 	// Identity
 	mat[8] = 1.0f;

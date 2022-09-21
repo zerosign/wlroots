@@ -350,8 +350,8 @@ void wlr_seat_pointer_send_axis(struct wlr_seat *wlr_seat, uint32_t time,
 		if (send_source && version >= WL_POINTER_AXIS_SOURCE_SINCE_VERSION) {
 			wl_pointer_send_axis_source(resource, source);
 		}
-		if (value) {
-			if (value_discrete) {
+		if (value != 0.0) {
+			if (value_discrete != 0) {
 				if (version >= WL_POINTER_AXIS_VALUE120_SINCE_VERSION) {
 					// High resolution discrete scrolling
 					wl_pointer_send_axis_value120(resource, orientation,

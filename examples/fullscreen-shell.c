@@ -62,10 +62,10 @@ static void render_surface(struct wlr_surface *surface,
 	}
 
 	struct wlr_box box = {
-		.x = sx * output->scale,
-		.y = sy * output->scale,
-		.width = surface->current.width * output->scale,
-		.height = surface->current.height * output->scale,
+		.x = (int)(sx * output->scale),
+		.y = (int)(sy * output->scale),
+		.width = (int)(surface->current.width * output->scale),
+		.height = (int)(surface->current.height * output->scale),
 	};
 
 	float matrix[9];
@@ -95,7 +95,7 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 
 	wlr_renderer_begin(renderer, width, height);
 
-	float color[4] = {0.3, 0.3, 0.3, 1.0};
+	float color[4] = {0.3f, 0.3f, 0.3f, 1.0f};
 	wlr_renderer_clear(renderer, color);
 
 	if (output->surface != NULL) {

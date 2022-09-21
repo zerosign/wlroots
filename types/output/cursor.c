@@ -81,8 +81,8 @@ static void output_scissor(struct wlr_output *output, pixman_box32_t *rect) {
  */
 static void output_cursor_get_box(struct wlr_output_cursor *cursor,
 		struct wlr_box *box) {
-	box->x = cursor->x - cursor->hotspot_x;
-	box->y = cursor->y - cursor->hotspot_y;
+	box->x = (int)(cursor->x - cursor->hotspot_x);
+	box->y = (int)(cursor->y - cursor->hotspot_y);
 	box->width = cursor->width;
 	box->height = cursor->height;
 }
@@ -287,8 +287,8 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 	}
 
 	struct wlr_box cursor_box = {
-		.width = texture->width * output->scale / scale,
-		.height = texture->height * output->scale / scale,
+		.width = (int)(texture->width * output->scale / scale),
+		.height = (int)(texture->height * output->scale / scale),
 	};
 
 	float output_matrix[9];
@@ -300,11 +300,11 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 		};
 		wlr_box_transform(&tr_size, &tr_size, output->transform, 0, 0);
 
-		wlr_matrix_translate(output_matrix, buffer->width / 2.0,
-			buffer->height / 2.0);
+		wlr_matrix_translate(output_matrix, buffer->width / 2.0f,
+			buffer->height / 2.0f);
 		wlr_matrix_transform(output_matrix, output->transform);
-		wlr_matrix_translate(output_matrix, - tr_size.width / 2.0,
-			- tr_size.height / 2.0);
+		wlr_matrix_translate(output_matrix, - tr_size.width / 2.0f,
+			- tr_size.height / 2.0f);
 	}
 
 	float matrix[9];
@@ -446,12 +446,12 @@ static void output_cursor_commit(struct wlr_output_cursor *cursor,
 
 	// Some clients commit a cursor surface with a NULL buffer to hide it.
 	cursor->enabled = wlr_surface_has_buffer(surface);
-	cursor->width = surface->current.width * cursor->output->scale;
-	cursor->height = surface->current.height * cursor->output->scale;
+	cursor->width = (int)(surface->current.width * cursor->output->scale);
+	cursor->height = (int)(surface->current.height * cursor->output->scale);
 	output_cursor_update_visible(cursor);
 	if (update_hotspot) {
-		cursor->hotspot_x -= surface->current.dx * cursor->output->scale;
-		cursor->hotspot_y -= surface->current.dy * cursor->output->scale;
+		cursor->hotspot_x -= (int32_t)(surface->current.dx * cursor->output->scale);
+		cursor->hotspot_y -= (int32_t)(surface->current.dy * cursor->output->scale);
 	}
 
 	if (output_cursor_attempt_hardware(cursor)) {
@@ -478,8 +478,8 @@ static void output_cursor_handle_destroy(struct wl_listener *listener,
 
 void wlr_output_cursor_set_surface(struct wlr_output_cursor *cursor,
 		struct wlr_surface *surface, int32_t hotspot_x, int32_t hotspot_y) {
-	hotspot_x *= cursor->output->scale;
-	hotspot_y *= cursor->output->scale;
+	hotspot_x = (int32_t)(hotspot_x * cursor->output->scale);
+	hotspot_y = (int32_t)(hotspot_y * cursor->output->scale);
 
 	if (surface && surface == cursor->surface) {
 		// Only update the hotspot: surface hasn't changed

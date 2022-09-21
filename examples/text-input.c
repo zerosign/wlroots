@@ -69,9 +69,9 @@ struct wlr_egl_surface *egl_surface;
 static void draw(void) {
 	eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
 
-	float color[] = {1.0, 1.0, 0.0, 1.0};
-	color[0] = enabled * 1.0;
-	color[1] = entered * 1.0;
+	float color[] = {1.0f, 1.0f, 0.0f, 1.0f};
+	color[0] = enabled * 1.0f;
+	color[1] = entered * 1.0f;
 
 	glViewport(0, 0, width, height);
 	glClearColor(color[0], color[1], color[2], 1.0);

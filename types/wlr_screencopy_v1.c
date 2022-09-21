@@ -570,10 +570,10 @@ static void capture_output(struct wl_client *wl_client,
 		buffer_box = *box;
 
 		wlr_box_transform(&buffer_box, &buffer_box, output->transform, ow, oh);
-		buffer_box.x *= output->scale;
-		buffer_box.y *= output->scale;
-		buffer_box.width *= output->scale;
-		buffer_box.height *= output->scale;
+		buffer_box.x = (int)(buffer_box.x * output->scale);
+		buffer_box.y = (int)(buffer_box.y * output->scale);
+		buffer_box.width = (int)(buffer_box.width * output->scale);
+		buffer_box.height = (int)(buffer_box.height * output->scale);
 	}
 
 	frame->box = buffer_box;

@@ -197,10 +197,10 @@ static void output_update_matrix(struct wlr_output *output) {
 		wlr_output_transformed_resolution(output, &tr_width, &tr_height);
 
 		wlr_matrix_translate(output->transform_matrix,
-			output->width / 2.0, output->height / 2.0);
+			output->width / 2.0f, output->height / 2.0f);
 		wlr_matrix_transform(output->transform_matrix, output->transform);
 		wlr_matrix_translate(output->transform_matrix,
-			- tr_width / 2.0, - tr_height / 2.0);
+			- tr_width / 2.0f, - tr_height / 2.0f);
 	}
 }
 
@@ -439,8 +439,8 @@ void wlr_output_transformed_resolution(struct wlr_output *output,
 void wlr_output_effective_resolution(struct wlr_output *output,
 		int *width, int *height) {
 	wlr_output_transformed_resolution(output, width, height);
-	*width /= output->scale;
-	*height /= output->scale;
+	*width = (int)(*width / output->scale);
+	*height = (int)(*height / output->scale);
 }
 
 struct wlr_output_mode *wlr_output_preferred_mode(struct wlr_output *output) {

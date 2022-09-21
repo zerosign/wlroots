@@ -280,7 +280,7 @@ bool wlr_cursor_warp(struct wlr_cursor *cur, struct wlr_input_device *dev,
 		result = wlr_box_contains_point(&mapping, lx, ly);
 	} else {
 		result = wlr_output_layout_contains_point(cur->state->layout, NULL,
-			lx, ly);
+			(int)lx, (int)ly);
 	}
 
 	if (result) {
@@ -818,8 +818,8 @@ static void handle_layout_change(struct wl_listener *listener, void *data) {
 		wl_container_of(listener, state, layout_change);
 	struct wlr_output_layout *layout = data;
 
-	if (!wlr_output_layout_contains_point(layout, NULL, state->cursor->x,
-			state->cursor->y)) {
+	if (!wlr_output_layout_contains_point(layout, NULL,
+			(int)state->cursor->x, (int)state->cursor->y)) {
 		// the output we were on has gone away so go to the closest boundary
 		// point
 		double x, y;

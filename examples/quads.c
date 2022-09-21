@@ -87,9 +87,9 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	wlr_output_commit(wlr_output);
 
 	//TODO rotate with a delta time
-	rotation += 0.05;
+	rotation += 0.05f;
 	if (rotation > 2 * M_PI) {
-		rotation = 0.f;
+		rotation = 0.0f;
 	}
 
 	sample->last_frame = now;

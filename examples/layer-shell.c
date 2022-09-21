@@ -39,13 +39,13 @@ struct wl_egl_window *popup_egl_window;
 static uint32_t popup_width = 256, popup_height = 256;
 struct wlr_egl_surface *popup_egl_surface;
 struct wl_callback *popup_frame_callback;
-float popup_alpha = 1.0, popup_red = 0.5f;
+float popup_alpha = 1.0f, popup_red = 0.5f;
 
 static uint32_t layer = ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND;
 static uint32_t anchor = 0;
 static uint32_t width = 256, height = 256;
 static int32_t margin_top = 0;
-static double alpha = 1.0;
+static float alpha = 1.0f;
 static bool run_display = true;
 static bool animate = false;
 static enum zwlr_layer_surface_v1_keyboard_interactivity keyboard_interactive =
@@ -148,15 +148,15 @@ static void draw(void) {
 }
 
 static void draw_popup(void) {
-	static float alpha_mod = -0.01;
+	static float alpha_mod = -0.01f;
 
 	eglMakeCurrent(egl_display, popup_egl_surface, popup_egl_surface, egl_context);
 	glViewport(0, 0, popup_width, popup_height);
 	glClearColor(popup_red * popup_alpha, 0.5f * popup_alpha,
 		0.5f * popup_alpha, popup_alpha);
 	popup_alpha += alpha_mod;
-	if (popup_alpha < 0.01 || popup_alpha >= 1.0f) {
-		alpha_mod *= -1.0;
+	if (popup_alpha < 0.01f || popup_alpha >= 1.0f) {
+		alpha_mod *= -1.0f;
 	}
 	glClear(GL_COLOR_BUFFER_BIT);
 
@@ -324,9 +324,9 @@ static void wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
 	} else if (input_surface == popup_wl_surface) {
 		if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
 			if (button == BTN_LEFT && popup_red <= 0.9f) {
-				popup_red += 0.1;
+				popup_red += 0.1f;
 			} else if (button == BTN_RIGHT && popup_red >= 0.1f) {
-				popup_red -= 0.1;
+				popup_red -= 0.1f;
 			}
 		}
 	} else {
@@ -541,7 +541,7 @@ int main(int argc, char **argv) {
 			break;
 		}
 		case 't':
-			alpha = atof(optarg);
+			alpha = (float)atof(optarg);
 			break;
 		case 'm': {
 			char *endptr = optarg;

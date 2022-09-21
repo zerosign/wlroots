@@ -633,7 +633,7 @@ static int init_encoding(struct capture_context *ctx) {
 		return 1;
 
 	ctx->avctx->opaque = ctx;
-	ctx->avctx->bit_rate = (int)ctx->out_bitrate*1000000.0f;
+	ctx->avctx->bit_rate = (int)(ctx->out_bitrate * 1000000.0f);
 	ctx->avctx->pix_fmt = ctx->software_format;
 	ctx->avctx->time_base = (AVRational){ 1, 1000 };
 	ctx->avctx->compression_level = 7;

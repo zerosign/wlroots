@@ -23,7 +23,7 @@
 #include "backend/drm/cvt.h"
 
 /* top/bottom margin size (% of height) - default: 1.8 */
-#define CVT_MARGIN_PERCENTAGE 1.8
+#define CVT_MARGIN_PERCENTAGE 1.8f
 
 /* character cell horizontal granularity (pixels) - default 8 */
 #define CVT_H_GRANULARITY 8
@@ -39,7 +39,7 @@
 
 /* Minimum time of vertical sync + back porch interval (µs)
  * default 550.0 */
-#define CVT_MIN_VSYNC_BP 550.0
+#define CVT_MIN_VSYNC_BP 550
 
 /* Nominal hsync width (% of line period) - default 8 */
 #define CVT_HSYNC_PERCENTAGE 8
@@ -57,18 +57,18 @@
 /* Scaling factor weighting - default 20 */
 #define CVT_J_FACTOR 20
 
-#define CVT_M_PRIME CVT_M_FACTOR * CVT_K_FACTOR / 256
-#define CVT_C_PRIME (CVT_C_FACTOR - CVT_J_FACTOR) * CVT_K_FACTOR / 256 + \
+#define CVT_M_PRIME CVT_M_FACTOR * CVT_K_FACTOR / 256.0f
+#define CVT_C_PRIME (CVT_C_FACTOR - CVT_J_FACTOR) * CVT_K_FACTOR / 256.0f + \
 	CVT_J_FACTOR
 
 /* Minimum vertical blanking interval time (µs) - default 460 */
-#define CVT_RB_MIN_VBLANK 460.0
+#define CVT_RB_MIN_VBLANK 460
 
 /* Fixed number of clocks for horizontal sync */
-#define CVT_RB_H_SYNC 32.0
+#define CVT_RB_H_SYNC 32
 
 /* Fixed number of clocks for horizontal blanking */
-#define CVT_RB_H_BLANK 160.0
+#define CVT_RB_H_BLANK 160
 
 /* Fixed number of lines for vertical front porch - default 3 */
 #define CVT_RB_VFPORCH 3
@@ -98,8 +98,8 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 	float interlace; /* Please rename this */
 
 	/* CVT default is 60.0Hz */
-	if (!vrefresh) {
-		vrefresh = 60.0;
+	if (vrefresh != 0.0f) {
+		vrefresh = 60.0f;
 	}
 
 	/* 1. Required field rate */
@@ -115,7 +115,7 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 	/* 3. Determine left and right borders */
 	if (margins) {
 		/* right margin is actually exactly the same as left */
-		hmargin = (((float) hdisplay_rnd) * CVT_MARGIN_PERCENTAGE / 100.0);
+		hmargin = (int)(((float)hdisplay_rnd) * CVT_MARGIN_PERCENTAGE / 100.0f);
 		hmargin -= hmargin % CVT_H_GRANULARITY;
 	} else {
 		hmargin = 0;
@@ -135,7 +135,7 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 	/* nope. */
 	if (margins) {
 		/* top and bottom margins are equal again. */
-		vmargin = (((float) vdisplay_rnd) * CVT_MARGIN_PERCENTAGE / 100.0);
+		vmargin = (int)(((float)vdisplay_rnd) * CVT_MARGIN_PERCENTAGE / 100.0f);
 	} else {
 		vmargin = 0;
 	}
@@ -186,18 +186,17 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 		(void) vblank_porch;
 
 		/* 11. Find total number of lines in vertical field */
-		mode->vtotal = vdisplay_rnd + 2 * vmargin + vsync_and_back_porch + interlace
-			+ CVT_MIN_V_PORCH;
+		mode->vtotal = vdisplay_rnd + 2 * vmargin + vsync_and_back_porch + CVT_MIN_V_PORCH;
 
 		/* 12. Find ideal blanking duty cycle from formula */
-		hblank_percentage = CVT_C_PRIME - CVT_M_PRIME * hperiod / 1000.0;
+		hblank_percentage = CVT_C_PRIME - CVT_M_PRIME * hperiod / 1000.0f;
 
 		/* 13. Blanking time */
 		if (hblank_percentage < 20) {
 			hblank_percentage = 20;
 		}
 
-		hblank = mode->hdisplay * hblank_percentage / (100.0 - hblank_percentage);
+		hblank = (int)(mode->hdisplay * hblank_percentage / (100.0f - hblank_percentage));
 		hblank -= hblank % (2 * CVT_H_GRANULARITY);
 
 		/* 14. Find total number of pixels in a line. */
@@ -218,11 +217,11 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 		int vbi_lines;
 
 		/* 8. Estimate Horizontal period. */
-		hperiod = ((float) (1000000.0 / vfield_rate - CVT_RB_MIN_VBLANK)) /
+		hperiod = ((float)(1000000.0 / vfield_rate - CVT_RB_MIN_VBLANK)) /
 			(vdisplay_rnd + 2 * vmargin);
 
 		/* 9. Find number of lines in vertical blanking */
-		vbi_lines = ((float) CVT_RB_MIN_VBLANK) / hperiod + 1;
+		vbi_lines = (int)((float)CVT_RB_MIN_VBLANK / hperiod) + 1;
 
 		/* 10. Check if vertical blanking is sufficient */
 		if (vbi_lines < (CVT_RB_VFPORCH + vsync + CVT_MIN_V_BPORCH)) {
@@ -230,7 +229,7 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 		}
 
 		/* 11. Find total number of lines in vertical field */
-		mode->vtotal = vdisplay_rnd + 2 * vmargin + interlace + vbi_lines;
+		mode->vtotal = vdisplay_rnd + 2 * vmargin + vbi_lines;
 
 		/* 12. Find total number of pixels in a line */
 		mode->htotal = mode->hdisplay + CVT_RB_H_BLANK;
@@ -245,12 +244,12 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 	}
 
 	/* 15/13. Find pixel clock frequency (kHz for xf86) */
-	mode->clock = mode->htotal * 1000.0 / hperiod;
+	mode->clock = (uint32_t)(mode->htotal * 1000.0f / hperiod);
 	mode->clock -= mode->clock % CVT_CLOCK_STEP;
 
 	/* 17/15. Find actual Field rate */
-	mode->vrefresh = (1000.0 * ((float) mode->clock)) /
-		((float) (mode->htotal * mode->vtotal));
+	mode->vrefresh = (uint32_t)((1000.0f * mode->clock) /
+		(mode->htotal * mode->vtotal));
 
 	/* 18/16. Find actual vertical frame frequency */
 	/* ignore - just set the mode flag for interlaced */

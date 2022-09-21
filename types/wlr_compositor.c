@@ -164,8 +164,8 @@ static void surface_state_viewport_src_size(struct wlr_surface_state *state,
 	}
 
 	if (state->viewport.has_src) {
-		*out_width = state->viewport.src.width;
-		*out_height = state->viewport.src.height;
+		*out_width = (int)state->viewport.src.width;
+		*out_height = (int)state->viewport.src.height;
 	} else {
 		surface_state_transformed_buffer_size(state,
 			out_width, out_height);
@@ -248,13 +248,13 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 			float scale_x = (float)pending->viewport.dst_width / src_width;
 			float scale_y = (float)pending->viewport.dst_height / src_height;
 			wlr_region_scale_xy(&surface_damage, &surface_damage,
-				1.0 / scale_x, 1.0 / scale_y);
+				1.0f / scale_x, 1.0f / scale_y);
 		}
 		if (pending->viewport.has_src) {
 			// This is lossy: do a best-effort conversion
 			pixman_region32_translate(&surface_damage,
-				floor(pending->viewport.src.x),
-				floor(pending->viewport.src.y));
+				(int)floor(pending->viewport.src.x),
+				(int)floor(pending->viewport.src.y));
 		}
 
 		wlr_region_scale(&surface_damage, &surface_damage, pending->scale);
@@ -795,7 +795,8 @@ bool wlr_surface_point_accepts_input(struct wlr_surface *surface,
 		double sx, double sy) {
 	return sx >= 0 && sx < surface->current.width &&
 		sy >= 0 && sy < surface->current.height &&
-		pixman_region32_contains_point(&surface->current.input, floor(sx), floor(sy), NULL);
+		pixman_region32_contains_point(&surface->current.input,
+			(int)floor(sx), (int)floor(sy), NULL);
 }
 
 struct wlr_surface *wlr_surface_surface_at(struct wlr_surface *surface,
@@ -1018,14 +1019,14 @@ void wlr_surface_get_effective_damage(struct wlr_surface *surface,
 	wlr_region_transform(damage, &surface->buffer_damage,
 		surface->current.transform, surface->current.buffer_width,
 		surface->current.buffer_height);
-	wlr_region_scale(damage, damage, 1.0 / (float)surface->current.scale);
+	wlr_region_scale(damage, damage, 1.0f / (float)surface->current.scale);
 
 	if (surface->current.viewport.has_src) {
 		struct wlr_box src_box = {
-			.x = floor(surface->current.viewport.src.x),
-			.y = floor(surface->current.viewport.src.y),
-			.width = ceil(surface->current.viewport.src.width),
-			.height = ceil(surface->current.viewport.src.height),
+			.x = (int)floor(surface->current.viewport.src.x),
+			.y = (int)floor(surface->current.viewport.src.y),
+			.width = (int)ceil(surface->current.viewport.src.width),
+			.height = (int)ceil(surface->current.viewport.src.height),
 		};
 		crop_region(damage, damage, &src_box);
 	}

@@ -117,7 +117,7 @@ void handle_pointer_axis(struct libinput_event *event,
 		wlr_event.delta =
 			libinput_event_pointer_get_axis_value(pevent, axes[i]);
 		wlr_event.delta_discrete =
-			libinput_event_pointer_get_axis_value_discrete(pevent, axes[i]);
+			(int)libinput_event_pointer_get_axis_value_discrete(pevent, axes[i]);
 		wlr_event.delta_discrete *= WLR_POINTER_AXIS_DISCRETE_STEP;
 		wl_signal_emit_mutable(&pointer->events.axis, &wlr_event);
 	}
@@ -155,7 +155,7 @@ void handle_pointer_axis_value120(struct libinput_event *event,
 			libinput_event_pointer_get_scroll_value(pevent, axes[i]);
 		if (source == WLR_AXIS_SOURCE_WHEEL) {
 			wlr_event.delta_discrete =
-				libinput_event_pointer_get_scroll_value_v120(pevent, axes[i]);
+				(int)libinput_event_pointer_get_scroll_value_v120(pevent, axes[i]);
 		}
 		wl_signal_emit_mutable(&pointer->events.axis, &wlr_event);
 	}
