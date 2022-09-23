@@ -440,3 +440,29 @@ bool wlr_renderer_get_time(struct wlr_renderer *r, struct timespec *t) {
 	}
 	return r->impl->get_time(r, t);
 }
+
+struct wlr_render_timestamp *wlr_renderer_create_timestamp(struct wlr_renderer *r) {
+	if (!r->impl->create_timestamp) {
+		return false;
+	}
+	return r->impl->create_timestamp(r);
+}
+
+void wlr_render_timestamp_init(struct wlr_render_timestamp *timestamp,
+		const struct wlr_render_timestamp_impl *impl) {
+	assert(impl->get_time && impl->destroy);
+	memset(timestamp, 0, sizeof(*timestamp));
+	timestamp->impl = impl;
+}
+
+bool wlr_render_timestamp_get_time(struct wlr_render_timestamp *timestamp,
+		struct timespec *t) {
+	return timestamp->impl->get_time(timestamp, t);
+}
+
+void wlr_render_timestamp_destroy(struct wlr_render_timestamp *timestamp) {
+	if (timestamp == NULL) {
+		return;
+	}
+	timestamp->impl->destroy(timestamp);
+}

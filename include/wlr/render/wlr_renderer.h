@@ -119,6 +119,15 @@ int wlr_renderer_get_drm_fd(struct wlr_renderer *r);
  */
 bool wlr_renderer_get_time(struct wlr_renderer *r, struct timespec *t);
 
+struct wlr_render_timestamp;
+
+struct wlr_render_timestamp *wlr_renderer_create_timestamp(struct wlr_renderer *r);
+
+bool wlr_render_timestamp_get_time(struct wlr_render_timestamp *timestamp,
+	struct timespec *t);
+
+void wlr_render_timestamp_destroy(struct wlr_render_timestamp *timestamp);
+
 /**
  * Destroys the renderer.
  *

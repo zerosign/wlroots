@@ -503,6 +503,35 @@ static bool gles2_get_time(struct wlr_renderer *wlr_renderer, struct timespec *t
 	return true;
 }
 
+static const struct wlr_render_timestamp_impl timestamp_impl;
+
+static struct wlr_render_timestamp *gles2_create_timestamp(
+		struct wlr_renderer *wlr_renderer) {
+	struct wlr_gles2_renderer *renderer =
+		gles2_get_renderer_in_context(wlr_renderer);
+
+	if (!renderer->exts.EXT_disjoint_timer_query) {
+		return NULL;
+	}
+
+	struct wlr_gles2_timestamp *timestamp = calloc(1, sizeof(*timestamp));
+	if (timestamp == NULL) {
+		return NULL;
+	}
+	wlr_render_timestamp_init(&timestamp->base, &timestamp_impl);
+
+	timestamp->renderer = renderer;
+
+	GLint disjoint = 0;
+	push_gles2_debug(renderer);
+	glGetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint); // clear the disjoint flag
+	renderer->procs.glGenQueriesEXT(1, &timestamp->query);
+	renderer->procs.glQueryCounterEXT(timestamp->query, GL_TIMESTAMP_EXT);
+	pop_gles2_debug(renderer);
+
+	return &timestamp->base;
+}
+
 static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
 	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
 
@@ -558,6 +587,7 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.get_render_buffer_caps = gles2_get_render_buffer_caps,
 	.texture_from_buffer = gles2_texture_from_buffer,
 	.get_time = gles2_get_time,
+	.create_timestamp = gles2_create_timestamp,
 };
 
 void push_gles2_debug_(struct wlr_gles2_renderer *renderer,
@@ -790,6 +820,10 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	if (check_gl_ext(exts_str, "GL_EXT_disjoint_timer_query")) {
 		renderer->exts.EXT_disjoint_timer_query = true;
 		load_gl_proc(&renderer->procs.glGetInteger64vEXT, "glGetInteger64vEXT");
+		load_gl_proc(&renderer->procs.glGenQueriesEXT, "glGenQueriesEXT");
+		load_gl_proc(&renderer->procs.glDeleteQueriesEXT, "glDeleteQueriesEXT");
+		load_gl_proc(&renderer->procs.glQueryCounterEXT, "glQueryCounterEXT");
+		load_gl_proc(&renderer->procs.glGetQueryObjecti64vEXT, "glGetQueryObjecti64vEXT");
 	}
 
 	if (renderer->exts.KHR_debug) {
@@ -887,3 +921,56 @@ GLuint wlr_gles2_renderer_get_current_fbo(struct wlr_renderer *wlr_renderer) {
 	assert(renderer->current_buffer);
 	return renderer->current_buffer->fbo;
 }
+
+static struct wlr_gles2_timestamp *get_timestamp(
+		struct wlr_render_timestamp *wlr_timestamp) {
+	assert(wlr_timestamp->impl == &timestamp_impl);
+	struct wlr_gles2_timestamp *timestamp =
+		wl_container_of(wlr_timestamp, timestamp, base);
+	return timestamp;
+}
+
+static void timestamp_destroy(struct wlr_render_timestamp *wlr_timestamp) {
+	struct wlr_gles2_timestamp *timestamp = get_timestamp(wlr_timestamp);
+	struct wlr_gles2_renderer *renderer = timestamp->renderer;
+
+	struct wlr_egl_context prev_ctx;
+	wlr_egl_save_context(&prev_ctx);
+	wlr_egl_make_current(renderer->egl);
+
+	push_gles2_debug(renderer);
+	renderer->procs.glDeleteQueriesEXT(1, &timestamp->query);
+	pop_gles2_debug(renderer);
+
+	wlr_egl_restore_context(&prev_ctx);
+}
+
+static bool timestamp_get_time(struct wlr_render_timestamp *wlr_timestamp,
+		struct timespec *t) {
+	struct wlr_gles2_timestamp *timestamp = get_timestamp(wlr_timestamp);
+	struct wlr_gles2_renderer *renderer = timestamp->renderer;
+
+	struct wlr_egl_context prev_ctx;
+	wlr_egl_save_context(&prev_ctx);
+	wlr_egl_make_current(renderer->egl);
+
+	GLint disjoint = 0;
+	GLint64 available = 0, nsec = 0;
+	push_gles2_debug(renderer);
+	glGetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
+	renderer->procs.glGetQueryObjecti64vEXT(timestamp->query,
+		GL_QUERY_RESULT_AVAILABLE_EXT, &available);
+	renderer->procs.glGetQueryObjecti64vEXT(timestamp->query,
+		GL_QUERY_RESULT_EXT, &nsec);
+	pop_gles2_debug(renderer);
+
+	wlr_egl_restore_context(&prev_ctx);
+
+	timespec_from_nsec(t, nsec);
+	return available && !disjoint;
+}
+
+static const struct wlr_render_timestamp_impl timestamp_impl = {
+	.destroy = timestamp_destroy,
+	.get_time = timestamp_get_time,
+};

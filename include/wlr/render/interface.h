@@ -49,6 +49,7 @@ struct wlr_renderer_impl {
 	struct wlr_texture *(*texture_from_buffer)(struct wlr_renderer *renderer,
 		struct wlr_buffer *buffer);
 	bool (*get_time)(struct wlr_renderer *r, struct timespec *t);
+	struct wlr_render_timestamp *(*create_timestamp)(struct wlr_renderer *r);
 };
 
 void wlr_renderer_init(struct wlr_renderer *renderer,
@@ -62,5 +63,18 @@ struct wlr_texture_impl {
 
 void wlr_texture_init(struct wlr_texture *texture,
 	const struct wlr_texture_impl *impl, uint32_t width, uint32_t height);
+
+struct wlr_render_timestamp {
+	const struct wlr_render_timestamp_impl *impl;
+};
+
+struct wlr_render_timestamp_impl {
+	void (*destroy)(struct wlr_render_timestamp *timestamp);
+	bool (*get_time)(struct wlr_render_timestamp *timestamp,
+		struct timespec *t);
+};
+
+void wlr_render_timestamp_init(struct wlr_render_timestamp *timestamp,
+	const struct wlr_render_timestamp_impl *impl);
 
 #endif

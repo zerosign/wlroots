@@ -63,6 +63,10 @@ struct wlr_gles2_renderer {
 		PFNGLPUSHDEBUGGROUPKHRPROC glPushDebugGroupKHR;
 		PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
 		PFNGLGETINTEGER64VEXTPROC glGetInteger64vEXT;
+		PFNGLGENQUERIESEXTPROC glGenQueriesEXT;
+		PFNGLDELETEQUERIESEXTPROC glDeleteQueriesEXT;
+		PFNGLQUERYCOUNTEREXTPROC glQueryCounterEXT;
+		PFNGLGETQUERYOBJECTI64VEXTPROC glGetQueryObjecti64vEXT;
 	} procs;
 
 	struct {
@@ -116,6 +120,12 @@ struct wlr_gles2_texture {
 	// If imported from a wlr_buffer
 	struct wlr_buffer *buffer;
 	struct wlr_addon buffer_addon;
+};
+
+struct wlr_gles2_timestamp {
+	struct wlr_render_timestamp base;
+	struct wlr_gles2_renderer *renderer;
+	GLuint query;
 };
 
 
