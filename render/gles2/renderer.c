@@ -18,6 +18,7 @@
 #include "render/gles2.h"
 #include "render/pixel_format.h"
 #include "types/wlr_matrix.h"
+#include "util/time.h"
 
 static const GLfloat verts[] = {
 	1, 0, // top right
@@ -485,6 +486,23 @@ struct wlr_egl *wlr_gles2_renderer_get_egl(struct wlr_renderer *wlr_renderer) {
 	return renderer->egl;
 }
 
+static bool gles2_get_time(struct wlr_renderer *wlr_renderer, struct timespec *t) {
+	struct wlr_gles2_renderer *renderer =
+		gles2_get_renderer_in_context(wlr_renderer);
+
+	if (!renderer->exts.EXT_disjoint_timer_query) {
+		return false;
+	}
+
+	GLint64 nsec = 0;
+	push_gles2_debug(renderer);
+	renderer->procs.glGetInteger64vEXT(GL_TIMESTAMP_EXT, &nsec);
+	pop_gles2_debug(renderer);
+
+	timespec_from_nsec(t, nsec);
+	return true;
+}
+
 static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
 	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
 
@@ -539,6 +557,7 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.get_drm_fd = gles2_get_drm_fd,
 	.get_render_buffer_caps = gles2_get_render_buffer_caps,
 	.texture_from_buffer = gles2_texture_from_buffer,
+	.get_time = gles2_get_time,
 };
 
 void push_gles2_debug_(struct wlr_gles2_renderer *renderer,
@@ -766,6 +785,11 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 		renderer->exts.OES_egl_image = true;
 		load_gl_proc(&renderer->procs.glEGLImageTargetRenderbufferStorageOES,
 			"glEGLImageTargetRenderbufferStorageOES");
+	}
+
+	if (check_gl_ext(exts_str, "GL_EXT_disjoint_timer_query")) {
+		renderer->exts.EXT_disjoint_timer_query = true;
+		load_gl_proc(&renderer->procs.glGetInteger64vEXT, "glGetInteger64vEXT");
 	}
 
 	if (renderer->exts.KHR_debug) {

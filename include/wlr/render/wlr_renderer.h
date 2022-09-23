@@ -14,6 +14,8 @@
 #include <wlr/backend.h>
 #include <wlr/render/wlr_texture.h>
 
+struct timespec;
+
 struct wlr_renderer_impl;
 struct wlr_drm_format_set;
 struct wlr_buffer;
@@ -111,6 +113,11 @@ bool wlr_renderer_init_wl_shm(struct wlr_renderer *r,
  * The caller doesn't have ownership of the FD, it must not close it.
  */
 int wlr_renderer_get_drm_fd(struct wlr_renderer *r);
+
+/**
+ * Get the current GPU time.
+ */
+bool wlr_renderer_get_time(struct wlr_renderer *r, struct timespec *t);
 
 /**
  * Destroys the renderer.

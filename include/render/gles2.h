@@ -32,6 +32,10 @@ struct wlr_gles2_tex_shader {
 	GLint tex_attrib;
 };
 
+// Fixed here, but missing from any libglvnd release:
+// https://gitlab.freedesktop.org/glvnd/libglvnd/-/merge_requests/268
+typedef void (GL_APIENTRYP PFNGLGETINTEGER64VEXTPROC) (GLenum pname, GLint64 *data);
+
 struct wlr_gles2_renderer {
 	struct wlr_renderer wlr_renderer;
 
@@ -48,6 +52,7 @@ struct wlr_gles2_renderer {
 		bool EXT_texture_type_2_10_10_10_REV;
 		bool OES_texture_half_float_linear;
 		bool EXT_texture_norm16;
+		bool EXT_disjoint_timer_query;
 	} exts;
 
 	struct {
@@ -57,6 +62,7 @@ struct wlr_gles2_renderer {
 		PFNGLPOPDEBUGGROUPKHRPROC glPopDebugGroupKHR;
 		PFNGLPUSHDEBUGGROUPKHRPROC glPushDebugGroupKHR;
 		PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
+		PFNGLGETINTEGER64VEXTPROC glGetInteger64vEXT;
 	} procs;
 
 	struct {

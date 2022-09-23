@@ -433,3 +433,10 @@ int wlr_renderer_get_drm_fd(struct wlr_renderer *r) {
 	}
 	return r->impl->get_drm_fd(r);
 }
+
+bool wlr_renderer_get_time(struct wlr_renderer *r, struct timespec *t) {
+	if (!r->impl->get_time) {
+		return false;
+	}
+	return r->impl->get_time(r, t);
+}

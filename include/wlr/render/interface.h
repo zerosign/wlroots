@@ -48,6 +48,7 @@ struct wlr_renderer_impl {
 	uint32_t (*get_render_buffer_caps)(struct wlr_renderer *renderer);
 	struct wlr_texture *(*texture_from_buffer)(struct wlr_renderer *renderer,
 		struct wlr_buffer *buffer);
+	bool (*get_time)(struct wlr_renderer *r, struct timespec *t);
 };
 
 void wlr_renderer_init(struct wlr_renderer *renderer,
