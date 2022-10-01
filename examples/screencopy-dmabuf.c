@@ -200,7 +200,7 @@ static void session_handle_transform(void *data,
 	buffer.y_invert = transform == WL_OUTPUT_TRANSFORM_FLIPPED_180;
 }
 
-static void session_handle_commit_time(void *data,
+static void session_handle_presentation_time(void *data,
 		struct ext_screencopy_session_v1 *frame, uint32_t tv_sec_hi,
 		uint32_t tv_sec_lo, uint32_t tv_nsec) {
 }
@@ -223,7 +223,7 @@ static const struct ext_screencopy_session_v1_listener session_listener = {
 	.init_done = session_handle_init_done,
 	.damage = session_handle_damage,
 	.cursor_info = session_handle_cursor_info,
-	.commit_time = session_handle_commit_time,
+	.presentation_time = session_handle_presentation_time,
 	.transform = session_handle_transform,
 	.ready = session_handle_ready,
 	.failed = session_handle_failed,

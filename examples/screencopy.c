@@ -198,7 +198,7 @@ static void session_handle_cursor_info(void *data,
 		int32_t height, int32_t hotspot_x, int32_t hotspot_y) {
 }
 
-static void session_handle_commit_time(void *data,
+static void session_handle_presentation_time(void *data,
 		struct ext_screencopy_session_v1 *session,
 		uint32_t sec_hi, uint32_t sec_lo, uint32_t nsec) {
 }
@@ -209,7 +209,7 @@ static const struct ext_screencopy_session_v1_listener frame_listener = {
 	.init_done = session_handle_init_done,
 	.damage = session_handle_damage,
 	.cursor_info = session_handle_cursor_info,
-	.commit_time = session_handle_commit_time,
+	.presentation_time = session_handle_presentation_time,
 	.transform = session_handle_transform,
 	.ready = session_handle_ready,
 	.failed = session_handle_failed,

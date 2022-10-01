@@ -979,14 +979,14 @@ static void session_send_damage(struct wlr_ext_screencopy_session_v1 *session) {
 	}
 }
 
-static void session_send_commit_time(
+static void session_send_presentation_time(
 		struct wlr_ext_screencopy_session_v1 *session,
 		struct timespec *when)
 {
 	time_t tv_sec = when->tv_sec;
 	uint32_t tv_sec_hi = (sizeof(tv_sec) > 4) ? tv_sec >> 32 : 0;
 	uint32_t tv_sec_lo = tv_sec & 0xFFFFFFFF;
-	ext_screencopy_session_v1_send_commit_time(session->resource,
+	ext_screencopy_session_v1_send_presentation_time(session->resource,
 			tv_sec_hi, tv_sec_lo, when->tv_nsec);
 }
 
@@ -1058,7 +1058,7 @@ static void session_handle_output_commit_ready(
 	session_send_transform(session);
 	session_send_damage(session);
 	session_send_cursor_info(session);
-	session_send_commit_time(session, event->when);
+	session_send_presentation_time(session, event->when);
 	ext_screencopy_session_v1_send_ready(session->resource);
 
 	pixman_region32_clear(&session->current_buffer.damage);
