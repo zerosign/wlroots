@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <wlr/types/wlr_ext_screencopy_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_buffer.h>
@@ -18,6 +20,7 @@
 #include <drm_fourcc.h>
 #include <limits.h>
 #include <string.h>
+#include <time.h>
 
 #include "ext-screencopy-v1-protocol.h"
 
@@ -25,6 +28,12 @@
 
 static const struct ext_screencopy_manager_v1_interface manager_impl;
 static const struct ext_screencopy_session_v1_interface session_impl;
+
+static uint64_t gettime_us(clockid_t clock) {
+	struct timespec ts;
+	clock_gettime(clock, &ts);
+	return ts.tv_sec * UINT64_C(1000000) + ts.tv_nsec / UINT64_C(1000);
+}
 
 static struct wlr_ext_screencopy_session_v1 *session_from_resource(
 		struct wl_resource *resource) {
@@ -51,6 +60,7 @@ static void session_destroy(struct wlr_ext_screencopy_session_v1 *session) {
 	pixman_region32_fini(&session->staged_cursor_buffer.damage);
 	pixman_region32_fini(&session->current_cursor_buffer.damage);
 
+	wl_list_remove(&session->output_present.link);
 	wl_list_remove(&session->output_set_cursor.link);
 	wl_list_remove(&session->output_move_cursor.link);
 	wl_list_remove(&session->output_precommit.link);
@@ -979,15 +989,42 @@ static void session_send_damage(struct wlr_ext_screencopy_session_v1 *session) {
 	}
 }
 
+static uint64_t session_get_last_presentation_time_us(
+		const struct wlr_ext_screencopy_session_v1 *session) {
+	if (!session->have_presentation_time) {
+		return gettime_us(CLOCK_MONOTONIC);
+	}
+
+	clock_t presentation_clock =
+		wlr_backend_get_presentation_clock(session->output->backend);
+
+	if (presentation_clock == CLOCK_MONOTONIC) {
+		return session->last_presentation_time_us;
+	}
+
+	int64_t now_presentation_us = gettime_us(presentation_clock);
+	int64_t now_monotonic_us = gettime_us(CLOCK_MONOTONIC);
+
+	// TODO: The result might end up being non-monotonically increasing
+	return session->last_presentation_time_us - now_presentation_us +
+		now_monotonic_us;
+}
+
 static void session_send_presentation_time(
-		struct wlr_ext_screencopy_session_v1 *session,
-		struct timespec *when)
-{
-	time_t tv_sec = when->tv_sec;
-	uint32_t tv_sec_hi = (sizeof(tv_sec) > 4) ? tv_sec >> 32 : 0;
+		struct wlr_ext_screencopy_session_v1 *session) {
+	uint64_t refresh_rate_mhz = session->output->current_mode->refresh;
+	uint64_t frame_period_us = UINT64_C(1000000000) / refresh_rate_mhz;
+
+	uint64_t last_us = session_get_last_presentation_time_us(session);
+	uint64_t next_us = last_us + frame_period_us;
+
+	uint64_t tv_sec = next_us / UINT64_C(1000000);
+	uint32_t tv_nsec = (next_us % UINT64_C(1000000)) * UINT64_C(1000);
+
+	uint32_t tv_sec_hi = tv_sec >> 32;
 	uint32_t tv_sec_lo = tv_sec & 0xFFFFFFFF;
 	ext_screencopy_session_v1_send_presentation_time(session->resource,
-			tv_sec_hi, tv_sec_lo, when->tv_nsec);
+			tv_sec_hi, tv_sec_lo, tv_nsec);
 }
 
 static void session_handle_output_commit_ready(
@@ -1058,7 +1095,7 @@ static void session_handle_output_commit_ready(
 	session_send_transform(session);
 	session_send_damage(session);
 	session_send_cursor_info(session);
-	session_send_presentation_time(session, event->when);
+	session_send_presentation_time(session);
 	ext_screencopy_session_v1_send_ready(session->resource);
 
 	pixman_region32_clear(&session->current_buffer.damage);
@@ -1124,6 +1161,18 @@ static void session_handle_output_move_cursor(struct wl_listener *listener,
 	wlr_output_schedule_frame(session->output);
 }
 
+static void session_handle_output_present(struct wl_listener *listener,
+		void *data) {
+	struct wlr_ext_screencopy_session_v1 *session =
+		wl_container_of(listener, session, output_move_cursor);
+	struct wlr_output_event_present *event = data;
+
+	session->have_presentation_time = true;
+	session->last_presentation_time_us =
+		event->when->tv_sec * UINT64_C(1000000) +
+		event->when->tv_nsec / UINT64_C(1000);
+}
+
 static void capture_output(struct wl_client *client, uint32_t version,
 		struct wlr_ext_screencopy_manager_v1 *manager,
 		uint32_t session_id, struct wlr_output *output,
@@ -1178,6 +1227,10 @@ static void capture_output(struct wl_client *client, uint32_t version,
 	wl_signal_add(&session->output->events.move_cursor,
 			&session->output_move_cursor);
 	session->output_move_cursor.notify = session_handle_output_move_cursor;
+
+	wl_signal_add(&session->output->events.present,
+			&session->output_present);
+	session->output_present.notify = session_handle_output_present;
 
 	pixman_region32_init(&session->current_buffer.damage);
 	pixman_region32_init(&session->staged_buffer.damage);

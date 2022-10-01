@@ -71,6 +71,9 @@ struct wlr_ext_screencopy_session_v1 {
 
 	bool committed;
 
+	bool have_presentation_time;
+	uint64_t last_presentation_time_us;
+
 	/* Accumulated damage for the session */
 	struct pixman_region32 frame_damage;
 	struct pixman_region32 cursor_damage;
@@ -82,6 +85,7 @@ struct wlr_ext_screencopy_session_v1 {
 	struct wl_listener output_destroy;
 	struct wl_listener output_set_cursor;
 	struct wl_listener output_move_cursor;
+	struct wl_listener output_present;
 
 	void *data;
 };
