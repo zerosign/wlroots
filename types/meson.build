@@ -41,6 +41,7 @@ wlr_files += files(
 	'wlr_export_dmabuf_v1.c',
 	'wlr_foreign_toplevel_management_v1.c',
 	'wlr_fullscreen_shell_v1.c',
+	'wlr_frame_scheduler.c',
 	'wlr_gamma_control_v1.c',
 	'wlr_idle_inhibit_v1.c',
 	'wlr_idle.c',
