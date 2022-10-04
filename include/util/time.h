@@ -24,6 +24,12 @@ int64_t timespec_to_nsec(const struct timespec *t);
 void timespec_from_nsec(struct timespec *r, int64_t nsec);
 
 /**
+ * Add two timespec values `a` and `b`, and store the result in `r`.
+ */
+void timespec_add(struct timespec *r, const struct timespec *a,
+		const struct timespec *b);
+
+/**
  * Subtracts timespec `b` from timespec `a`, and stores the difference in `r`.
  */
 void timespec_sub(struct timespec *r, const struct timespec *a,
