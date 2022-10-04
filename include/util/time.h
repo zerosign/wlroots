@@ -14,6 +14,11 @@ uint32_t get_current_time_msec(void);
 int64_t timespec_to_msec(const struct timespec *a);
 
 /**
+ * Convert a timespec to nanoseconds.
+ */
+int64_t timespec_to_nsec(const struct timespec *t);
+
+/**
  * Convert nanoseconds to a timespec.
  */
 void timespec_from_nsec(struct timespec *r, int64_t nsec);
