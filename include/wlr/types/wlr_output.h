@@ -16,6 +16,7 @@
 #include <wayland-util.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/util/addon.h>
+#include <wlr/util/box.h>
 
 enum wlr_output_mode_aspect_ratio {
 	WLR_OUTPUT_MODE_ASPECT_RATIO_NONE,
@@ -51,6 +52,17 @@ struct wlr_output_cursor {
 	struct wl_listener surface_destroy;
 };
 
+struct wlr_output_tile_info {
+	uint32_t group_id;
+	uint32_t tile_is_single_monitor;
+	uint32_t num_h_tile;
+	uint32_t num_v_tile;
+	uint32_t tile_h_loc;
+	uint32_t tile_v_loc;
+	uint32_t tile_h_size;
+	uint32_t tile_v_size;
+};
+
 enum wlr_output_adaptive_sync_status {
 	WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED,
 	WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED,
@@ -66,6 +78,7 @@ enum wlr_output_state_field {
 	WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED = 1 << 6,
 	WLR_OUTPUT_STATE_GAMMA_LUT = 1 << 7,
 	WLR_OUTPUT_STATE_RENDER_FORMAT = 1 << 8,
+	WLR_OUTPUT_STATE_SOURCE_BOX = 1 << 9,
 	WLR_OUTPUT_STATE_SUBPIXEL = 1 << 9,
 };
 
@@ -87,6 +100,9 @@ struct wlr_output_state {
 	float scale;
 	enum wl_output_transform transform;
 	bool adaptive_sync_enabled;
+	/* allow partial buffer scanout for tiling displays
+	 * only valid if WLR_OUTPUT_STATE_SOURCE_BOX */
+	struct wlr_box source_box; // source box for respective output
 	uint32_t render_format;
 	enum wl_output_subpixel subpixel;
 
@@ -131,6 +147,7 @@ struct wlr_output {
 	char *description; // may be NULL
 	char *make, *model, *serial; // may be NULL
 	int32_t phys_width, phys_height; // mm
+	struct wlr_output_tile_info tile_info;
 
 	// Note: some backends may have zero modes
 	struct wl_list modes; // wlr_output_mode::link
@@ -416,6 +433,14 @@ uint32_t wlr_output_preferred_read_format(struct wlr_output *output);
  */
 void wlr_output_set_damage(struct wlr_output *output,
 	pixman_region32_t *damage);
+/**
+ * This can be used in case the output buffer is larger than the buffer that
+ * is supposed to be presented on the actual screen attached to the DRM
+ * connector. Current use case are hi-res tiling displays which use multiple
+ * DRM connectors to make up the full monitor.
+ */
+void wlr_output_set_source_box(struct wlr_output *output,
+	struct wlr_box source_box);
 /**
  * Test whether the pending output state would be accepted by the backend. If
  * this function returns true, wlr_output_commit() can only fail due to a

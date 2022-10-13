@@ -20,6 +20,7 @@ union wlr_drm_connector_props {
 		uint32_t subconnector; // not guaranteed to exist
 		uint32_t non_desktop;
 		uint32_t panel_orientation; // not guaranteed to exist
+		uint32_t tile;
 		uint32_t content_type; // not guaranteed to exist
 		uint32_t max_bpc; // not guaranteed to exist
 
@@ -27,7 +28,7 @@ union wlr_drm_connector_props {
 
 		uint32_t crtc_id;
 	};
-	uint32_t props[4];
+	uint32_t props[8];
 };
 
 union wlr_drm_crtc_props {
