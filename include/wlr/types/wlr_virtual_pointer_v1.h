@@ -33,6 +33,9 @@ struct wlr_virtual_pointer_v1 {
 	struct wlr_pointer_axis_event axis_event[2];
 	enum wl_pointer_axis axis;
 	bool axis_valid[2];
+	/* keep track of pressed buttons so we can release them when the virtual pointer is destroyed */
+	unsigned int pressed_buttons;
+
 
 	struct wl_list link; // wlr_virtual_pointer_manager_v1.virtual_pointers
 };

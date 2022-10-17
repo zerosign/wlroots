@@ -7,6 +7,8 @@
 #include <wlr/util/log.h>
 #include "wlr-virtual-pointer-unstable-v1-protocol.h"
 
+#include <linux/input-event-codes.h>
+
 static const struct wlr_pointer_impl pointer_impl = {
 	.name = "virtual-pointer",
 };
@@ -67,6 +69,14 @@ static void virtual_pointer_button(struct wl_client *client,
 	if (pointer == NULL) {
 		return;
 	}
+
+	unsigned int index = button - BTN_MOUSE;
+	if (state) {
+		pointer->pressed_buttons |= 1 << index;
+	} else {
+		pointer->pressed_buttons &= ~(1 << index);
+	}
+
 	struct wlr_pointer_button_event event = {
 		.pointer = &pointer->pointer,
 		.time_msec = time,
@@ -189,6 +199,18 @@ static void virtual_pointer_destroy_resource(struct wl_resource *resource) {
 		virtual_pointer_from_resource(resource);
 	if (pointer == NULL) {
 		return;
+	}
+
+	for (unsigned int button = 0; button < sizeof(pointer->pressed_buttons) * 8; button++) {
+		if (pointer->pressed_buttons & (1 << button)) {
+			struct wlr_pointer_button_event event = {
+				.pointer = &pointer->pointer,
+				// FIXME: time
+				.time_msec = 0,
+				.button = button + BTN_MOUSE,
+				.state = WLR_BUTTON_RELEASED};
+			wl_signal_emit_mutable(&pointer->pointer.events.button, &event);
+		}
 	}
 
 	wlr_pointer_finish(&pointer->pointer);
