@@ -342,6 +342,33 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 	return ok;
 }
 
+static bool atomic_snapshot_state(struct wlr_drm_backend *drm) {
+	drmModeAtomicFree(drm->atomic_snapshot);
+	drm->atomic_snapshot = snapshot_drm_state(drm->fd);
+	return drm->atomic_snapshot != NULL;
+}
+
+static bool atomic_restore_state(struct wlr_drm_backend *drm) {
+	if (drm->atomic_snapshot == NULL) {
+		wlr_log(WLR_DEBUG, "No atomic snapshot, falling back to legacy state restoration");
+		return legacy_restore_state(drm);
+	}
+
+	uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+	int ret = drmModeAtomicCommit(drm->fd, drm->atomic_snapshot, flags, NULL);
+	if (ret != 0) {
+		wlr_log_errno(WLR_ERROR, "drmModeAtomicCommit failed");
+		return false;
+	}
+
+	drmModeAtomicFree(drm->atomic_snapshot);
+	drm->atomic_snapshot = NULL;
+
+	return true;
+}
+
 const struct wlr_drm_interface atomic_iface = {
 	.crtc_commit = atomic_crtc_commit,
+	.snapshot_state = atomic_snapshot_state,
+	.restore_state = atomic_restore_state,
 };

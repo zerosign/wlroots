@@ -16,6 +16,8 @@ const char *get_pnp_manufacturer(uint16_t code);
 void parse_edid(struct wlr_drm_connector *conn, size_t len, const uint8_t *data);
 const char *drm_connector_status_str(drmModeConnection status);
 
+drmModeAtomicReq *snapshot_drm_state(int drm_fd);
+
 // Part of match_obj
 enum {
 	UNMATCHED = (uint32_t)-1,

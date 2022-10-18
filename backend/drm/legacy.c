@@ -227,6 +227,34 @@ bool drm_legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
 	return true;
 }
 
+bool legacy_restore_state(struct wlr_drm_backend *drm) {
+	// Best-effort state restoration
+	bool ok = true;
+	struct wlr_drm_connector *conn;
+	wl_list_for_each(conn, &drm->connectors, link) {
+		struct wlr_output_mode *mode = NULL;
+		uint32_t committed = WLR_OUTPUT_STATE_ENABLED;
+		if (conn->status != DRM_MODE_DISCONNECTED && conn->output.enabled
+				&& conn->output.current_mode != NULL) {
+			committed |= WLR_OUTPUT_STATE_MODE;
+			mode = conn->output.current_mode;
+		}
+		struct wlr_output_state state = {
+			.committed = committed,
+			.allow_artifacts = true,
+			.enabled = mode != NULL,
+			.mode_type = WLR_OUTPUT_STATE_MODE_FIXED,
+			.mode = mode,
+		};
+		if (!drm_connector_commit_state(conn, &state)) {
+			wlr_drm_conn_log(conn, WLR_ERROR, "Failed to restore state");
+			ok = false;
+		}
+	}
+	return ok;
+}
+
 const struct wlr_drm_interface legacy_iface = {
 	.crtc_commit = legacy_crtc_commit,
+	.restore_state = legacy_restore_state,
 };
