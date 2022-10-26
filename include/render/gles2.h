@@ -112,6 +112,12 @@ struct wlr_gles2_texture {
 	struct wlr_addon buffer_addon;
 };
 
+enum wlr_gles2_shader_source {
+	WLR_GLES2_SHADER_SOURCE_SINGLE_COLOR = 1,
+	WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBA = 2,
+	WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBX = 3,
+	WLR_GLES2_SHADER_SOURCE_TEXTURE_EXTERNAL = 4,
+};
 
 bool is_gles2_pixel_format_supported(const struct wlr_gles2_renderer *renderer,
 	const struct wlr_gles2_pixel_format *format);
