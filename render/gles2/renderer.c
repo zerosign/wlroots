@@ -627,10 +627,12 @@ static GLuint compile_shader(struct wlr_gles2_renderer *renderer,
 }
 
 static GLuint link_program(struct wlr_gles2_renderer *renderer,
-		enum wlr_gles2_shader_source source) {
+		const struct wlr_gles2_shader_params *params) {
 	static char frag_preamble[1024];
 	snprintf(frag_preamble, sizeof(frag_preamble),
-		"#define SOURCE %d\n", source);
+		"#define SOURCE %d\n"
+		"#define COLOR_TRANSFORM %d\n",
+		params->source, params->color_transform);
 
 	push_gles2_debug(renderer);
 
@@ -676,8 +678,8 @@ error:
 
 static bool link_tex_program(struct wlr_gles2_renderer *renderer,
 		struct wlr_gles2_tex_shader *shader,
-		enum wlr_gles2_shader_source source) {
-	shader->program = link_program(renderer, source);
+		const struct wlr_gles2_shader_params *params) {
+	shader->program = link_program(renderer, params);
 	if (!shader->program) {
 		return false;
 	}
@@ -829,6 +831,10 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 		}
 	}
 
+	if (check_gl_ext(exts_str, "GL_OES_texture_3D")) {
+		load_gl_proc(&renderer->procs.glTexImage3DOES, "glTexImage3DOES");
+	}
+
 	if (renderer->exts.KHR_debug) {
 		glEnable(GL_DEBUG_OUTPUT_KHR);
 		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
@@ -843,9 +849,18 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 
 	push_gles2_debug(renderer);
 
+	enum wlr_gles2_shader_color_transform color_transform =
+		WLR_GLES2_SHADER_COLOR_TRANSFORM_IDENTITY;
+	if (renderer->procs.glTexImage3DOES != NULL) {
+		color_transform = WLR_GLES2_SHADER_COLOR_TRANSFORM_LUT_3D;
+	}
+
 	GLuint prog;
 	renderer->shaders.quad.program = prog =
-		link_program(renderer, WLR_GLES2_SHADER_SOURCE_SINGLE_COLOR);
+		link_program(renderer, &(struct wlr_gles2_shader_params){
+			.source = WLR_GLES2_SHADER_SOURCE_SINGLE_COLOR,
+			.color_transform = color_transform,
+		});
 	if (!renderer->shaders.quad.program) {
 		goto error;
 	}
@@ -854,16 +869,25 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	renderer->shaders.quad.pos_attrib = glGetAttribLocation(prog, "pos");
 
 	if (!link_tex_program(renderer, &renderer->shaders.tex_rgba,
-			WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBA)) {
+			&(struct wlr_gles2_shader_params){
+				.source = WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBA,
+				.color_transform = color_transform,
+			})) {
 		goto error;
 	}
 	if (!link_tex_program(renderer, &renderer->shaders.tex_rgbx,
-			WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBX)) {
+			&(struct wlr_gles2_shader_params){
+				.source = WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBX,
+				.color_transform = color_transform,
+			})) {
 		goto error;
 	}
 	if (renderer->exts.OES_egl_image_external &&
 			!link_tex_program(renderer, &renderer->shaders.tex_ext,
-			WLR_GLES2_SHADER_SOURCE_TEXTURE_EXTERNAL)) {
+			&(struct wlr_gles2_shader_params){
+				.source = WLR_GLES2_SHADER_SOURCE_TEXTURE_EXTERNAL,
+				.color_transform = color_transform,
+			})) {
 		goto error;
 	}
 
