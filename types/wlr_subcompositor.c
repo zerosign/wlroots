@@ -61,8 +61,10 @@ static void subsurface_handle_set_position(struct wl_client *client,
 		return;
 	}
 
-	subsurface->pending.x = x;
-	subsurface->pending.y = y;
+	// Parent coordinate space
+	double factor = subsurface->parent->client_scale_factor;
+	subsurface->pending.x = x / factor;
+	subsurface->pending.y = y / factor;
 }
 
 static struct wlr_subsurface *subsurface_find_sibling(
