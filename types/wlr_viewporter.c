@@ -86,8 +86,9 @@ static void viewport_handle_set_destination(struct wl_client *client,
 		pending->viewport.has_dst = true;
 	}
 
-	pending->viewport.dst_width = width;
-	pending->viewport.dst_height = height;
+	double factor = viewport->surface->client_scale_factor;
+	pending->viewport.dst_width = width / factor;
+	pending->viewport.dst_height = height / factor;
 
 	pending->committed |= WLR_SURFACE_STATE_VIEWPORT;
 }
