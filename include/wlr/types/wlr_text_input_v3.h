@@ -35,7 +35,7 @@ struct wlr_text_input_v3_state {
 		uint32_t purpose;
 	} content_type;
 
-	struct wlr_box cursor_rectangle;
+	struct wlr_fbox cursor_rectangle;
 
 	// Tracks which features were used in the current commit.
 	// Useful in the enabling commit, where usage means support.
