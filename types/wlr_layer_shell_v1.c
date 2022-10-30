@@ -114,8 +114,9 @@ static void layer_surface_handle_set_size(struct wl_client *client,
 		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_DESIRED_SIZE;
 	}
 
-	surface->pending.desired_width = width;
-	surface->pending.desired_height = height;
+	double factor = surface->surface->client_scale_factor;
+	surface->pending.desired_width = width / factor;
+	surface->pending.desired_height = height / factor;
 }
 
 static void layer_surface_handle_set_anchor(struct wl_client *client,
@@ -160,6 +161,10 @@ static void layer_surface_handle_set_exclusive_zone(struct wl_client *client,
 		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_ZONE;
 	}
 
+	if (zone > 0) {
+		// Only unscale meaningful values
+		zone /= surface->surface->client_scale_factor;
+	}
 	surface->pending.exclusive_zone = zone;
 }
 
@@ -182,10 +187,11 @@ static void layer_surface_handle_set_margin(
 		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_MARGIN;
 	}
 
-	surface->pending.margin.top = top;
-	surface->pending.margin.right = right;
-	surface->pending.margin.bottom = bottom;
-	surface->pending.margin.left = left;
+	double factor = surface->surface->client_scale_factor;
+	surface->pending.margin.top = top / factor;
+	surface->pending.margin.right = right / factor;
+	surface->pending.margin.bottom = bottom / factor;
+	surface->pending.margin.left = left / factor;
 }
 
 static void layer_surface_handle_set_keyboard_interactivity(
@@ -302,8 +308,10 @@ uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
 	configure->width = width;
 	configure->height = height;
 	configure->serial = wl_display_next_serial(display);
-	zwlr_layer_surface_v1_send_configure(surface->resource,
-		configure->serial, configure->width, configure->height);
+	double factor = surface->surface->server_scale_factor;
+	zwlr_layer_surface_v1_send_configure(surface->resource, configure->serial,
+		round(configure->width * factor),
+		round(configure->height * factor));
 	return configure->serial;
 }
 
