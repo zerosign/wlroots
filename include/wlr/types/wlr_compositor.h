@@ -38,14 +38,14 @@ struct wlr_surface_state {
 	uint32_t seq;
 
 	struct wlr_buffer *buffer;
-	int32_t dx, dy; // relative to previous position
+	double dx, dy; // relative to previous position
 	pixman_region32_t surface_damage, buffer_damage; // clipped to bounds
 	pixman_region32_t opaque, input;
 	enum wl_output_transform transform;
 	int32_t scale;
 	struct wl_list frame_callback_list; // wl_resource
 
-	int width, height; // in surface-local coordinates
+	double width, height; // in surface-local coordinates
 	int buffer_width, buffer_height;
 
 	struct wl_list subsurfaces_below;
@@ -101,7 +101,7 @@ struct wlr_surface {
 	/**
 	 * The buffer position, in surface-local units.
 	 */
-	int sx, sy;
+	double sx, sy;
 	/**
 	 * The last commit's buffer damage, in buffer-local coordinates. This
 	 * contains both the damage accumulated by the client via
@@ -161,7 +161,7 @@ struct wlr_surface {
 	struct {
 		int32_t scale;
 		enum wl_output_transform transform;
-		int width, height;
+		double width, height;
 		int buffer_width, buffer_height;
 	} previous;
 
@@ -183,7 +183,7 @@ struct wlr_compositor {
 };
 
 typedef void (*wlr_surface_iterator_func_t)(struct wlr_surface *surface,
-	int sx, int sy, void *data);
+	double sx, double sy, void *data);
 
 /**
  * Set the lifetime role for this surface. Returns true on success or false if
@@ -249,7 +249,7 @@ void wlr_surface_send_frame_done(struct wlr_surface *surface,
  * surface coordinates.
  * X and y may be negative, if there are subsurfaces with negative position.
  */
-void wlr_surface_get_extends(struct wlr_surface *surface, struct wlr_box *box);
+void wlr_surface_get_extends(struct wlr_surface *surface, struct wlr_fbox *box);
 
 /**
  * Get the struct wlr_surface corresponding to a wl_surface resource.

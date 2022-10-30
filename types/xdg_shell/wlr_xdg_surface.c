@@ -491,18 +491,19 @@ struct wlr_surface *wlr_xdg_surface_popup_surface_at(
 struct xdg_surface_iterator_data {
 	wlr_surface_iterator_func_t user_iterator;
 	void *user_data;
-	int x, y;
+	double x, y;
 };
 
 static void xdg_surface_iterator(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct xdg_surface_iterator_data *iter_data = data;
 	iter_data->user_iterator(surface, iter_data->x + sx, iter_data->y + sy,
 		iter_data->user_data);
 }
 
 static void xdg_surface_for_each_popup_surface(struct wlr_xdg_surface *surface,
-		int x, int y, wlr_surface_iterator_func_t iterator, void *user_data) {
+		double x, double y, wlr_surface_iterator_func_t iterator,
+		void *user_data) {
 	struct wlr_xdg_popup *popup;
 	wl_list_for_each(popup, &surface->popups, link) {
 		if (!popup->base->configured || !popup->base->mapped) {
@@ -538,7 +539,13 @@ void wlr_xdg_surface_for_each_popup_surface(struct wlr_xdg_surface *surface,
 
 void wlr_xdg_surface_get_geometry(struct wlr_xdg_surface *surface,
 		struct wlr_box *box) {
-	wlr_surface_get_extends(surface->surface, box);
+	// TODO: update xdg-shell to use fractional coordinate space
+	struct wlr_fbox fbox;
+	wlr_surface_get_extends(surface->surface, &fbox);
+	box->x = fbox.x;
+	box->y = fbox.y;
+	box->width = fbox.width;
+	box->height = fbox.height;
 
 	/* The client never set the geometry */
 	if (wlr_box_empty(&surface->current.geometry)) {

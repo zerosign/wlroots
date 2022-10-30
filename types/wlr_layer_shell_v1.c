@@ -520,11 +520,11 @@ struct wlr_layer_shell_v1 *wlr_layer_shell_v1_create(struct wl_display *display)
 struct layer_surface_iterator_data {
 	wlr_surface_iterator_func_t user_iterator;
 	void *user_data;
-	int x, y;
+	double x, y;
 };
 
 static void layer_surface_iterator(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct layer_surface_iterator_data *iter_data = data;
 	iter_data->user_iterator(surface, iter_data->x + sx, iter_data->y + sy,
 		iter_data->user_data);
@@ -537,7 +537,7 @@ void wlr_layer_surface_v1_for_each_surface(struct wlr_layer_surface_v1 *surface,
 }
 
 void wlr_layer_surface_v1_for_each_popup_surface(struct wlr_layer_surface_v1 *surface,
-		wlr_surface_iterator_func_t iterator, void *user_data){
+		wlr_surface_iterator_func_t iterator, void *user_data) {
 	struct wlr_xdg_popup *popup;
 	wl_list_for_each(popup, &surface->popups, link) {
 		if (!popup->base->configured || !popup->base->mapped) {

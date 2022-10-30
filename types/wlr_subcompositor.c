@@ -318,7 +318,7 @@ static void subsurface_handle_surface_client_commit(
 }
 
 static void collect_damage_iter(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct wlr_subsurface *subsurface = data;
 	pixman_region32_t *damage = &subsurface->parent->external_damage;
 	pixman_region32_union_rect(damage, damage,

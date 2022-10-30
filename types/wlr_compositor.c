@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wlr/render/interface.h>
@@ -17,22 +18,6 @@
 
 #define COMPOSITOR_VERSION 5
 #define CALLBACK_VERSION 1
-
-static int min(int fst, int snd) {
-	if (fst < snd) {
-		return fst;
-	} else {
-		return snd;
-	}
-}
-
-static int max(int fst, int snd) {
-	if (fst > snd) {
-		return fst;
-	} else {
-		return snd;
-	}
-}
 
 static void surface_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
@@ -165,7 +150,7 @@ static void surface_state_transformed_buffer_size(struct wlr_surface_state *stat
  * destination rectangle).
  */
 static void surface_state_viewport_src_size(struct wlr_surface_state *state,
-		int *out_width, int *out_height) {
+		double *out_width, double *out_height) {
 	if (state->buffer_width == 0 && state->buffer_height == 0) {
 		*out_width = *out_height = 0;
 		return;
@@ -175,10 +160,11 @@ static void surface_state_viewport_src_size(struct wlr_surface_state *state,
 		*out_width = state->viewport.src.width;
 		*out_height = state->viewport.src.height;
 	} else {
+		int width, height;
 		surface_state_transformed_buffer_size(state,
-			out_width, out_height);
-		*out_width /= state->scale;
-		*out_height /= state->scale;
+			&width, &height);
+		*out_width = width / state->scale;
+		*out_height = height / state->scale;
 	}
 }
 
@@ -251,10 +237,10 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 		pixman_region32_copy(&surface_damage, &pending->surface_damage);
 
 		if (pending->viewport.has_dst) {
-			int src_width, src_height;
+			double src_width, src_height;
 			surface_state_viewport_src_size(pending, &src_width, &src_height);
-			float scale_x = (float)pending->viewport.dst_width / src_width;
-			float scale_y = (float)pending->viewport.dst_height / src_height;
+			double scale_x = pending->viewport.dst_width / src_width;
+			double scale_y = pending->viewport.dst_height / src_height;
 			wlr_region_scale_xy(&surface_damage, &surface_damage,
 				1.0 / scale_x, 1.0 / scale_y);
 		}
@@ -955,7 +941,7 @@ void wlr_surface_send_frame_done(struct wlr_surface *surface,
 	}
 }
 
-static void surface_for_each_surface(struct wlr_surface *surface, int x, int y,
+static void surface_for_each_surface(struct wlr_surface *surface, double x, double y,
 		wlr_surface_iterator_func_t iterator, void *user_data) {
 	struct wlr_subsurface *subsurface;
 	wl_list_for_each(subsurface, &surface->current.subsurfaces_below, current.link) {
@@ -964,8 +950,8 @@ static void surface_for_each_surface(struct wlr_surface *surface, int x, int y,
 		}
 
 		struct wlr_subsurface_parent_state *state = &subsurface->current;
-		int sx = state->x;
-		int sy = state->y;
+		double sx = state->x;
+		double sy = state->y;
 
 		surface_for_each_surface(subsurface->surface, x + sx, y + sy,
 			iterator, user_data);
@@ -979,8 +965,8 @@ static void surface_for_each_surface(struct wlr_surface *surface, int x, int y,
 		}
 
 		struct wlr_subsurface_parent_state *state = &subsurface->current;
-		int sx = state->x;
-		int sy = state->y;
+		double sx = state->x;
+		double sy = state->y;
 
 		surface_for_each_surface(subsurface->surface, x + sx, y + sy,
 			iterator, user_data);
@@ -993,22 +979,22 @@ void wlr_surface_for_each_surface(struct wlr_surface *surface,
 }
 
 struct bound_acc {
-	int32_t min_x, min_y;
-	int32_t max_x, max_y;
+	double min_x, min_y;
+	double max_x, max_y;
 };
 
 static void handle_bounding_box_surface(struct wlr_surface *surface,
-		int x, int y, void *data) {
+		double x, double y, void *data) {
 	struct bound_acc *acc = data;
 
-	acc->min_x = min(x, acc->min_x);
-	acc->min_y = min(y, acc->min_y);
+	acc->min_x = fmin(x, acc->min_x);
+	acc->min_y = fmin(y, acc->min_y);
 
-	acc->max_x = max(x + surface->current.width, acc->max_x);
-	acc->max_y = max(y + surface->current.height, acc->max_y);
+	acc->max_x = fmax(x + surface->current.width, acc->max_x);
+	acc->max_y = fmax(y + surface->current.height, acc->max_y);
 }
 
-void wlr_surface_get_extends(struct wlr_surface *surface, struct wlr_box *box) {
+void wlr_surface_get_extends(struct wlr_surface *surface, struct wlr_fbox *box) {
 	struct bound_acc acc = {
 		.min_x = 0,
 		.min_y = 0,
@@ -1051,11 +1037,11 @@ void wlr_surface_get_effective_damage(struct wlr_surface *surface,
 		crop_region(damage, damage, &src_box);
 	}
 	if (surface->current.viewport.has_dst) {
-		int src_width, src_height;
+		double src_width, src_height;
 		surface_state_viewport_src_size(&surface->current,
 			&src_width, &src_height);
-		float scale_x = (float)surface->current.viewport.dst_width / src_width;
-		float scale_y = (float)surface->current.viewport.dst_height / src_height;
+		double scale_x = surface->current.viewport.dst_width / src_width;
+		double scale_y = surface->current.viewport.dst_height / src_height;
 		wlr_region_scale_xy(damage, damage, scale_x, scale_y);
 	}
 
