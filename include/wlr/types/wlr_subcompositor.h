@@ -21,7 +21,7 @@ struct wlr_surface;
  * Instead, it's applied on parent surface commit.
  */
 struct wlr_subsurface_parent_state {
-	int32_t x, y;
+	double x, y;
 	struct wl_list link;
 };
 
