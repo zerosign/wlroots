@@ -62,6 +62,8 @@ static void viewport_handle_set_source(struct wl_client *client,
 	pending->viewport.src.width = width;
 	pending->viewport.src.height = height;
 
+	pending->viewport.src_factor = viewport->surface->client_scale_factor;
+
 	pending->committed |= WLR_SURFACE_STATE_VIEWPORT;
 }
 

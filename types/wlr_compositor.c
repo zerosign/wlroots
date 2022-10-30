@@ -59,10 +59,12 @@ static void surface_handle_attach(struct wl_client *client,
 	wlr_buffer_unlock(surface->pending.buffer);
 	surface->pending.buffer = buffer;
 
+	surface->pending.buffer_factor = surface->client_scale_factor;
+
 	if (wl_resource_get_version(resource) < WL_SURFACE_OFFSET_SINCE_VERSION) {
 		surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
-		surface->pending.dx = dx;
-		surface->pending.dy = dy;
+		surface->pending.dx = dx / surface->client_scale_factor;
+		surface->pending.dy = dy / surface->client_scale_factor;
 	}
 }
 
@@ -74,9 +76,23 @@ static void surface_handle_damage(struct wl_client *client,
 		return;
 	}
 	surface->pending.committed |= WLR_SURFACE_STATE_SURFACE_DAMAGE;
+	// XXX: best effort; if a client really wants to use wl_surface.damage
+	// with fractional scale factor, it's not our problem
+	double factor = surface->client_scale_factor;
+	width = ceil(width * factor);
+	height = ceil(height * factor);
+	// If a client supplies e.g. an INT32_MAX×INT32_MAX rectangle with
+	// a scale factor > 1, it will cause an overflow.
+	if (width < 0) {
+		width = INT32_MAX;
+	}
+	if (height < 0) {
+		height = INT32_MAX;
+	}
 	pixman_region32_union_rect(&surface->pending.surface_damage,
 		&surface->pending.surface_damage,
-		x, y, width, height);
+		floor(x * factor), floor(y * factor),
+		width, height);
 }
 
 static void callback_handle_resource_destroy(struct wl_resource *resource) {
@@ -110,6 +126,13 @@ static void surface_handle_set_opaque_region(struct wl_client *client,
 	if (region_resource) {
 		pixman_region32_t *region = wlr_region_from_resource(region_resource);
 		pixman_region32_copy(&surface->pending.opaque, region);
+		// XXX: best effort
+		wlr_region_scale(&surface->pending.opaque,
+			&surface->pending.opaque, 1 / surface->client_scale_factor);
+		if (floor(surface->client_scale_factor) != surface->client_scale_factor) {
+			wlr_region_expand(&surface->pending.opaque,
+				&surface->pending.opaque, -1);
+		}
 	} else {
 		pixman_region32_clear(&surface->pending.opaque);
 	}
@@ -123,6 +146,9 @@ static void surface_handle_set_input_region(struct wl_client *client,
 	if (region_resource) {
 		pixman_region32_t *region = wlr_region_from_resource(region_resource);
 		pixman_region32_copy(&surface->pending.input, region);
+		// XXX: best effort
+		wlr_region_scale(&surface->pending.input,
+			&surface->pending.input, 1 / surface->client_scale_factor);
 	} else {
 		pixman_region32_fini(&surface->pending.input);
 		pixman_region32_init_rect(&surface->pending.input,
@@ -208,11 +234,20 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 			pending->height = pending->viewport.dst_height;
 		}
 	} else {
-		surface_state_viewport_src_size(pending, &pending->width, &pending->height);
+		surface_state_viewport_src_size(pending,
+			&pending->width, &pending->height);
+		if (pending->viewport.has_src) {
+			pending->width /= pending->viewport.src_factor;
+			pending->height /= pending->viewport.src_factor;
+		} else {
+			pending->width /= pending->buffer_factor;
+			pending->height /= pending->buffer_factor;
+		}
 	}
 
 	pixman_region32_intersect_rect(&pending->surface_damage,
-		&pending->surface_damage, 0, 0, pending->width, pending->height);
+		&pending->surface_damage, 0, 0,
+		ceil(pending->width), ceil(pending->height));
 
 	pixman_region32_intersect_rect(&pending->buffer_damage,
 		&pending->buffer_damage, 0, 0, pending->buffer_width,
@@ -543,8 +578,8 @@ static void surface_handle_offset(struct wl_client *client,
 	struct wlr_surface *surface = wlr_surface_from_resource(resource);
 
 	surface->pending.committed |= WLR_SURFACE_STATE_OFFSET;
-	surface->pending.dx = x;
-	surface->pending.dy = y;
+	surface->pending.dx = x / surface->client_scale_factor;
+	surface->pending.dy = y / surface->client_scale_factor;
 }
 
 static const struct wl_surface_interface surface_implementation = {

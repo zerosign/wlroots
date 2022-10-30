@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
+#include <linux/input-event-codes.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
@@ -100,6 +101,9 @@ struct tinywl_keyboard {
 	struct wl_listener key;
 	struct wl_listener destroy;
 };
+
+static void begin_interactive(struct tinywl_view *view,
+	enum tinywl_cursor_mode mode, uint32_t edges);
 
 static void focus_view(struct tinywl_view *view, struct wlr_surface *surface) {
 	/* Note: this function only deals with keyboard focus. */
@@ -523,6 +527,21 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		reset_cursor_mode(server);
 	} else {
+                struct wlr_keyboard *wlr_keyboard = wlr_seat_get_keyboard(server->seat);
+
+                if (view != NULL && wlr_keyboard != NULL) {
+                        uint32_t modifiers = wlr_keyboard_get_modifiers(wlr_keyboard);
+                        if ((modifiers & WLR_MODIFIER_ALT) != 0) {
+                                if (event->button == BTN_LEFT) {
+					begin_interactive(view, TINYWL_CURSOR_MOVE, 0);
+                                } else if (event->button == BTN_RIGHT) {
+					begin_interactive(view, TINYWL_CURSOR_RESIZE,
+						WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+                                }
+                                return;
+                        }
+                }
+
 		/* Focus that client if the button was _pressed_ */
 		focus_view(view, surface);
 	}

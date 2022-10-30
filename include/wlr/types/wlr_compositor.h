@@ -64,11 +64,19 @@ struct wlr_surface_state {
 		// destination rectangle is applied
 		struct wlr_fbox src;
 		int dst_width, dst_height; // in surface-local coordinates
+
+		// private state
+
+		double src_factor;
 	} viewport;
 
 	// Number of locks that prevent this surface state from being committed.
 	size_t cached_state_locks;
 	struct wl_list cached_state_link; // wlr_surface.cached
+
+	// private state
+
+	double buffer_factor;
 };
 
 struct wlr_surface_role {
