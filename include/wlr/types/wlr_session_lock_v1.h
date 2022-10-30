@@ -43,7 +43,7 @@ struct wlr_session_lock_v1 {
 };
 
 struct wlr_session_lock_surface_v1_state {
-	uint32_t width, height;
+	double width, height;
 	uint32_t configure_serial;
 };
 
@@ -51,7 +51,7 @@ struct wlr_session_lock_surface_v1_configure {
 	struct wl_list link; // wlr_session_lock_surface_v1.configure_list
 	uint32_t serial;
 
-	uint32_t width, height;
+	double width, height;
 };
 
 struct wlr_session_lock_surface_v1 {
@@ -88,7 +88,7 @@ void wlr_session_lock_v1_destroy(struct wlr_session_lock_v1 *lock);
 
 uint32_t wlr_session_lock_surface_v1_configure(
 	struct wlr_session_lock_surface_v1 *lock_surface,
-	uint32_t width, uint32_t height);
+	double width, double height);
 
 /**
  * Returns true if the surface has the session lock surface role.

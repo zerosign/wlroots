@@ -60,7 +60,8 @@ struct wlr_session_lock_surface_v1 *wlr_session_lock_surface_v1_from_wlr_surface
 
 uint32_t wlr_session_lock_surface_v1_configure(
 		struct wlr_session_lock_surface_v1 *lock_surface,
-		uint32_t width, uint32_t height) {
+		double width, double height) {
+	assert(width >= 0.0 && height >= 0.0);
 	struct wlr_session_lock_surface_v1_configure *configure =
 		calloc(1, sizeof(struct wlr_session_lock_surface_v1_configure));
 	if (configure == NULL) {
@@ -143,9 +144,10 @@ static void lock_surface_role_commit(struct wlr_surface *surface) {
 		return;
 	}
 
-	if (surface->current.width < 0 || surface->current.height < 0 ||
-			(uint32_t)surface->current.width != lock_surface->pending.width ||
-			(uint32_t)surface->current.height != lock_surface->pending.height) {
+	// XXX: a better way to test for equality?
+	static const double epsilon = 1.0 / 256.0;
+	if (fabs(surface->current.width - lock_surface->pending.width) >= epsilon ||
+			fabs(surface->current.height - lock_surface->pending.height) >= epsilon) {
 		wl_resource_post_error(lock_surface->resource,
 			EXT_SESSION_LOCK_SURFACE_V1_ERROR_DIMENSIONS_MISMATCH,
 			"committed surface dimensions do not match last acked configure");
