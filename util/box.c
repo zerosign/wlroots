@@ -124,6 +124,32 @@ bool wlr_fbox_empty(const struct wlr_fbox *box) {
 	return box == NULL || box->width <= 0 || box->height <= 0;
 }
 
+bool wlr_fbox_intersection(struct wlr_fbox *dest, const struct wlr_fbox *box_a,
+		const struct wlr_fbox *box_b) {
+	bool a_empty = wlr_fbox_empty(box_a);
+	bool b_empty = wlr_fbox_empty(box_b);
+
+	if (a_empty || b_empty) {
+		dest->x = 0.0;
+		dest->y = 0.0;
+		dest->width = -100.0;
+		dest->height = -100.0;
+		return false;
+	}
+
+	int x1 = fmax(box_a->x, box_b->x);
+	int y1 = fmax(box_a->y, box_b->y);
+	int x2 = fmin(box_a->x + box_a->width, box_b->x + box_b->width);
+	int y2 = fmin(box_a->y + box_a->height, box_b->y + box_b->height);
+
+	dest->x = x1;
+	dest->y = y1;
+	dest->width = x2 - x1;
+	dest->height = y2 - y1;
+
+	return !wlr_fbox_empty(dest);
+}
+
 void wlr_fbox_transform(struct wlr_fbox *dest, const struct wlr_fbox *box,
 		enum wl_output_transform transform, double width, double height) {
 	struct wlr_fbox src = *box;

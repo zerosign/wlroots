@@ -80,6 +80,14 @@ void wlr_box_transform(struct wlr_box *dest, const struct wlr_box *box,
 	enum wl_output_transform transform, int width, int height);
 
 /**
+ * Gives the intersecting box between two struct wlr_fbox.
+ *
+ * Returns an empty box if the provided boxes don't intersect.
+ */
+bool wlr_fbox_intersection(struct wlr_fbox *dest, const struct wlr_fbox *box_a,
+	const struct wlr_fbox *box_b);
+
+/**
  * Checks whether a box is empty or not.
  *
  * A box is considered empty if its width and/or height is zero or negative.
