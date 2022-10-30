@@ -79,7 +79,9 @@ uint32_t wlr_session_lock_surface_v1_configure(
 	wl_list_insert(lock_surface->configure_list.prev, &configure->link);
 
 	ext_session_lock_surface_v1_send_configure(lock_surface->resource,
-		configure->serial, configure->width, configure->height);
+		configure->serial,
+		round(configure->width * lock_surface->surface->server_scale_factor),
+		round(configure->height * lock_surface->surface->server_scale_factor));
 
 	return configure->serial;
 }
