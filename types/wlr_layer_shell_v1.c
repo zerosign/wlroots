@@ -288,7 +288,8 @@ static void layer_surface_resource_destroy(struct wl_resource *resource) {
 }
 
 uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
-		uint32_t width, uint32_t height) {
+		double width, double height) {
+	assert(width >= 0.0 && height >= 0.0);
 	struct wl_display *display =
 		wl_client_get_display(wl_resource_get_client(surface->resource));
 	struct wlr_layer_surface_v1_configure *configure =
@@ -302,8 +303,7 @@ uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
 	configure->height = height;
 	configure->serial = wl_display_next_serial(display);
 	zwlr_layer_surface_v1_send_configure(surface->resource,
-			configure->serial, configure->width,
-			configure->height);
+		configure->serial, configure->width, configure->height);
 	return configure->serial;
 }
 
