@@ -139,6 +139,23 @@ struct wlr_surface {
 
 	struct wl_list cached; // wlr_surface_state.cached_link
 
+	/**
+	 * The scale factor that describes the coordinate system the client
+	 * uses for communication.
+	 *
+	 * Divide the coordinates and sizes received from the client by
+	 * this factor to convert them into the logical coordinate space.
+	 */
+	double client_scale_factor;
+	/**
+	 * The scale factor that describes the coordinate system the server
+	 * uses for communication.
+	 *
+	 * Multiply the coordinates and sizes in the logical coordinate space
+	 * by this factor before sending them to the client.
+	 */
+	double server_scale_factor;
+
 	const struct wlr_surface_role *role; // the lifetime-bound role or NULL
 	void *role_data; // role-specific data
 

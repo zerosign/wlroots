@@ -672,6 +672,9 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	surface_state_init(&surface->pending);
 	surface->pending.seq = 1;
 
+	surface->client_scale_factor = 1.0;
+	surface->server_scale_factor = 1.0;
+
 	wl_signal_init(&surface->events.client_commit);
 	wl_signal_init(&surface->events.commit);
 	wl_signal_init(&surface->events.destroy);
