@@ -30,12 +30,15 @@ struct wlr_xdg_toplevel_configure *send_xdg_toplevel_configure(
 	}
 	*configure = toplevel->scheduled;
 
+	double factor = toplevel->base->surface->server_scale_factor;
+
 	uint32_t version = wl_resource_get_version(toplevel->resource);
 
 	if ((configure->fields & WLR_XDG_TOPLEVEL_CONFIGURE_BOUNDS) &&
 			version >= XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION) {
 		xdg_toplevel_send_configure_bounds(toplevel->resource,
-			configure->bounds.width, configure->bounds.height);
+			round(configure->bounds.width * factor),
+			round(configure->bounds.height * factor));
 	}
 
 	if ((configure->fields & WLR_XDG_TOPLEVEL_CONFIGURE_WM_CAPABILITIES) &&
@@ -101,14 +104,14 @@ struct wlr_xdg_toplevel_configure *send_xdg_toplevel_configure(
 	}
 	assert(nstates <= sizeof(states) / sizeof(states[0]));
 
-	int32_t width = configure->width;
-	int32_t height = configure->height;
 	struct wl_array wl_states = {
 		.size = nstates * sizeof(states[0]),
 		.data = states,
 	};
 	xdg_toplevel_send_configure(toplevel->resource,
-		width, height, &wl_states);
+		round(configure->width * factor),
+		round(configure->height * factor),
+		&wl_states);
 
 	toplevel->scheduled.fields = 0;
 
@@ -333,16 +336,18 @@ static void xdg_toplevel_handle_set_max_size(struct wl_client *client,
 		struct wl_resource *resource, int32_t width, int32_t height) {
 	struct wlr_xdg_toplevel *toplevel =
 		wlr_xdg_toplevel_from_resource(resource);
-	toplevel->pending.max_width = width;
-	toplevel->pending.max_height = height;
+	double factor = toplevel->base->surface->client_scale_factor;
+	toplevel->pending.max_width = width / factor;
+	toplevel->pending.max_height = height / factor;
 }
 
 static void xdg_toplevel_handle_set_min_size(struct wl_client *client,
 		struct wl_resource *resource, int32_t width, int32_t height) {
 	struct wlr_xdg_toplevel *toplevel =
 		wlr_xdg_toplevel_from_resource(resource);
-	toplevel->pending.min_width = width;
-	toplevel->pending.min_height = height;
+	double factor = toplevel->base->surface->client_scale_factor;
+	toplevel->pending.min_width = width / factor;
+	toplevel->pending.min_height = height / factor;
 }
 
 static void xdg_toplevel_handle_set_maximized(struct wl_client *client,

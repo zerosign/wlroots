@@ -222,10 +222,11 @@ static void xdg_surface_handle_set_window_geometry(struct wl_client *client,
 		return;
 	}
 
-	surface->pending.geometry.x = x;
-	surface->pending.geometry.y = y;
-	surface->pending.geometry.width = width;
-	surface->pending.geometry.height = height;
+	double factor = surface->surface->client_scale_factor;
+	surface->pending.geometry.x = x / factor;
+	surface->pending.geometry.y = y / factor;
+	surface->pending.geometry.width = width / factor;
+	surface->pending.geometry.height = height / factor;
 }
 
 static void xdg_surface_handle_destroy(struct wl_client *client,
