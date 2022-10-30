@@ -51,7 +51,7 @@ struct wlr_xdg_client {
 };
 
 struct wlr_xdg_positioner_rules {
-	struct wlr_box anchor_rect;
+	struct wlr_fbox anchor_rect;
 	enum xdg_positioner_anchor anchor;
 	enum xdg_positioner_gravity gravity;
 	enum xdg_positioner_constraint_adjustment constraint_adjustment;
@@ -62,11 +62,11 @@ struct wlr_xdg_positioner_rules {
 	uint32_t parent_configure_serial;
 
 	struct {
-		int32_t width, height;
+		double width, height;
 	} size, parent_size;
 
 	struct {
-		int32_t x, y;
+		double x, y;
 	} offset;
 };
 
@@ -78,7 +78,7 @@ struct wlr_xdg_positioner {
 struct wlr_xdg_popup_state {
 	// Position of the popup relative to the upper left corner of
 	// the window geometry of the parent surface
-	struct wlr_box geometry;
+	struct wlr_fbox geometry;
 
 	bool reactive;
 };
@@ -89,7 +89,7 @@ enum wlr_xdg_popup_configure_field {
 
 struct wlr_xdg_popup_configure {
 	uint32_t fields; // enum wlr_xdg_popup_configure_field
-	struct wlr_box geometry;
+	struct wlr_fbox geometry;
 	struct wlr_xdg_positioner_rules rules;
 	uint32_t reposition_token;
 };
@@ -224,7 +224,7 @@ struct wlr_xdg_surface_configure {
 
 struct wlr_xdg_surface_state {
 	uint32_t configure_serial;
-	struct wlr_box geometry;
+	struct wlr_fbox geometry;
 };
 
 /**
@@ -400,7 +400,7 @@ uint32_t wlr_xdg_toplevel_set_tiled(struct wlr_xdg_toplevel *toplevel,
  * Returns the associated configure serial.
  */
 uint32_t wlr_xdg_toplevel_set_bounds(struct wlr_xdg_toplevel *toplevel,
-		int32_t width, int32_t height);
+		double width, double height);
 
 /**
  * Configure the window manager capabilities for this toplevel. `caps` is a
@@ -438,21 +438,22 @@ void wlr_xdg_popup_get_position(struct wlr_xdg_popup *popup,
  * Get the geometry based on positioner rules.
  */
 void wlr_xdg_positioner_rules_get_geometry(
-		const struct wlr_xdg_positioner_rules *rules, struct wlr_box *box);
+		const struct wlr_xdg_positioner_rules *rules, struct wlr_fbox *box);
 
 /**
  * Unconstrain the box from the constraint area according to positioner rules.
  */
 void wlr_xdg_positioner_rules_unconstrain_box(
 		const struct wlr_xdg_positioner_rules *rules,
-		const struct wlr_box *constraint, struct wlr_box *box);
+		const struct wlr_fbox *constraint, struct wlr_fbox *box);
 
 /**
  * Convert the given coordinates in the popup coordinate system to the toplevel
  * surface coordinate system.
  */
 void wlr_xdg_popup_get_toplevel_coords(struct wlr_xdg_popup *popup,
-		int popup_sx, int popup_sy, int *toplevel_sx, int *toplevel_sy);
+		double popup_sx, double popup_sy,
+		double *toplevel_sx, double *toplevel_sy);
 
 /**
  * Set the geometry of this popup to unconstrain it according to its
@@ -460,7 +461,7 @@ void wlr_xdg_popup_get_toplevel_coords(struct wlr_xdg_popup *popup,
  * surface coordinate system.
  */
 void wlr_xdg_popup_unconstrain_from_box(struct wlr_xdg_popup *popup,
-		const struct wlr_box *toplevel_space_box);
+		const struct wlr_fbox *toplevel_space_box);
 
 /**
  * Find a surface within this xdg-surface tree at the given surface-local
@@ -503,7 +504,7 @@ struct wlr_xdg_surface *wlr_xdg_surface_from_wlr_surface(
  * The x and y value can be < 0.
  */
 void wlr_xdg_surface_get_geometry(struct wlr_xdg_surface *surface,
-		struct wlr_box *box);
+		struct wlr_fbox *box);
 
 /**
  * Call `iterator` on each mapped surface and popup in the xdg-surface tree

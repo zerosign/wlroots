@@ -28,7 +28,7 @@ struct wlr_xdg_popup_configure *send_xdg_popup_configure(
 			configure->reposition_token);
 	}
 
-	struct wlr_box *geometry = &configure->geometry;
+	struct wlr_fbox *geometry = &configure->geometry;
 	xdg_popup_send_configure(popup->resource,
 		geometry->x, geometry->y,
 		geometry->width, geometry->height);
@@ -473,7 +473,8 @@ void wlr_xdg_popup_destroy(struct wlr_xdg_popup *popup) {
 }
 
 void wlr_xdg_popup_get_toplevel_coords(struct wlr_xdg_popup *popup,
-		int popup_sx, int popup_sy, int *toplevel_sx, int *toplevel_sy) {
+		double popup_sx, double popup_sy,
+		double *toplevel_sx, double *toplevel_sy) {
 	struct wlr_surface *parent = popup->parent;
 	while (wlr_surface_is_xdg_surface(parent)) {
 		struct wlr_xdg_surface *xdg_surface =
@@ -496,11 +497,11 @@ void wlr_xdg_popup_get_toplevel_coords(struct wlr_xdg_popup *popup,
 }
 
 void wlr_xdg_popup_unconstrain_from_box(struct wlr_xdg_popup *popup,
-		const struct wlr_box *toplevel_space_box) {
-	int toplevel_sx, toplevel_sy;
+		const struct wlr_fbox *toplevel_space_box) {
+	double toplevel_sx, toplevel_sy;
 	wlr_xdg_popup_get_toplevel_coords(popup,
 		0, 0, &toplevel_sx, &toplevel_sy);
-	struct wlr_box popup_constraint = {
+	struct wlr_fbox popup_constraint = {
 		.x = toplevel_space_box->x - toplevel_sx,
 		.y = toplevel_space_box->y - toplevel_sy,
 		.width = toplevel_space_box->width,

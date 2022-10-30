@@ -572,10 +572,10 @@ uint32_t wlr_xdg_toplevel_set_tiled(struct wlr_xdg_toplevel *toplevel,
 }
 
 uint32_t wlr_xdg_toplevel_set_bounds(struct wlr_xdg_toplevel *toplevel,
-		int32_t width, int32_t height) {
+		double width, double height) {
 	assert(toplevel->base->client->shell->version >=
 		XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION);
-	assert(width >= 0 && height >= 0);
+	assert(width >= 0.0 && height >= 0.0);
 	toplevel->scheduled.fields |= WLR_XDG_TOPLEVEL_CONFIGURE_BOUNDS;
 	toplevel->scheduled.bounds.width = width;
 	toplevel->scheduled.bounds.height = height;

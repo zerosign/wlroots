@@ -60,7 +60,7 @@ struct tinywl_server {
 	enum tinywl_cursor_mode cursor_mode;
 	struct tinywl_view *grabbed_view;
 	double grab_x, grab_y;
-	struct wlr_box grab_geobox;
+	struct wlr_fbox grab_geobox;
 	uint32_t resize_edges;
 
 	struct wlr_output_layout *output_layout;
@@ -419,7 +419,7 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 		}
 	}
 
-	struct wlr_box geo_box;
+	struct wlr_fbox geo_box;
 	wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
 	view->x = new_left - geo_box.x;
 	view->y = new_top - geo_box.y;
@@ -685,7 +685,7 @@ static void begin_interactive(struct tinywl_view *view,
 		server->grab_x = server->cursor->x - view->x;
 		server->grab_y = server->cursor->y - view->y;
 	} else {
-		struct wlr_box geo_box;
+		struct wlr_fbox geo_box;
 		wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
 
 		double border_x = (view->x + geo_box.x) +

@@ -52,7 +52,7 @@ static void scene_xdg_surface_update_position(
 		struct wlr_scene_xdg_surface *scene_xdg_surface) {
 	struct wlr_xdg_surface *xdg_surface = scene_xdg_surface->xdg_surface;
 
-	struct wlr_box geo = {0};
+	struct wlr_fbox geo = {0};
 	wlr_xdg_surface_get_geometry(xdg_surface, &geo);
 	wlr_scene_node_set_position(&scene_xdg_surface->surface_tree->node,
 		-geo.x, -geo.y);
