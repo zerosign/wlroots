@@ -89,7 +89,7 @@ static void handle_scene_surface_surface_commit(
 	// schedule the frame however if the node is enabled and there is an
 	// output intersecting, otherwise the frame done events would never reach
 	// the surface anyway.
-	int lx, ly;
+	double lx, ly;
 	bool enabled = wlr_scene_node_coords(&scene_buffer->node, &lx, &ly);
 
 	if (!wl_list_empty(&surface->surface->current.frame_callback_list) &&
@@ -99,7 +99,7 @@ static void handle_scene_surface_surface_commit(
 }
 
 static bool scene_buffer_point_accepts_input(struct wlr_scene_buffer *scene_buffer,
-		int sx, int sy) {
+		double sx, double sy) {
 	struct wlr_scene_surface *scene_surface =
 		wlr_scene_surface_from_buffer(scene_buffer);
 

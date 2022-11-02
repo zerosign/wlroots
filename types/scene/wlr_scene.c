@@ -19,6 +19,16 @@
 
 #define HIGHLIGHT_DAMAGE_FADEOUT_TIME 250
 
+// Use position-aware rounding for fractional→integer geometry conversions.
+// This allows to avoid gaps between logically adjacent surfaces. Scaling-aware
+// clients are not affected by this.
+static void box_from_fbox(struct wlr_box *box, struct wlr_fbox *fbox) {
+	box->x = round(fbox->x);
+	box->y = round(fbox->y);
+	box->width = round(fbox->x + fbox->width) - box->x;
+	box->height = round(fbox->y + fbox->height) - box->y;
+}
+
 static struct wlr_scene_tree *scene_tree_from_node(struct wlr_scene_node *node) {
 	assert(node->type == WLR_SCENE_NODE_TREE);
 	struct wlr_scene_tree *tree = wl_container_of(node, tree, node);
@@ -180,13 +190,14 @@ struct wlr_scene_tree *wlr_scene_tree_create(struct wlr_scene_tree *parent) {
 	return tree;
 }
 
-static void scene_node_get_size(struct wlr_scene_node *node, int *lx, int *ly);
+static void scene_node_get_size(struct wlr_scene_node *node, double *lx, double *ly);
 
 typedef bool (*scene_node_box_iterator_func_t)(struct wlr_scene_node *node,
-	int sx, int sy, void *data);
+	double sx, double sy, void *data);
 
-static bool _scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_box *box,
-		scene_node_box_iterator_func_t iterator, void *user_data, int lx, int ly) {
+static bool _scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_fbox *box,
+		scene_node_box_iterator_func_t iterator, void *user_data,
+		double lx, double ly) {
 	if (!node->enabled) {
 		return false;
 	}
@@ -196,17 +207,18 @@ static bool _scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_box *box
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
 		struct wlr_scene_node *child;
 		wl_list_for_each_reverse(child, &scene_tree->children, link) {
-			if (_scene_nodes_in_box(child, box, iterator, user_data, lx + child->x, ly + child->y)) {
+			if (_scene_nodes_in_box(child, box, iterator, user_data,
+					lx + child->x, ly + child->y)) {
 				return true;
 			}
 		}
 		break;
 	case WLR_SCENE_NODE_RECT:
 	case WLR_SCENE_NODE_BUFFER:;
-		struct wlr_box node_box = { .x = lx, .y = ly };
+		struct wlr_fbox node_box = { .x = lx, .y = ly };
 		scene_node_get_size(node, &node_box.width, &node_box.height);
 
-		if (wlr_box_intersection(&node_box, &node_box, box) &&
+		if (wlr_fbox_intersection(&node_box, &node_box, box) &&
 				iterator(node, lx, ly, user_data)) {
 			return true;
 		}
@@ -216,16 +228,21 @@ static bool _scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_box *box
 	return false;
 }
 
-static bool scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_box *box,
+static bool scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_fbox *box,
 		scene_node_box_iterator_func_t iterator, void *user_data) {
-	int x, y;
+	double x, y;
 	wlr_scene_node_coords(node, &x, &y);
 
 	return _scene_nodes_in_box(node, box, iterator, user_data, x, y);
 }
 
-static void scene_node_opaque_region(struct wlr_scene_node *node, int x, int y,
+static void scene_node_opaque_region(struct wlr_scene_node *node, double x, double y,
 		pixman_region32_t *opaque) {
+	struct wlr_fbox fbox = { .x = x, .y = y, };
+	scene_node_get_size(node, &fbox.width, &fbox.height);
+	struct wlr_box box;
+	box_from_fbox(&box, &fbox);
+
 	if (node->type == WLR_SCENE_NODE_RECT) {
 		struct wlr_scene_rect *scene_rect = scene_rect_from_node(node);
 		if (scene_rect->color[3] != 1) {
@@ -240,15 +257,13 @@ static void scene_node_opaque_region(struct wlr_scene_node *node, int x, int y,
 
 		if (!buffer_is_opaque(scene_buffer->buffer)) {
 			pixman_region32_copy(opaque, &scene_buffer->opaque_region);
-			pixman_region32_translate(opaque, x, y);
+			pixman_region32_translate(opaque, box.x, box.y);
 			return;
 		}
 	}
 
-	int width, height;
-	scene_node_get_size(node, &width, &height);
 	pixman_region32_fini(opaque);
-	pixman_region32_init_rect(opaque, x, y, width, height);
+	pixman_region32_init_rect(opaque, box.x, box.y, box.width, box.height);
 }
 
 struct scene_update_data {
@@ -375,16 +390,18 @@ static void update_node_update_outputs(struct wlr_scene_node *node,
 }
 
 static bool scene_node_update_iterator(struct wlr_scene_node *node,
-		int lx, int ly, void *_data) {
+		double lx, double ly, void *_data) {
 	struct scene_update_data *data = _data;
 
-	struct wlr_box box = { .x = lx, .y = ly };
-	scene_node_get_size(node, &box.width, &box.height);
+	struct wlr_fbox fbox = { .x = lx, .y = ly };
+	scene_node_get_size(node, &fbox.width, &fbox.height);
+	struct wlr_box box;
+	box_from_fbox(&box, &fbox);
 
 	pixman_region32_subtract(&node->visible, &node->visible, data->update_region);
 	pixman_region32_union(&node->visible, &node->visible, data->visible);
 	pixman_region32_intersect_rect(&node->visible, &node->visible,
-		lx, ly, box.width, box.height);
+		box.x, box.y, box.width, box.height);
 
 	if (data->calculate_visibility) {
 		pixman_region32_t opaque;
@@ -418,7 +435,7 @@ static void scene_node_visibility(struct wlr_scene_node *node,
 }
 
 static void scene_node_bounds(struct wlr_scene_node *node,
-		int x, int y, pixman_region32_t *visible) {
+		double x, double y, pixman_region32_t *visible) {
 	if (!node->enabled) {
 		return;
 	}
@@ -432,9 +449,12 @@ static void scene_node_bounds(struct wlr_scene_node *node,
 		return;
 	}
 
-	int width, height;
-	scene_node_get_size(node, &width, &height);
-	pixman_region32_union_rect(visible, visible, x, y, width, height);
+	struct wlr_fbox fbox = { .x = x, .y = y, };
+	scene_node_get_size(node, &fbox.width, &fbox.height);
+	struct wlr_box box;
+	box_from_fbox(&box, &fbox);
+
+	pixman_region32_union_rect(visible, visible, box.x, box.y, box.width, box.height);
 }
 
 static void scene_update_region(struct wlr_scene *scene,
@@ -451,7 +471,7 @@ static void scene_update_region(struct wlr_scene *scene,
 	};
 
 	struct pixman_box32 *region_box = pixman_region32_extents(update_region);
-	struct wlr_box box = {
+	struct wlr_fbox box = {
 		.x = region_box->x1,
 		.y = region_box->y1,
 		.width = region_box->x2 - region_box->x1,
@@ -468,7 +488,7 @@ static void scene_node_update(struct wlr_scene_node *node,
 		pixman_region32_t *damage) {
 	struct wlr_scene *scene = scene_node_get_root(node);
 
-	int x, y;
+	double x, y;
 	if (!wlr_scene_node_coords(node, &x, &y)) {
 		if (damage) {
 			scene_update_region(scene, damage);
@@ -500,7 +520,7 @@ static void scene_node_update(struct wlr_scene_node *node,
 }
 
 struct wlr_scene_rect *wlr_scene_rect_create(struct wlr_scene_tree *parent,
-		int width, int height, const float color[static 4]) {
+		double width, double height, const float color[static 4]) {
 	struct wlr_scene_rect *scene_rect =
 		calloc(1, sizeof(struct wlr_scene_rect));
 	if (scene_rect == NULL) {
@@ -518,7 +538,8 @@ struct wlr_scene_rect *wlr_scene_rect_create(struct wlr_scene_tree *parent,
 	return scene_rect;
 }
 
-void wlr_scene_rect_set_size(struct wlr_scene_rect *rect, int width, int height) {
+void wlr_scene_rect_set_size(struct wlr_scene_rect *rect,
+		double width, double height) {
 	if (rect->width == width && rect->height == height) {
 		return;
 	}
@@ -601,7 +622,7 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 		return;
 	}
 
-	int lx, ly;
+	double lx, ly;
 	if (!wlr_scene_node_coords(&scene_buffer->node, &lx, &ly)) {
 		return;
 	}
@@ -716,7 +737,7 @@ void wlr_scene_buffer_set_source_box(struct wlr_scene_buffer *scene_buffer,
 }
 
 void wlr_scene_buffer_set_dest_size(struct wlr_scene_buffer *scene_buffer,
-		int width, int height) {
+		double width, double height) {
 	if (scene_buffer->dst_width == width && scene_buffer->dst_height == height) {
 		return;
 	}
@@ -761,7 +782,7 @@ static struct wlr_texture *scene_buffer_get_texture(
 }
 
 static void scene_node_get_size(struct wlr_scene_node *node,
-		int *width, int *height) {
+		double *width, double *height) {
 	*width = 0;
 	*height = 0;
 
@@ -791,23 +812,12 @@ static void scene_node_get_size(struct wlr_scene_node *node,
 	}
 }
 
-static int scale_length(int length, int offset, float scale) {
-	return round((offset + length) * scale) - round(offset * scale);
-}
-
-static void scale_box(struct wlr_box *box, float scale) {
-	box->width = scale_length(box->width, box->x, scale);
-	box->height = scale_length(box->height, box->y, scale);
-	box->x = round(box->x * scale);
-	box->y = round(box->y * scale);
-}
-
 void wlr_scene_node_set_enabled(struct wlr_scene_node *node, bool enabled) {
 	if (node->enabled == enabled) {
 		return;
 	}
 
-	int x, y;
+	double x, y;
 	pixman_region32_t visible;
 	pixman_region32_init(&visible);
 	if (wlr_scene_node_coords(node, &x, &y)) {
@@ -819,7 +829,7 @@ void wlr_scene_node_set_enabled(struct wlr_scene_node *node, bool enabled) {
 	scene_node_update(node, &visible);
 }
 
-void wlr_scene_node_set_position(struct wlr_scene_node *node, int x, int y) {
+void wlr_scene_node_set_position(struct wlr_scene_node *node, double x, double y) {
 	if (node->x == x && node->y == y) {
 		return;
 	}
@@ -889,7 +899,7 @@ void wlr_scene_node_reparent(struct wlr_scene_node *node,
 		assert(&ancestor->node != node);
 	}
 
-	int x, y;
+	double x, y;
 	pixman_region32_t visible;
 	pixman_region32_init(&visible);
 	if (wlr_scene_node_coords(node, &x, &y)) {
@@ -903,10 +913,10 @@ void wlr_scene_node_reparent(struct wlr_scene_node *node,
 }
 
 bool wlr_scene_node_coords(struct wlr_scene_node *node,
-		int *lx_ptr, int *ly_ptr) {
+		double *lx_ptr, double *ly_ptr) {
 	assert(node);
 
-	int lx = 0, ly = 0;
+	double lx = 0, ly = 0;
 	bool enabled = true;
 	while (true) {
 		lx += node->x;
@@ -925,7 +935,7 @@ bool wlr_scene_node_coords(struct wlr_scene_node *node,
 }
 
 static void scene_node_for_each_scene_buffer(struct wlr_scene_node *node,
-		int lx, int ly, wlr_scene_buffer_iterator_func_t user_iterator,
+		double lx, double ly, wlr_scene_buffer_iterator_func_t user_iterator,
 		void *user_data) {
 	if (!node->enabled) {
 		return;
@@ -958,7 +968,7 @@ struct node_at_data {
 };
 
 static bool scene_node_at_iterator(struct wlr_scene_node *node,
-		int lx, int ly, void *data) {
+		double lx, double ly, void *data) {
 	struct node_at_data *at_data = data;
 
 	double rx = at_data->lx - lx;
@@ -981,9 +991,9 @@ static bool scene_node_at_iterator(struct wlr_scene_node *node,
 
 struct wlr_scene_node *wlr_scene_node_at(struct wlr_scene_node *node,
 		double lx, double ly, double *nx, double *ny) {
-	struct wlr_box box = {
-		.x = floor(lx),
-		.y = floor(ly),
+	struct wlr_fbox box = {
+		.x = lx,
+		.y = ly,
 		.width = 1,
 		.height = 1
 	};
@@ -1065,7 +1075,7 @@ static void render_texture(struct wlr_output *output,
 
 static void scene_node_render(struct wlr_scene_node *node,
 		struct wlr_scene_output *scene_output, pixman_region32_t *damage) {
-	int x, y;
+	double x, y;
 	wlr_scene_node_coords(node, &x, &y);
 	x -= scene_output->x;
 	y -= scene_output->y;
@@ -1083,12 +1093,14 @@ static void scene_node_render(struct wlr_scene_node *node,
 		return;
 	}
 
-	struct wlr_box dst_box = {
-		.x = x,
-		.y = y,
-	};
-	scene_node_get_size(node, &dst_box.width, &dst_box.height);
-	scale_box(&dst_box, output->scale);
+	struct wlr_fbox fbox = { .x = x, .y = y };
+	scene_node_get_size(node, &fbox.width, &fbox.height);
+	fbox.x *= output->scale;
+	fbox.y *= output->scale;
+	fbox.width *= output->scale;
+	fbox.height *= output->scale;
+	struct wlr_box dst_box;
+	box_from_fbox(&dst_box, &fbox);
 
 	struct wlr_texture *texture;
 	float matrix[9];
@@ -1337,13 +1349,13 @@ static bool scene_node_invisible(struct wlr_scene_node *node) {
 }
 
 struct render_list_constructor_data {
-	struct wlr_box box;
+	struct wlr_fbox box;
 	struct wl_array *render_list;
 	bool calculate_visibility;
 };
 
 static bool construct_render_list_iterator(struct wlr_scene_node *node,
-		int lx, int ly, void *_data) {
+		double lx, double ly, void *_data) {
 	struct render_list_constructor_data *data = _data;
 
 	if (scene_node_invisible(node)) {
@@ -1383,7 +1395,7 @@ static bool construct_render_list_iterator(struct wlr_scene_node *node,
 }
 
 static bool scene_node_try_direct_scanout(struct wlr_scene_node *node,
-		struct wlr_scene_output *scene_output, struct wlr_box *box) {
+		struct wlr_scene_output *scene_output, struct wlr_fbox *box) {
 	if (!scene_output->scene->direct_scanout) {
 		return false;
 	}
@@ -1420,11 +1432,11 @@ static bool scene_node_try_direct_scanout(struct wlr_scene_node *node,
 		return false;
 	}
 
-	struct wlr_box node_box;
+	struct wlr_fbox node_box;
 	wlr_scene_node_coords(node, &node_box.x, &node_box.y);
 	scene_node_get_size(node, &node_box.width, &node_box.height);
 
-	if (!wlr_box_equal(box, &node_box)) {
+	if (!wlr_fbox_equal(box, &node_box)) {
 		return false;
 	}
 
@@ -1445,13 +1457,19 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 	struct wlr_renderer *renderer = output->renderer;
 	assert(renderer != NULL);
 
+	int output_width, output_height;
+	wlr_output_effective_resolution(output,
+		&output_width, &output_height);
 	struct render_list_constructor_data list_con = {
-		.box = { .x = scene_output->x, .y = scene_output->y },
+		.box = {
+			.x = scene_output->x,
+			.y = scene_output->y,
+			.width = output_width,
+			.height = output_height,
+		},
 		.render_list = &scene_output->render_list,
 		.calculate_visibility = scene_output->scene->calculate_visibility,
 	};
-	wlr_output_effective_resolution(output,
-		&list_con.box.width, &list_con.box.height);
 
 	list_con.render_list->size = 0;
 	scene_nodes_in_box(&scene_output->scene->tree.node, &list_con.box,
@@ -1559,7 +1577,7 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 
 		for (int i = list_len - 1; i >= 0; i--) {
 			struct wlr_scene_node *node = list_data[i];
-			int x, y;
+			double x, y;
 			wlr_scene_node_coords(node, &x, &y);
 
 			// We must only cull opaque regions that are visible by the node.
@@ -1688,7 +1706,7 @@ void wlr_scene_output_send_frame_done(struct wlr_scene_output *scene_output,
 }
 
 static void scene_output_for_each_scene_buffer(const struct wlr_box *output_box,
-		struct wlr_scene_node *node, int lx, int ly,
+		struct wlr_scene_node *node, double lx, double ly,
 		wlr_scene_buffer_iterator_func_t user_iterator, void *user_data) {
 	if (!node->enabled) {
 		return;
@@ -1698,8 +1716,10 @@ static void scene_output_for_each_scene_buffer(const struct wlr_box *output_box,
 	ly += node->y;
 
 	if (node->type == WLR_SCENE_NODE_BUFFER) {
-		struct wlr_box node_box = { .x = lx, .y = ly };
-		scene_node_get_size(node, &node_box.width, &node_box.height);
+		struct wlr_fbox fbox = { .x = lx, .y = ly };
+		scene_node_get_size(node, &fbox.width, &fbox.height);
+		struct wlr_box node_box;
+		box_from_fbox(&node_box, &fbox);
 
 		struct wlr_box intersection;
 		if (wlr_box_intersection(&intersection, output_box, &node_box)) {
