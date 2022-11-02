@@ -14,6 +14,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
@@ -22,6 +23,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -67,6 +69,8 @@ struct tinywl_server {
 	struct wlr_output_layout *output_layout;
 	struct wl_list outputs;
 	struct wl_listener new_output;
+
+	struct wlr_output *last_output; // XXX: hack
 };
 
 struct tinywl_output {
@@ -89,7 +93,7 @@ struct tinywl_view {
 	struct wl_listener request_resize;
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
-	int x, y;
+	double x, y;
 };
 
 struct tinywl_keyboard {
@@ -185,6 +189,48 @@ static bool handle_keybinding(struct tinywl_server *server, xkb_keysym_t sym) {
 			server->views.prev, next_view, link);
 		focus_view(next_view, next_view->xdg_toplevel->base->surface);
 		break;
+	case XKB_KEY_j:;
+		wlr_output_set_scale(server->last_output,
+			server->last_output->scale + 0.05);
+		wlr_output_commit(server->last_output);
+		break;
+	case XKB_KEY_k:;
+		wlr_output_set_scale(server->last_output,
+			server->last_output->scale - 0.05);
+		wlr_output_commit(server->last_output);
+		break;
+	case XKB_KEY_d: {
+		struct tinywl_view *cur_view = wl_container_of(
+			server->views.next, cur_view, link);
+		wlr_scene_node_set_position(&cur_view->scene_tree->node,
+			cur_view->scene_tree->node.x + 1,
+			cur_view->scene_tree->node.y);
+		break;
+			}
+	case XKB_KEY_a: {
+		struct tinywl_view *cur_view = wl_container_of(
+			server->views.next, cur_view, link);
+		wlr_scene_node_set_position(&cur_view->scene_tree->node,
+			cur_view->scene_tree->node.x - 1,
+			cur_view->scene_tree->node.y);
+		break;
+			}
+	case XKB_KEY_w: {
+		struct tinywl_view *cur_view = wl_container_of(
+			server->views.next, cur_view, link);
+		wlr_scene_node_set_position(&cur_view->scene_tree->node,
+			cur_view->scene_tree->node.x,
+			cur_view->scene_tree->node.y - 1);
+		break;
+			}
+	case XKB_KEY_s: {
+		struct tinywl_view *cur_view = wl_container_of(
+			server->views.next, cur_view, link);
+		wlr_scene_node_set_position(&cur_view->scene_tree->node,
+			cur_view->scene_tree->node.x,
+			cur_view->scene_tree->node.y + 1);
+		break;
+			}
 	default:
 		return false;
 	}
@@ -646,6 +692,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	 * output (such as DPI, scale factor, manufacturer, etc).
 	 */
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
+	server->last_output = wlr_output;
 }
 
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
@@ -973,6 +1020,9 @@ int main(int argc, char *argv[]) {
 	server.request_set_selection.notify = seat_request_set_selection;
 	wl_signal_add(&server.seat->events.request_set_selection,
 			&server.request_set_selection);
+
+	wlr_fractional_scale_manager_v1_create(server.wl_display);
+	wlr_viewporter_create(server.wl_display);
 
 	/* Add a Unix socket to the Wayland display. */
 	const char *socket = wl_display_add_socket_auto(server.wl_display);
