@@ -154,10 +154,11 @@ static void text_input_set_cursor_rectangle(struct wl_client *client,
 		return;
 	}
 	text_input->pending.features |= WLR_TEXT_INPUT_V3_FEATURE_CURSOR_RECTANGLE;
-	text_input->pending.cursor_rectangle.x = x;
-	text_input->pending.cursor_rectangle.y = y;
-	text_input->pending.cursor_rectangle.width = width;
-	text_input->pending.cursor_rectangle.height = height;
+	double factor = text_input->focused_surface->client_scale_factor;
+	text_input->pending.cursor_rectangle.x = x / factor;
+	text_input->pending.cursor_rectangle.y = y / factor;
+	text_input->pending.cursor_rectangle.width = width / factor;
+	text_input->pending.cursor_rectangle.height = height / factor;
 }
 
 static void text_input_commit(struct wl_client *client,
