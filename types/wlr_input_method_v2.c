@@ -131,7 +131,7 @@ struct wlr_input_popup_surface_v2 *wlr_input_popup_surface_v2_from_wlr_surface(
 
 void wlr_input_popup_surface_v2_send_text_input_rectangle(
 		struct wlr_input_popup_surface_v2 *popup_surface,
-		struct wlr_box *sbox) {
+		struct wlr_fbox *sbox) {
 	zwp_input_popup_surface_v2_send_text_input_rectangle(
 		popup_surface->resource, sbox->x, sbox->y, sbox->width, sbox->height);
 }
