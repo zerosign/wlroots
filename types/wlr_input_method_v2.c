@@ -132,8 +132,10 @@ struct wlr_input_popup_surface_v2 *wlr_input_popup_surface_v2_from_wlr_surface(
 void wlr_input_popup_surface_v2_send_text_input_rectangle(
 		struct wlr_input_popup_surface_v2 *popup_surface,
 		struct wlr_fbox *sbox) {
-	zwp_input_popup_surface_v2_send_text_input_rectangle(
-		popup_surface->resource, sbox->x, sbox->y, sbox->width, sbox->height);
+	double factor = popup_surface->surface->server_scale_factor;
+	zwp_input_popup_surface_v2_send_text_input_rectangle(popup_surface->resource,
+		round(sbox->x * factor), round(sbox->y * factor),
+		round(sbox->width * factor), round(sbox->height * factor));
 }
 
 static void popup_surface_set_mapped(
