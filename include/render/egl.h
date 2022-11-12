@@ -38,6 +38,11 @@ struct wlr_egl {
 		PFNEGLQUERYDISPLAYATTRIBEXTPROC eglQueryDisplayAttribEXT;
 		PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
 		PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
+		PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
+		PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
+		PFNEGLDUPNATIVEFENCEFDANDROIDPROC eglDupNativeFenceFDANDROID;
+		PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;
+		PFNEGLCLIENTWAITSYNCKHRPROC eglClientWaitSyncKHR;
 	} procs;
 
 	bool has_modifiers;
@@ -113,5 +118,13 @@ bool wlr_egl_make_current(struct wlr_egl *egl);
 bool wlr_egl_unset_current(struct wlr_egl *egl);
 
 bool wlr_egl_is_current(struct wlr_egl *egl);
+
+EGLSyncKHR wlr_egl_create_sync(struct wlr_egl *egl, int fence_fd);
+
+void wlr_egl_destroy_sync(struct wlr_egl *egl, EGLSyncKHR sync);
+
+int wlr_egl_dup_fence_fd(struct wlr_egl *egl, EGLSyncKHR sync);
+
+bool wlr_egl_wait_sync(struct wlr_egl *egl, EGLSyncKHR sync);
 
 #endif
