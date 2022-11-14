@@ -23,6 +23,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_frame_scheduler.h>
 
 struct wlr_output;
 struct wlr_output_layout;
@@ -166,6 +167,7 @@ struct wlr_scene_output {
 	struct wlr_addon addon;
 
 	struct wlr_damage_ring damage_ring;
+	struct wlr_frame_scheduler frame_scheduler;
 
 	int x, y;
 

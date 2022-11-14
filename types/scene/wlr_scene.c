@@ -1218,6 +1218,7 @@ struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 	wlr_addon_init(&scene_output->addon, &output->addons, scene, &output_addon_impl);
 
 	wlr_damage_ring_init(&scene_output->damage_ring);
+	wlr_frame_scheduler_init(&scene_output->frame_scheduler, output);
 	wl_list_init(&scene_output->damage_highlight_regions);
 
 	int prev_output_index = -1;
@@ -1279,6 +1280,7 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 
 	wlr_addon_finish(&scene_output->addon);
 	wlr_damage_ring_finish(&scene_output->damage_ring);
+	wlr_frame_scheduler_finish(&scene_output->frame_scheduler);
 	wl_list_remove(&scene_output->link);
 	wl_list_remove(&scene_output->output_commit.link);
 	wl_list_remove(&scene_output->output_mode.link);
@@ -1621,6 +1623,8 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 
 	wlr_output_render_software_cursors(output, &damage);
 
+	wlr_frame_scheduler_mark_render_submitted(&scene_output->frame_scheduler,
+		renderer);
 	wlr_renderer_end(renderer);
 	pixman_region32_fini(&damage);
 

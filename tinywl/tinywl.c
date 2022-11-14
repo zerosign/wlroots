@@ -607,9 +607,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 		calloc(1, sizeof(struct tinywl_output));
 	output->wlr_output = wlr_output;
 	output->server = server;
-	/* Sets up a listener for the frame notify event. */
-	output->frame.notify = output_frame;
-	wl_signal_add(&wlr_output->events.frame, &output->frame);
 
 	/* Sets up a listener for the destroy notify event. */
 	output->destroy.notify = output_destroy;
@@ -627,6 +624,12 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	 * output (such as DPI, scale factor, manufacturer, etc).
 	 */
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
+
+	struct wlr_scene_output *scene_output =
+		wlr_scene_get_scene_output(server->scene, wlr_output);
+	/* Sets up a listener for the frame notify event. */
+	output->frame.notify = output_frame;
+	wl_signal_add(&scene_output->frame_scheduler.events.frame, &output->frame);
 }
 
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
