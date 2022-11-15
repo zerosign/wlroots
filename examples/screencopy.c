@@ -36,8 +36,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <assert.h>
+#include <libdrm/drm_fourcc.h>
 #include <wayland-client-protocol.h>
-#include "wlr-screencopy-unstable-v1-client-protocol.h"
+#include "ext-screencopy-v1-client-protocol.h"
 
 struct format {
 	enum wl_shm_format wl_format;
@@ -45,7 +46,7 @@ struct format {
 };
 
 static struct wl_shm *shm = NULL;
-static struct zwlr_screencopy_manager_v1 *screencopy_manager = NULL;
+static struct ext_screencopy_manager_v1 *screencopy_manager = NULL;
 static struct wl_output *output = NULL;
 
 static struct {
@@ -65,6 +66,15 @@ static const struct format formats[] = {
 	{WL_SHM_FORMAT_XBGR8888, false},
 	{WL_SHM_FORMAT_ABGR8888, false},
 };
+
+static enum wl_shm_format drm_format_to_wl_shm(uint32_t in) {
+	switch (in) {
+	case DRM_FORMAT_ARGB8888: return WL_SHM_FORMAT_ARGB8888;
+	case DRM_FORMAT_XRGB8888: return WL_SHM_FORMAT_XRGB8888;
+	}
+
+	return in;
+}
 
 static struct wl_buffer *create_shm_buffer(enum wl_shm_format fmt,
 		int width, int height, int stride, void **data_out) {
@@ -105,10 +115,29 @@ static struct wl_buffer *create_shm_buffer(enum wl_shm_format fmt,
 	return buffer;
 }
 
-static void frame_handle_buffer(void *data,
-		struct zwlr_screencopy_frame_v1 *frame, uint32_t format,
-		uint32_t width, uint32_t height, uint32_t stride) {
-	buffer.format = format;
+static void commit_buffer(struct ext_screencopy_session_v1 *session) {
+	if (buffer.wl_buffer == NULL) {
+		fprintf(stderr, "no supported buffer format reported\n");
+		exit(EXIT_FAILURE);
+	}
+
+	ext_screencopy_session_v1_attach_buffer(session, buffer.wl_buffer);
+	ext_screencopy_session_v1_damage_buffer(session, 0, 0, buffer.width,
+			buffer.height);
+
+	ext_screencopy_session_v1_commit(session, 0);
+}
+
+static void session_handle_buffer_info(void *data,
+		struct ext_screencopy_session_v1 *session,
+		enum ext_screencopy_session_v1_buffer_type type,
+		uint32_t format, uint32_t width, uint32_t height,
+		uint32_t stride) {
+	if (type != EXT_SCREENCOPY_SESSION_V1_BUFFER_TYPE_WL_SHM) {
+		return;
+	}
+
+	buffer.format = drm_format_to_wl_shm(format);
 	buffer.width = width;
 	buffer.height = height;
 	buffer.stride = stride;
@@ -116,37 +145,74 @@ static void frame_handle_buffer(void *data,
 	// Make sure the buffer is not allocated
 	assert(!buffer.wl_buffer);
 	buffer.wl_buffer =
-		create_shm_buffer(format, width, height, stride, &buffer.data);
+		create_shm_buffer(buffer.format, width, height, stride, &buffer.data);
 	if (buffer.wl_buffer == NULL) {
 		fprintf(stderr, "failed to create buffer\n");
 		exit(EXIT_FAILURE);
 	}
-
-	zwlr_screencopy_frame_v1_copy(frame, buffer.wl_buffer);
 }
 
-static void frame_handle_flags(void *data,
-		struct zwlr_screencopy_frame_v1 *frame, uint32_t flags) {
-	buffer.y_invert = flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT;
+static void session_handle_cursor_buffer_info(void *data,
+		struct ext_screencopy_session_v1 *session, const char *name,
+		enum ext_screencopy_session_v1_input_type input_type,
+		enum ext_screencopy_session_v1_buffer_type type,
+		uint32_t format, uint32_t width, uint32_t height,
+		uint32_t stride) {
 }
 
-static void frame_handle_ready(void *data,
-		struct zwlr_screencopy_frame_v1 *frame, uint32_t tv_sec_hi,
-		uint32_t tv_sec_lo, uint32_t tv_nsec) {
+static void session_handle_init_done(void *data,
+		struct ext_screencopy_session_v1 *session) {
+	commit_buffer(session);
+	return;
+}
+
+static void session_handle_transform(void *data,
+		struct ext_screencopy_session_v1 *session,
+		int32_t transform) {
+	if (transform == WL_OUTPUT_TRANSFORM_FLIPPED_180) {
+		buffer.y_invert = true;
+	}
+}
+
+static void session_handle_ready(void *data,
+		struct ext_screencopy_session_v1 *session) {
 	buffer_copy_done = true;
 }
 
-static void frame_handle_failed(void *data,
-		struct zwlr_screencopy_frame_v1 *frame) {
+static void session_handle_failed(void *data,
+		struct ext_screencopy_session_v1 *session,
+		enum ext_screencopy_session_v1_failure_reason reason) {
 	fprintf(stderr, "failed to copy frame\n");
 	exit(EXIT_FAILURE);
 }
 
-static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
-	.buffer = frame_handle_buffer,
-	.flags = frame_handle_flags,
-	.ready = frame_handle_ready,
-	.failed = frame_handle_failed,
+static void session_handle_damage(void *data,
+		struct ext_screencopy_session_v1 *session,
+		uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+}
+
+static void session_handle_cursor_info(void *data,
+		struct ext_screencopy_session_v1 *session, const char *name,
+		enum ext_screencopy_session_v1_input_type input_type,
+		int has_damage, int32_t pos_x, int32_t pos_y, int32_t width,
+		int32_t height, int32_t hotspot_x, int32_t hotspot_y) {
+}
+
+static void session_handle_presentation_time(void *data,
+		struct ext_screencopy_session_v1 *session,
+		uint32_t sec_hi, uint32_t sec_lo, uint32_t nsec) {
+}
+
+static const struct ext_screencopy_session_v1_listener frame_listener = {
+	.buffer_info = session_handle_buffer_info,
+	.cursor_buffer_info = session_handle_cursor_buffer_info,
+	.init_done = session_handle_init_done,
+	.damage = session_handle_damage,
+	.cursor_info = session_handle_cursor_info,
+	.presentation_time = session_handle_presentation_time,
+	.transform = session_handle_transform,
+	.ready = session_handle_ready,
+	.failed = session_handle_failed,
 };
 
 static void handle_global(void *data, struct wl_registry *registry,
@@ -156,9 +222,9 @@ static void handle_global(void *data, struct wl_registry *registry,
 	} else if (strcmp(interface, wl_shm_interface.name) == 0) {
 		shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
 	} else if (strcmp(interface,
-			zwlr_screencopy_manager_v1_interface.name) == 0) {
+			ext_screencopy_manager_v1_interface.name) == 0) {
 		screencopy_manager = wl_registry_bind(registry, name,
-			&zwlr_screencopy_manager_v1_interface, 1);
+			&ext_screencopy_manager_v1_interface, 1);
 	}
 }
 
@@ -241,7 +307,7 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	if (screencopy_manager == NULL) {
-		fprintf(stderr, "compositor doesn't support wlr-screencopy-unstable-v1\n");
+		fprintf(stderr, "compositor doesn't support ext-screencopy-v1\n");
 		return EXIT_FAILURE;
 	}
 	if (output == NULL) {
@@ -249,9 +315,11 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	struct zwlr_screencopy_frame_v1 *frame =
-		zwlr_screencopy_manager_v1_capture_output(screencopy_manager, 0, output);
-	zwlr_screencopy_frame_v1_add_listener(frame, &frame_listener, NULL);
+	struct ext_screencopy_session_v1 *session =
+		ext_screencopy_manager_v1_capture_output(screencopy_manager,
+				output,
+				EXT_SCREENCOPY_MANAGER_V1_OPTIONS_RENDER_CURSORS);
+	ext_screencopy_session_v1_add_listener(session, &frame_listener, NULL);
 
 	while (!buffer_copy_done && wl_display_dispatch(display) != -1) {
 		// This space is intentionally left blank

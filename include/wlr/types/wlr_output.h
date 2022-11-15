@@ -178,6 +178,8 @@ struct wlr_output {
 		struct wl_signal enable;
 		struct wl_signal mode;
 		struct wl_signal description;
+		struct wl_signal set_cursor;
+		struct wl_signal move_cursor;
 		struct wl_signal destroy;
 	} events;
 
@@ -256,6 +258,18 @@ struct wlr_output_event_present {
 struct wlr_output_event_bind {
 	struct wlr_output *output;
 	struct wl_resource *resource;
+};
+
+struct wlr_output_event_set_cursor {
+	struct wlr_output *output;
+	struct wlr_buffer *buffer;
+	int hotspot_x;
+	int hotspot_y;
+};
+
+struct wlr_output_event_move_cursor {
+	struct wlr_output* output;
+	int x, y;
 };
 
 struct wlr_surface;
