@@ -180,7 +180,8 @@ void wlr_seat_pointer_enter(struct wlr_seat *wlr_seat,
 			}
 
 			wl_pointer_send_enter(resource, serial, surface->resource,
-				wl_fixed_from_double(sx), wl_fixed_from_double(sy));
+				wl_fixed_from_double(sx * surface->server_scale_factor),
+				wl_fixed_from_double(sy * surface->server_scale_factor));
 			pointer_send_frame(resource);
 		}
 	}
@@ -229,20 +230,20 @@ void wlr_seat_pointer_send_motion(struct wlr_seat *wlr_seat, uint32_t time,
 		return;
 	}
 
-	// Ensure we don't send duplicate motion events. Instead of comparing with an
-	// epsilon, chop off some precision by converting to a `wl_fixed_t` first,
-	// since that is what a client receives.
-	wl_fixed_t sx_fixed = wl_fixed_from_double(sx);
-	wl_fixed_t sy_fixed = wl_fixed_from_double(sy);
-	if (wl_fixed_from_double(wlr_seat->pointer_state.sx) != sx_fixed ||
-			wl_fixed_from_double(wlr_seat->pointer_state.sy) != sy_fixed) {
+	// Compare wl_fixed_t values to ensure we don't send duplicate events.
+	double factor = wlr_seat->pointer_state.focused_surface->server_scale_factor;
+	wl_fixed_t sx_new = wl_fixed_from_double(sx * factor);
+	wl_fixed_t sy_new = wl_fixed_from_double(sy * factor);
+	wl_fixed_t sx_old = wl_fixed_from_double(wlr_seat->pointer_state.sx * factor);
+	wl_fixed_t sy_old = wl_fixed_from_double(wlr_seat->pointer_state.sy * factor);
+	if (sx_new != sx_old || sy_new != sy_old) {
 		struct wl_resource *resource;
 		wl_resource_for_each(resource, &client->pointers) {
 			if (wlr_seat_client_from_pointer_resource(resource) == NULL) {
 				continue;
 			}
 
-			wl_pointer_send_motion(resource, time, sx_fixed, sy_fixed);
+			wl_pointer_send_motion(resource, time, sx_new, sy_new);
 		}
 	}
 

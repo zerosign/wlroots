@@ -34,10 +34,10 @@ struct wlr_scene_node;
 struct wlr_scene_buffer;
 
 typedef bool (*wlr_scene_buffer_point_accepts_input_func_t)(
-	struct wlr_scene_buffer *buffer, int sx, int sy);
+	struct wlr_scene_buffer *buffer, double sx, double sy);
 
 typedef void (*wlr_scene_buffer_iterator_func_t)(
-	struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data);
+	struct wlr_scene_buffer *buffer, double sx, double sy, void *user_data);
 
 enum wlr_scene_node_type {
 	WLR_SCENE_NODE_TREE,
@@ -53,7 +53,7 @@ struct wlr_scene_node {
 	struct wl_list link; // wlr_scene_tree.children
 
 	bool enabled;
-	int x, y; // relative to parent
+	double x, y; // relative to parent
 
 	struct {
 		struct wl_signal destroy;
@@ -108,6 +108,7 @@ struct wlr_scene_surface {
 
 	struct wlr_addon addon;
 
+	struct wl_listener outputs_update;
 	struct wl_listener output_enter;
 	struct wl_listener output_leave;
 	struct wl_listener output_present;
@@ -119,7 +120,7 @@ struct wlr_scene_surface {
 /** A scene-graph node displaying a solid-colored rectangle */
 struct wlr_scene_rect {
 	struct wlr_scene_node node;
-	int width, height;
+	double width, height;
 	float color[4];
 };
 
@@ -131,6 +132,7 @@ struct wlr_scene_buffer {
 	struct wlr_buffer *buffer;
 
 	struct {
+		struct wl_signal outputs_update;
 		struct wl_signal output_enter; // struct wlr_scene_output
 		struct wl_signal output_leave; // struct wlr_scene_output
 		struct wl_signal output_present; // struct wlr_scene_output
@@ -153,7 +155,7 @@ struct wlr_scene_buffer {
 	uint64_t active_outputs;
 	struct wlr_texture *texture;
 	struct wlr_fbox src_box;
-	int dst_width, dst_height;
+	double dst_width, dst_height;
 	enum wl_output_transform transform;
 	pixman_region32_t opaque_region;
 };
@@ -213,7 +215,7 @@ void wlr_scene_node_set_enabled(struct wlr_scene_node *node, bool enabled);
 /**
  * Set the position of the node relative to its parent.
  */
-void wlr_scene_node_set_position(struct wlr_scene_node *node, int x, int y);
+void wlr_scene_node_set_position(struct wlr_scene_node *node, double x, double y);
 /**
  * Move the node right above the specified sibling.
  * Asserts that node and sibling are distinct and share the same parent.
@@ -244,7 +246,7 @@ void wlr_scene_node_reparent(struct wlr_scene_node *node,
  *
  * True is returned if the node and all of its ancestors are enabled.
  */
-bool wlr_scene_node_coords(struct wlr_scene_node *node, int *lx, int *ly);
+bool wlr_scene_node_coords(struct wlr_scene_node *node, double *lx, double *ly);
 /**
  * Call `iterator` on each buffer in the scene-graph, with the buffer's
  * position in layout coordinates. The function is called from root to leaves
@@ -304,12 +306,13 @@ struct wlr_scene_surface *wlr_scene_surface_from_buffer(
  * Add a node displaying a solid-colored rectangle to the scene-graph.
  */
 struct wlr_scene_rect *wlr_scene_rect_create(struct wlr_scene_tree *parent,
-		int width, int height, const float color[static 4]);
+	double width, double height, const float color[static 4]);
 
 /**
  * Change the width and height of an existing rectangle node.
  */
-void wlr_scene_rect_set_size(struct wlr_scene_rect *rect, int width, int height);
+void wlr_scene_rect_set_size(struct wlr_scene_rect *rect,
+	double width, double height);
 
 /**
  * Change the color of an existing rectangle node.
@@ -365,7 +368,7 @@ void wlr_scene_buffer_set_source_box(struct wlr_scene_buffer *scene_buffer,
  * destination size is zero.
  */
 void wlr_scene_buffer_set_dest_size(struct wlr_scene_buffer *scene_buffer,
-	int width, int height);
+	double width, double height);
 
 /**
  * Set a transform which will be applied to the buffer.
@@ -471,7 +474,7 @@ struct wlr_scene_layer_surface_v1 *wlr_scene_layer_surface_v1_create(
  */
 void wlr_scene_layer_surface_v1_configure(
 	struct wlr_scene_layer_surface_v1 *scene_layer_surface,
-	const struct wlr_box *full_area, struct wlr_box *usable_area);
+	const struct wlr_fbox *full_area, struct wlr_fbox *usable_area);
 
 /**
  * Add a node displaying a drag icon and all its sub-surfaces to the

@@ -56,23 +56,23 @@ struct wlr_layer_surface_v1_state {
 	uint32_t committed; // enum wlr_layer_surface_v1_state_field
 
 	uint32_t anchor;
-	int32_t exclusive_zone;
+	double exclusive_zone;
 	struct {
-		int32_t top, right, bottom, left;
+		double top, right, bottom, left;
 	} margin;
 	enum zwlr_layer_surface_v1_keyboard_interactivity keyboard_interactive;
-	uint32_t desired_width, desired_height;
+	double desired_width, desired_height;
 	enum zwlr_layer_shell_v1_layer layer;
 
 	uint32_t configure_serial;
-	uint32_t actual_width, actual_height;
+	double actual_width, actual_height;
 };
 
 struct wlr_layer_surface_v1_configure {
 	struct wl_list link; // wlr_layer_surface_v1.configure_list
 	uint32_t serial;
 
-	uint32_t width, height;
+	double width, height;
 };
 
 struct wlr_layer_surface_v1 {
@@ -131,7 +131,7 @@ struct wlr_layer_shell_v1 *wlr_layer_shell_v1_create(struct wl_display *display,
  * this size. Returns the associated configure serial.
  */
 uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
-		uint32_t width, uint32_t height);
+		double width, double height);
 
 /**
  * Notify the client that the surface has been closed and destroy the

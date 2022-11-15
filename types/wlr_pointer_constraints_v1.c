@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_region.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+#include <wlr/util/region.h>
 
 static const struct zwp_locked_pointer_v1_interface locked_pointer_impl;
 static const struct zwp_confined_pointer_v1_interface confined_pointer_impl;
@@ -74,6 +75,10 @@ static void pointer_constraint_set_region(
 	if (region_resource) {
 		const pixman_region32_t *region = wlr_region_from_resource(region_resource);
 		pixman_region32_copy(&constraint->pending.region, region);
+		// XXX: Best effort
+		wlr_region_scale(&constraint->pending.region, &constraint->pending.region,
+			1 / constraint->surface->client_scale_factor);
+
 	}
 
 	constraint->pending.committed |= WLR_POINTER_CONSTRAINT_V1_STATE_REGION;
@@ -98,8 +103,9 @@ static void pointer_constraint_set_cursor_position_hint(struct wl_client *client
 		return;
 	}
 
-	constraint->pending.cursor_hint.x = wl_fixed_to_double(x);
-	constraint->pending.cursor_hint.y = wl_fixed_to_double(y);
+	double factor = constraint->surface->client_scale_factor;
+	constraint->pending.cursor_hint.x = wl_fixed_to_double(x / factor);
+	constraint->pending.cursor_hint.y = wl_fixed_to_double(y / factor);
 	constraint->pending.committed |= WLR_POINTER_CONSTRAINT_V1_STATE_CURSOR_HINT;
 }
 

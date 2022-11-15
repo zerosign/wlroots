@@ -1,8 +1,23 @@
 #include <assert.h>
 #include <stdlib.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include "types/wlr_scene.h"
+
+static void handle_scene_buffer_outputs_update(
+		struct wl_listener *listener, void *data) {
+	struct wlr_scene_surface *surface =
+		wl_container_of(listener, surface, outputs_update);
+
+	if (surface->buffer->primary_output == NULL) {
+		return;
+	}
+	double scale = surface->buffer->primary_output->output->scale;
+	if (surface->surface->server_scale_factor != scale) {
+		wlr_fractional_scale_v1_send_scale_factor(surface->surface, scale);
+	}
+}
 
 static void handle_scene_buffer_output_enter(
 		struct wl_listener *listener, void *data) {
@@ -116,7 +131,7 @@ static void handle_scene_surface_surface_commit(
 	// schedule the frame however if the node is enabled and there is an
 	// output intersecting, otherwise the frame done events would never reach
 	// the surface anyway.
-	int lx, ly;
+	double lx, ly;
 	bool enabled = wlr_scene_node_coords(&scene_buffer->node, &lx, &ly);
 
 	if (!wl_list_empty(&surface->surface->current.frame_callback_list) &&
@@ -126,7 +141,7 @@ static void handle_scene_surface_surface_commit(
 }
 
 static bool scene_buffer_point_accepts_input(struct wlr_scene_buffer *scene_buffer,
-		int sx, int sy) {
+		double sx, double sy) {
 	struct wlr_scene_surface *scene_surface =
 		wlr_scene_surface_from_buffer(scene_buffer);
 
@@ -140,6 +155,7 @@ static void surface_addon_destroy(struct wlr_addon *addon) {
 
 	wlr_addon_finish(&surface->addon);
 
+	wl_list_remove(&surface->outputs_update.link);
 	wl_list_remove(&surface->output_enter.link);
 	wl_list_remove(&surface->output_leave.link);
 	wl_list_remove(&surface->output_present.link);
@@ -183,6 +199,9 @@ struct wlr_scene_surface *wlr_scene_surface_create(struct wlr_scene_tree *parent
 	surface->buffer = scene_buffer;
 	surface->surface = wlr_surface;
 	scene_buffer->point_accepts_input = scene_buffer_point_accepts_input;
+
+	surface->outputs_update.notify = handle_scene_buffer_outputs_update;
+	wl_signal_add(&scene_buffer->events.outputs_update, &surface->outputs_update);
 
 	surface->output_enter.notify = handle_scene_buffer_output_enter;
 	wl_signal_add(&scene_buffer->events.output_enter, &surface->output_enter);

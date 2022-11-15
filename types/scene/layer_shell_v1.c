@@ -37,7 +37,7 @@ static void scene_layer_surface_handle_layer_surface_unmap(
 
 static void layer_surface_exclusive_zone(
 		struct wlr_layer_surface_v1_state *state,
-		struct wlr_box *usable_area) {
+		struct wlr_fbox *usable_area) {
 	switch (state->anchor) {
 	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
 			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
@@ -70,7 +70,7 @@ static void layer_surface_exclusive_zone(
 
 void wlr_scene_layer_surface_v1_configure(
 		struct wlr_scene_layer_surface_v1 *scene_layer_surface,
-		const struct wlr_box *full_area, struct wlr_box *usable_area) {
+		const struct wlr_fbox *full_area, struct wlr_fbox *usable_area) {
 	struct wlr_layer_surface_v1 *layer_surface =
 		scene_layer_surface->layer_surface;
 	struct wlr_layer_surface_v1_state *state = &layer_surface->current;
@@ -78,14 +78,14 @@ void wlr_scene_layer_surface_v1_configure(
 	// If the exclusive zone is set to -1, the layer surface will use the
 	// full area of the output, otherwise it is constrained to the
 	// remaining usable area.
-	struct wlr_box bounds;
+	struct wlr_fbox bounds;
 	if (state->exclusive_zone == -1) {
 		bounds = *full_area;
 	} else {
 		bounds = *usable_area;
 	}
 
-	struct wlr_box box = {
+	struct wlr_fbox box = {
 		.width = state->desired_width,
 		.height = state->desired_height,
 	};

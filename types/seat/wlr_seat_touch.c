@@ -338,8 +338,10 @@ uint32_t wlr_seat_touch_send_down(struct wlr_seat *seat,
 		if (seat_client_from_touch_resource(resource) == NULL) {
 			continue;
 		}
-		wl_touch_send_down(resource, serial, time, surface->resource,
-			touch_id, wl_fixed_from_double(sx), wl_fixed_from_double(sy));
+		wl_touch_send_down(resource, serial, time,
+			surface->resource, touch_id,
+			wl_fixed_from_double(sx * surface->server_scale_factor),
+			wl_fixed_from_double(sy * surface->server_scale_factor));
 	}
 
 	point->client->needs_touch_frame = true;
@@ -374,13 +376,18 @@ void wlr_seat_touch_send_motion(struct wlr_seat *seat, uint32_t time, int32_t to
 		return;
 	}
 
+	double factor = 1.0;
+	if (point->surface != NULL) {
+		factor = point->surface->server_scale_factor;
+	}
 	struct wl_resource *resource;
 	wl_resource_for_each(resource, &point->client->touches) {
 		if (seat_client_from_touch_resource(resource) == NULL) {
 			continue;
 		}
-		wl_touch_send_motion(resource, time, touch_id, wl_fixed_from_double(sx),
-			wl_fixed_from_double(sy));
+		wl_touch_send_motion(resource, time, touch_id,
+			wl_fixed_from_double(sx * factor),
+			wl_fixed_from_double(sy * factor));
 	}
 
 	point->client->needs_touch_frame = true;

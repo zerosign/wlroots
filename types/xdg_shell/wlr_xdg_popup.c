@@ -3,6 +3,20 @@
 #include <string.h>
 #include "types/wlr_xdg_shell.h"
 
+static void unscale_rules(struct wlr_xdg_positioner_rules *rules,
+		double factor) {
+	rules->anchor_rect.x /= factor;
+	rules->anchor_rect.y /= factor;
+	rules->anchor_rect.width /= factor;
+	rules->anchor_rect.height /= factor;
+	rules->size.width /= factor;
+	rules->size.height /= factor;
+	rules->parent_size.width /= factor;
+	rules->parent_size.height /= factor;
+	rules->offset.x /= factor;
+	rules->offset.y /= factor;
+}
+
 void handle_xdg_popup_ack_configure(
 		struct wlr_xdg_popup *popup,
 		struct wlr_xdg_popup_configure *configure) {
@@ -28,10 +42,11 @@ struct wlr_xdg_popup_configure *send_xdg_popup_configure(
 			configure->reposition_token);
 	}
 
-	struct wlr_box *geometry = &configure->geometry;
+	struct wlr_fbox *geometry = &configure->geometry;
+	double factor = popup->base->surface->server_scale_factor;
 	xdg_popup_send_configure(popup->resource,
-		geometry->x, geometry->y,
-		geometry->width, geometry->height);
+		round(geometry->x * factor), round(geometry->y * factor),
+		round(geometry->width * factor), round(geometry->height * factor));
 
 	popup->scheduled.fields = 0;
 
@@ -315,9 +330,12 @@ static void xdg_popup_handle_reposition(
 
 	struct wlr_xdg_positioner *positioner =
 		wlr_xdg_positioner_from_resource(positioner_resource);
-	wlr_xdg_positioner_rules_get_geometry(
-		&positioner->rules, &popup->scheduled.geometry);
 	popup->scheduled.rules = positioner->rules;
+	unscale_rules(&popup->scheduled.rules,
+		popup->base->surface->client_scale_factor);
+
+	wlr_xdg_positioner_rules_get_geometry(
+		&popup->scheduled.rules, &popup->scheduled.geometry);
 
 	popup->scheduled.fields |= WLR_XDG_POPUP_CONFIGURE_REPOSITION_TOKEN;
 	popup->scheduled.reposition_token = token;
@@ -410,9 +428,12 @@ void create_xdg_popup(struct wlr_xdg_surface *surface,
 
 	surface->role = WLR_XDG_SURFACE_ROLE_POPUP;
 
-	wlr_xdg_positioner_rules_get_geometry(
-		&positioner->rules, &surface->popup->scheduled.geometry);
 	surface->popup->scheduled.rules = positioner->rules;
+	unscale_rules(&surface->popup->scheduled.rules,
+		surface->surface->client_scale_factor);
+
+	wlr_xdg_positioner_rules_get_geometry(&surface->popup->scheduled.rules,
+		&surface->popup->scheduled.geometry);
 
 	wl_signal_init(&surface->popup->events.reposition);
 
@@ -473,7 +494,8 @@ void wlr_xdg_popup_destroy(struct wlr_xdg_popup *popup) {
 }
 
 void wlr_xdg_popup_get_toplevel_coords(struct wlr_xdg_popup *popup,
-		int popup_sx, int popup_sy, int *toplevel_sx, int *toplevel_sy) {
+		double popup_sx, double popup_sy,
+		double *toplevel_sx, double *toplevel_sy) {
 	struct wlr_surface *parent = popup->parent;
 	while (wlr_surface_is_xdg_surface(parent)) {
 		struct wlr_xdg_surface *xdg_surface =
@@ -496,11 +518,11 @@ void wlr_xdg_popup_get_toplevel_coords(struct wlr_xdg_popup *popup,
 }
 
 void wlr_xdg_popup_unconstrain_from_box(struct wlr_xdg_popup *popup,
-		const struct wlr_box *toplevel_space_box) {
-	int toplevel_sx, toplevel_sy;
+		const struct wlr_fbox *toplevel_space_box) {
+	double toplevel_sx, toplevel_sy;
 	wlr_xdg_popup_get_toplevel_coords(popup,
 		0, 0, &toplevel_sx, &toplevel_sy);
-	struct wlr_box popup_constraint = {
+	struct wlr_fbox popup_constraint = {
 		.x = toplevel_space_box->x - toplevel_sx,
 		.y = toplevel_space_box->y - toplevel_sy,
 		.width = toplevel_space_box->width,

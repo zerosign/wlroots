@@ -114,8 +114,9 @@ static void layer_surface_handle_set_size(struct wl_client *client,
 		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_DESIRED_SIZE;
 	}
 
-	surface->pending.desired_width = width;
-	surface->pending.desired_height = height;
+	double factor = surface->surface->client_scale_factor;
+	surface->pending.desired_width = width / factor;
+	surface->pending.desired_height = height / factor;
 }
 
 static void layer_surface_handle_set_anchor(struct wl_client *client,
@@ -160,6 +161,10 @@ static void layer_surface_handle_set_exclusive_zone(struct wl_client *client,
 		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_ZONE;
 	}
 
+	if (zone > 0) {
+		// Only unscale meaningful values
+		zone /= surface->surface->client_scale_factor;
+	}
 	surface->pending.exclusive_zone = zone;
 }
 
@@ -182,10 +187,11 @@ static void layer_surface_handle_set_margin(
 		surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_MARGIN;
 	}
 
-	surface->pending.margin.top = top;
-	surface->pending.margin.right = right;
-	surface->pending.margin.bottom = bottom;
-	surface->pending.margin.left = left;
+	double factor = surface->surface->client_scale_factor;
+	surface->pending.margin.top = top / factor;
+	surface->pending.margin.right = right / factor;
+	surface->pending.margin.bottom = bottom / factor;
+	surface->pending.margin.left = left / factor;
 }
 
 static void layer_surface_handle_set_keyboard_interactivity(
@@ -288,7 +294,8 @@ static void layer_surface_resource_destroy(struct wl_resource *resource) {
 }
 
 uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
-		uint32_t width, uint32_t height) {
+		double width, double height) {
+	assert(width >= 0.0 && height >= 0.0);
 	struct wl_display *display =
 		wl_client_get_display(wl_resource_get_client(surface->resource));
 	struct wlr_layer_surface_v1_configure *configure =
@@ -301,9 +308,10 @@ uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
 	configure->width = width;
 	configure->height = height;
 	configure->serial = wl_display_next_serial(display);
-	zwlr_layer_surface_v1_send_configure(surface->resource,
-			configure->serial, configure->width,
-			configure->height);
+	double factor = surface->surface->server_scale_factor;
+	zwlr_layer_surface_v1_send_configure(surface->resource, configure->serial,
+		round(configure->width * factor),
+		round(configure->height * factor));
 	return configure->serial;
 }
 
@@ -522,11 +530,11 @@ struct wlr_layer_shell_v1 *wlr_layer_shell_v1_create(struct wl_display *display,
 struct layer_surface_iterator_data {
 	wlr_surface_iterator_func_t user_iterator;
 	void *user_data;
-	int x, y;
+	double x, y;
 };
 
 static void layer_surface_iterator(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct layer_surface_iterator_data *iter_data = data;
 	iter_data->user_iterator(surface, iter_data->x + sx, iter_data->y + sy,
 		iter_data->user_data);
@@ -539,7 +547,7 @@ void wlr_layer_surface_v1_for_each_surface(struct wlr_layer_surface_v1 *surface,
 }
 
 void wlr_layer_surface_v1_for_each_popup_surface(struct wlr_layer_surface_v1 *surface,
-		wlr_surface_iterator_func_t iterator, void *user_data){
+		wlr_surface_iterator_func_t iterator, void *user_data) {
 	struct wlr_xdg_popup *popup;
 	wl_list_for_each(popup, &surface->popups, link) {
 		if (!popup->base->configured || !popup->base->mapped) {

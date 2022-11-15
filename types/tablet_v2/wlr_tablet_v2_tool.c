@@ -379,8 +379,10 @@ void wlr_send_tablet_v2_tablet_tool_motion(
 		return;
 	}
 
+	double factor = tool->focused_surface->server_scale_factor;
 	zwp_tablet_tool_v2_send_motion(tool->current_client->resource,
-		wl_fixed_from_double(x), wl_fixed_from_double(y));
+		wl_fixed_from_double(x * factor),
+		wl_fixed_from_double(y * factor));
 
 	queue_tool_frame(tool->current_client);
 }

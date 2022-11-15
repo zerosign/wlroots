@@ -52,7 +52,7 @@ struct render_data {
 };
 
 static void render_surface(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct render_data *rdata = data;
 	struct wlr_output *output = rdata->output;
 

@@ -204,7 +204,7 @@ static uint32_t xdg_positioner_gravity_to_wlr_edges(
 }
 
 void wlr_xdg_positioner_rules_get_geometry(
-		const struct wlr_xdg_positioner_rules *rules, struct wlr_box *box) {
+		const struct wlr_xdg_positioner_rules *rules, struct wlr_fbox *box) {
 	box->x = rules->offset.x;
 	box->y = rules->offset.y;
 	box->width = rules->size.width;
@@ -314,8 +314,8 @@ static bool is_unconstrained(const struct constraint_offsets *offsets) {
 		offsets->left <= 0 && offsets->right <= 0;
 }
 
-static void get_constrained_box_offsets(const struct wlr_box *constraint,
-		const struct wlr_box *box, struct constraint_offsets *offsets) {
+static void get_constrained_box_offsets(const struct wlr_fbox *constraint,
+		const struct wlr_fbox *box, struct constraint_offsets *offsets) {
 	offsets->left = constraint->x - box->x;
 	offsets->right = box->x + box->width - constraint->x - constraint->width;
 	offsets->top = constraint->y - box->y;
@@ -324,7 +324,7 @@ static void get_constrained_box_offsets(const struct wlr_box *constraint,
 
 static bool xdg_positioner_rules_unconstrain_by_flip(
 		const struct wlr_xdg_positioner_rules *rules,
-		const struct wlr_box *constraint, struct wlr_box *box,
+		const struct wlr_fbox *constraint, struct wlr_fbox *box,
 		struct constraint_offsets *offsets) {
 	// If none of the edges are constrained, no need to flip.
 	// If both edges are constrained, the box is bigger than
@@ -348,7 +348,7 @@ static bool xdg_positioner_rules_unconstrain_by_flip(
 		flipped.gravity = xdg_positioner_gravity_invert_y(flipped.gravity);
 	}
 
-	struct wlr_box flipped_box;
+	struct wlr_fbox flipped_box;
 	wlr_xdg_positioner_rules_get_geometry(&flipped, &flipped_box);
 	struct constraint_offsets flipped_offsets;
 	get_constrained_box_offsets(constraint, &flipped_box, &flipped_offsets);
@@ -370,7 +370,7 @@ static bool xdg_positioner_rules_unconstrain_by_flip(
 
 static bool xdg_positioner_rules_unconstrain_by_slide(
 		const struct wlr_xdg_positioner_rules *rules,
-		const struct wlr_box *constraint, struct wlr_box *box,
+		const struct wlr_fbox *constraint, struct wlr_fbox *box,
 		struct constraint_offsets *offsets) {
 	uint32_t gravity = xdg_positioner_gravity_to_wlr_edges(rules->gravity);
 
@@ -438,7 +438,7 @@ static bool xdg_positioner_rules_unconstrain_by_slide(
 
 static bool xdg_positioner_rules_unconstrain_by_resize(
 		const struct wlr_xdg_positioner_rules *rules,
-		const struct wlr_box *constraint, struct wlr_box *box,
+		const struct wlr_fbox *constraint, struct wlr_fbox *box,
 		struct constraint_offsets *offsets) {
 	bool resize_x = (offsets->left > 0 || offsets->right > 0) &&
 		(rules->constraint_adjustment & XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_RESIZE_X);
@@ -463,7 +463,7 @@ static bool xdg_positioner_rules_unconstrain_by_resize(
 	}
 
 	// Try to satisfy the constraints by clipping the box.
-	struct wlr_box resized_box = *box;
+	struct wlr_fbox resized_box = *box;
 	if (resize_x) {
 		resized_box.x += offsets->left;
 		resized_box.width -= offsets->left + offsets->right;
@@ -473,7 +473,7 @@ static bool xdg_positioner_rules_unconstrain_by_resize(
 		resized_box.height -= offsets->top + offsets->bottom;
 	}
 
-	if (wlr_box_empty(&resized_box)) {
+	if (wlr_fbox_empty(&resized_box)) {
 		return false;
 	}
 
@@ -484,7 +484,7 @@ static bool xdg_positioner_rules_unconstrain_by_resize(
 
 void wlr_xdg_positioner_rules_unconstrain_box(
 		const struct wlr_xdg_positioner_rules *rules,
-		const struct wlr_box *constraint, struct wlr_box *box) {
+		const struct wlr_fbox *constraint, struct wlr_fbox *box) {
 	struct constraint_offsets offsets;
 	get_constrained_box_offsets(constraint, box, &offsets);
 	if (is_unconstrained(&offsets)) {

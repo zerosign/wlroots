@@ -222,10 +222,11 @@ static void xdg_surface_handle_set_window_geometry(struct wl_client *client,
 		return;
 	}
 
-	surface->pending.geometry.x = x;
-	surface->pending.geometry.y = y;
-	surface->pending.geometry.width = width;
-	surface->pending.geometry.height = height;
+	double factor = surface->surface->client_scale_factor;
+	surface->pending.geometry.x = x / factor;
+	surface->pending.geometry.y = y / factor;
+	surface->pending.geometry.width = width / factor;
+	surface->pending.geometry.height = height / factor;
 }
 
 static void xdg_surface_handle_destroy(struct wl_client *client,
@@ -446,7 +447,7 @@ void wlr_xdg_popup_get_position(struct wlr_xdg_popup *popup,
 		double *popup_sx, double *popup_sy) {
 	struct wlr_xdg_surface *parent =
 		wlr_xdg_surface_from_wlr_surface(popup->parent);
-	struct wlr_box parent_geo;
+	struct wlr_fbox parent_geo;
 	wlr_xdg_surface_get_geometry(parent, &parent_geo);
 	*popup_sx = parent_geo.x + popup->current.geometry.x -
 		popup->base->current.geometry.x;
@@ -491,18 +492,19 @@ struct wlr_surface *wlr_xdg_surface_popup_surface_at(
 struct xdg_surface_iterator_data {
 	wlr_surface_iterator_func_t user_iterator;
 	void *user_data;
-	int x, y;
+	double x, y;
 };
 
 static void xdg_surface_iterator(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
+		double sx, double sy, void *data) {
 	struct xdg_surface_iterator_data *iter_data = data;
 	iter_data->user_iterator(surface, iter_data->x + sx, iter_data->y + sy,
 		iter_data->user_data);
 }
 
 static void xdg_surface_for_each_popup_surface(struct wlr_xdg_surface *surface,
-		int x, int y, wlr_surface_iterator_func_t iterator, void *user_data) {
+		double x, double y, wlr_surface_iterator_func_t iterator,
+		void *user_data) {
 	struct wlr_xdg_popup *popup;
 	wl_list_for_each(popup, &surface->popups, link) {
 		if (!popup->base->configured || !popup->base->mapped) {
@@ -537,13 +539,13 @@ void wlr_xdg_surface_for_each_popup_surface(struct wlr_xdg_surface *surface,
 }
 
 void wlr_xdg_surface_get_geometry(struct wlr_xdg_surface *surface,
-		struct wlr_box *box) {
+		struct wlr_fbox *box) {
 	wlr_surface_get_extends(surface->surface, box);
 
 	/* The client never set the geometry */
-	if (wlr_box_empty(&surface->current.geometry)) {
+	if (wlr_fbox_empty(&surface->current.geometry)) {
 		return;
 	}
 
-	wlr_box_intersection(box, &surface->current.geometry, box);
+	wlr_fbox_intersection(box, &surface->current.geometry, box);
 }
