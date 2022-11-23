@@ -54,6 +54,7 @@ struct wlr_wl_backend {
 
 struct wlr_wl_remote_output {
 	struct wl_output *output;
+	struct wlr_wl_backend *backend;
 	uint32_t scale;
 
 	// we use this to identify the output in the
@@ -61,6 +62,11 @@ struct wlr_wl_remote_output {
 	uint32_t name;
 
 	struct wl_list link; // wlr_wl_backend.remote_outputs
+};
+
+struct wlr_wl_active_remote_output {
+	struct wlr_wl_remote_output *remote_output;
+	struct wl_list link; // wlr_wl_output.active_remote_outputs
 };
 
 struct wlr_wl_buffer {
@@ -98,8 +104,19 @@ struct wlr_wl_output {
 	struct xdg_toplevel *xdg_toplevel;
 	struct zxdg_toplevel_decoration_v1 *zxdg_toplevel_decoration_v1;
 	struct wl_list presentation_feedbacks;
+	struct wl_list active_remote_outputs; // wlr_wl_active_remote_output.link
 
 	uint32_t enter_serial;
+
+	// last requested output size. This is not the actual size that the
+	// compositor has accepted.
+	struct {
+		bool needs_ack;
+		uint32_t serial;
+
+		int32_t width;
+		int32_t height;
+	} requested;
 
 	struct {
 		struct wlr_wl_pointer *pointer;
@@ -181,6 +198,8 @@ bool create_wl_seat(struct wl_seat *wl_seat, struct wlr_wl_backend *wl,
 	uint32_t global_name);
 void destroy_wl_seat(struct wlr_wl_seat *seat);
 void destroy_wl_buffer(struct wlr_wl_buffer *buffer);
+
+void surface_update(struct wlr_wl_output *output);
 
 extern const struct wlr_pointer_impl wl_pointer_impl;
 extern const struct wlr_tablet_pad_impl wl_tablet_pad_impl;
