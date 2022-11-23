@@ -48,7 +48,19 @@ struct wlr_wl_backend {
 	struct wl_drm *legacy_drm;
 	struct xdg_activation_v1 *activation_v1;
 	struct wl_subcompositor *subcompositor;
+	struct wl_list remote_outputs; // wlr_wl_remote_output.link
 	char *drm_render_name;
+};
+
+struct wlr_wl_remote_output {
+	struct wl_output *output;
+	uint32_t scale;
+
+	// we use this to identify the output in the
+	// global registry so that we can remove it later
+	uint32_t name;
+
+	struct wl_list link; // wlr_wl_backend.remote_outputs
 };
 
 struct wlr_wl_buffer {
