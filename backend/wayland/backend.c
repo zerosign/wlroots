@@ -236,6 +236,13 @@ static const struct zwp_linux_dmabuf_feedback_v1_listener
 	.tranche_flags = linux_dmabuf_feedback_v1_handle_tranche_flags,
 };
 
+static void update_outputs(struct wlr_wl_backend *backend) {
+	struct wlr_wl_output *output;
+	wl_list_for_each(output, &backend->outputs, link) {
+		surface_update(output);
+	}
+}
+
 static void wlr_output_handle_scale(void *data,
 		struct wl_output *wl_output, int32_t factor) {
 	struct wlr_wl_remote_output *output = data;
@@ -254,7 +261,8 @@ static void wlr_output_handle_mode(void *data, struct wl_output *wl_output,
 }
 
 static void wlr_output_handle_done(void *data, struct wl_output *wl_output) {
-	// This is intentionally left blank
+	struct wlr_wl_remote_output *output = data;
+	update_outputs(output->backend);
 }
 
 static const struct wl_output_listener output_listener = {
@@ -436,6 +444,7 @@ static void registry_global(void *data, struct wl_registry *registry,
 		output->output = wl_output;
 		output->scale = 1;
 		output->name = name;
+		output->backend = wl;
 
 		wl_list_insert(&wl->remote_outputs, &output->link);
 		wl_output_add_listener(wl_output, &output_listener, output);
