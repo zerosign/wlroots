@@ -203,10 +203,10 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 		bool test_only) {
 	struct wlr_drm_backend *drm = conn->backend;
 	struct wlr_output *output = &conn->output;
-	struct wlr_drm_crtc *crtc = conn->crtc;
 
 	bool modeset = state->modeset;
 	bool active = state->active;
+	struct wlr_drm_crtc *crtc = state->crtc;
 
 	uint32_t mode_id = crtc->mode_id;
 	if (modeset) {

@@ -98,6 +98,7 @@ struct wlr_drm_connector_state {
 	bool modeset;
 	bool active;
 	drmModeModeInfo mode;
+	struct wlr_drm_crtc *crtc;
 	struct wlr_drm_fb *primary_fb;
 };
 

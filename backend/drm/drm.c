@@ -329,7 +329,7 @@ static bool drm_crtc_commit(struct wlr_drm_connector *conn,
 	assert((flags & ~DRM_MODE_PAGE_FLIP_FLAGS) == 0);
 
 	struct wlr_drm_backend *drm = conn->backend;
-	struct wlr_drm_crtc *crtc = conn->crtc;
+	struct wlr_drm_crtc *crtc = state->crtc;
 	bool ok = drm->iface->crtc_commit(conn, state, flags, test_only);
 	if (ok && !test_only) {
 		drm_fb_clear(&crtc->primary->queued_fb);
@@ -359,6 +359,7 @@ static void drm_connector_state_init(struct wlr_drm_connector_state *state,
 	state->modeset = base->allow_artifacts;
 	state->active = (base->committed & WLR_OUTPUT_STATE_ENABLED) ?
 		base->enabled : conn->output.enabled;
+	state->crtc = conn->crtc;
 
 	if (base->committed & WLR_OUTPUT_STATE_MODE) {
 		switch (base->mode_type) {
@@ -401,9 +402,7 @@ static bool drm_connector_state_update_primary_fb(struct wlr_drm_connector *conn
 
 	assert(state->base->committed & WLR_OUTPUT_STATE_BUFFER);
 
-	struct wlr_drm_crtc *crtc = conn->crtc;
-	assert(crtc != NULL);
-
+	struct wlr_drm_crtc *crtc = state->crtc;
 	struct wlr_drm_plane *plane = crtc->primary;
 	struct wlr_buffer *source_buf = state->base->buffer;
 
@@ -444,7 +443,15 @@ static bool drm_connector_state_update_primary_fb(struct wlr_drm_connector *conn
 	return true;
 }
 
-static bool drm_connector_alloc_crtc(struct wlr_drm_connector *conn);
+static void realloc_crtcs(struct wlr_drm_backend *drm,
+	struct wlr_drm_connector_state *want_conn_state);
+
+static bool drm_connector_state_alloc_crtc(struct wlr_drm_connector_state *state) {
+	if (state->crtc == NULL) {
+		realloc_crtcs(state->conn->backend, state);
+	}
+	return state->crtc != NULL;
+}
 
 static bool drm_connector_test(struct wlr_output *output,
 		const struct wlr_output_state *state) {
@@ -488,7 +495,7 @@ static bool drm_connector_test(struct wlr_output *output,
 			goto out;
 		}
 
-		if (!drm_connector_alloc_crtc(conn)) {
+		if (!drm_connector_state_alloc_crtc(&pending)) {
 			wlr_drm_conn_log(conn, WLR_DEBUG,
 				"No CRTC available for this connector");
 			goto out;
@@ -508,7 +515,7 @@ static bool drm_connector_test(struct wlr_output *output,
 		goto out;
 	}
 
-	if (!conn->crtc) {
+	if (!pending.crtc) {
 		// If the output is disabled, we don't have a crtc even after
 		// reallocation
 		ok = true;
@@ -578,7 +585,7 @@ bool drm_connector_commit_state(struct wlr_drm_connector *conn,
 	}
 
 	if (pending.active) {
-		if (!drm_connector_alloc_crtc(conn)) {
+		if (!drm_connector_state_alloc_crtc(&pending)) {
 			wlr_drm_conn_log(conn, WLR_ERROR,
 				"No CRTC available for this connector");
 			goto out;
@@ -698,16 +705,6 @@ struct wlr_drm_fb *get_next_cursor_fb(struct wlr_drm_connector *conn) {
 		return conn->crtc->cursor->queued_fb;
 	}
 	return conn->crtc->cursor->current_fb;
-}
-
-static void realloc_crtcs(struct wlr_drm_backend *drm,
-	struct wlr_drm_connector *want_conn);
-
-static bool drm_connector_alloc_crtc(struct wlr_drm_connector *conn) {
-	if (conn->crtc == NULL) {
-		realloc_crtcs(conn->backend, conn);
-	}
-	return conn->crtc != NULL;
 }
 
 static struct wlr_drm_mode *drm_mode_create(const drmModeModeInfo *modeinfo) {
@@ -1027,8 +1024,10 @@ static void dealloc_crtc(struct wlr_drm_connector *conn) {
 }
 
 static void realloc_crtcs(struct wlr_drm_backend *drm,
-		struct wlr_drm_connector *want_conn) {
+		struct wlr_drm_connector_state *want_conn_state) {
 	assert(drm->num_crtcs > 0);
+
+	struct wlr_drm_connector *want_conn = want_conn_state != NULL ? want_conn_state->conn : NULL;
 
 	size_t num_connectors = wl_list_length(&drm->connectors);
 	if (num_connectors == 0) {
