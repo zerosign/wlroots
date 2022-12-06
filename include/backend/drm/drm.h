@@ -93,6 +93,7 @@ struct wlr_drm_mode {
 };
 
 struct wlr_drm_connector_state {
+	struct wlr_drm_connector *conn;
 	const struct wlr_output_state *base;
 	bool modeset;
 	bool active;

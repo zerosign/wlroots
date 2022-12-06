@@ -354,6 +354,7 @@ static void drm_connector_state_init(struct wlr_drm_connector_state *state,
 		struct wlr_drm_connector *conn,
 		const struct wlr_output_state *base) {
 	memset(state, 0, sizeof(*state));
+	state->conn = conn;
 	state->base = base;
 	state->modeset = base->allow_artifacts;
 	state->active = (base->committed & WLR_OUTPUT_STATE_ENABLED) ?
