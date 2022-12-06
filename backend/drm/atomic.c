@@ -171,7 +171,7 @@ static void plane_disable(struct atomic *atom, struct wlr_drm_plane *plane) {
 }
 
 static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
-		struct wlr_drm_plane *plane, struct wlr_drm_fb *fb, uint32_t crtc_id,
+		struct wlr_drm_plane *plane, struct wlr_drm_fb *fb, struct wlr_drm_crtc *crtc,
 		int32_t x, int32_t y) {
 	uint32_t id = plane->id;
 	const union wlr_drm_plane_props *props = &plane->props;
@@ -193,7 +193,7 @@ static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 	atomic_add(atom, id, props->crtc_w, width);
 	atomic_add(atom, id, props->crtc_h, height);
 	atomic_add(atom, id, props->fb_id, fb->id);
-	atomic_add(atom, id, props->crtc_id, crtc_id);
+	atomic_add(atom, id, props->crtc_id, crtc->id);
 	atomic_add(atom, id, props->crtc_x, (uint64_t)x);
 	atomic_add(atom, id, props->crtc_y, (uint64_t)y);
 }
@@ -294,7 +294,7 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 		if (crtc->props.vrr_enabled != 0) {
 			atomic_add(&atom, crtc->id, crtc->props.vrr_enabled, vrr_enabled);
 		}
-		set_plane_props(&atom, drm, crtc->primary, state->primary_fb, crtc->id,
+		set_plane_props(&atom, drm, crtc->primary, state->primary_fb, crtc,
 			0, 0);
 		if (crtc->primary->props.fb_damage_clips != 0) {
 			atomic_add(&atom, crtc->primary->id,
@@ -303,7 +303,7 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 		if (crtc->cursor) {
 			if (drm_connector_is_cursor_visible(conn)) {
 				set_plane_props(&atom, drm, crtc->cursor, get_next_cursor_fb(conn),
-					crtc->id, conn->cursor_x, conn->cursor_y);
+					crtc, conn->cursor_x, conn->cursor_y);
 			} else {
 				plane_disable(&atom, crtc->cursor);
 			}
