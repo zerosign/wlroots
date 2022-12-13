@@ -69,7 +69,7 @@ static bool legacy_crtc_commit(struct wlr_drm_connector *conn,
 
 	struct wlr_drm_backend *drm = conn->backend;
 	struct wlr_output *output = &conn->output;
-	struct wlr_drm_crtc *crtc = conn->crtc;
+	struct wlr_drm_crtc *crtc = state->crtc;
 	struct wlr_drm_plane *cursor = crtc->cursor;
 
 	uint32_t fb_id = 0;

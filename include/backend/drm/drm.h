@@ -75,7 +75,7 @@ struct wlr_drm_backend {
 	struct wl_listener dev_remove;
 
 	struct wl_list fbs; // wlr_drm_fb.link
-	struct wl_list outputs;
+	struct wl_list connectors; // wlr_drm_connector.link
 
 	/* Only initialized on multi-GPU setups */
 	struct wlr_drm_renderer mgpu_renderer;
@@ -93,10 +93,12 @@ struct wlr_drm_mode {
 };
 
 struct wlr_drm_connector_state {
+	struct wlr_drm_connector *conn;
 	const struct wlr_output_state *base;
 	bool modeset;
 	bool active;
 	drmModeModeInfo mode;
+	struct wlr_drm_crtc *crtc;
 	struct wlr_drm_fb *primary_fb;
 };
 
@@ -122,7 +124,7 @@ struct wlr_drm_connector {
 	/* Buffer to be submitted to the kernel on the next page-flip */
 	struct wlr_drm_fb *cursor_pending_fb;
 
-	struct wl_list link;
+	struct wl_list link; // wlr_drm_backend.connectors
 
 	/* CRTC ID if a page-flip is pending, zero otherwise.
 	 *
