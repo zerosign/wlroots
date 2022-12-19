@@ -184,6 +184,11 @@ struct wlr_xwayland_resize_event {
 	uint32_t edges;
 };
 
+struct wlr_xwayland_fullscreen_event {
+	size_t randr_emu_monitor_rects_count;
+	struct wlr_box *randr_emu_monitor_rects;
+};
+
 struct wlr_xwayland_minimize_event {
 	struct wlr_xwayland_surface *surface;
 	bool minimize;

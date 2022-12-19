@@ -89,6 +89,7 @@ const char *const atom_map[ATOM_LAST] = {
 	[DND_ACTION_PRIVATE] = "XdndActionPrivate",
 	[NET_CLIENT_LIST] = "_NET_CLIENT_LIST",
 	[NET_CLIENT_LIST_STACKING] = "_NET_CLIENT_LIST_STACKING",
+	[XWAYLAND_RANDR_EMU_MONITOR_RECTS] = "_XWAYLAND_RANDR_EMU_MONITOR_RECTS",
 };
 
 #define STARTUP_INFO_REMOVE_PREFIX "remove: ID="
@@ -1261,6 +1262,44 @@ static bool xsurface_is_maximized(
 	return xsurface->maximized_horz && xsurface->maximized_vert;
 }
 
+static void read_xwayland_randr_emu_monitor_rects(
+		struct wlr_xwayland_surface *xsurface,
+		struct wlr_xwayland_fullscreen_event *fullscreen_event) {
+	struct wlr_xwm *xwm = xsurface->xwm;
+	xcb_get_property_cookie_t cookie = xcb_get_property(xwm->xcb_conn, 0, xsurface->window_id,
+		xwm->atoms[XWAYLAND_RANDR_EMU_MONITOR_RECTS], XCB_ATOM_ANY, 0, 1024);
+	xcb_get_property_reply_t *reply = xcb_get_property_reply(xwm->xcb_conn, cookie, NULL);
+	if (reply == NULL) {
+		wlr_log(WLR_ERROR, "Failed to get _XWAYLAND_RANDR_EMU_MONITOR_RECTS property on window %d",
+			xsurface->window_id);
+		return;
+	}
+	if (reply->value_len % 4 != 0) {
+		wlr_log(WLR_ERROR, "_XWAYLAND_RANDR_EMU_MONITOR_RECTS property on window %d has "
+			"%d elements, but it should be a multiple of 4",
+			xsurface->window_id, reply->value_len);
+		free(reply);
+		return;
+	}
+
+	uint32_t *modes = xcb_get_property_value(reply);
+	fullscreen_event->randr_emu_monitor_rects_count = reply->value_len / 4;
+	fullscreen_event->randr_emu_monitor_rects = calloc(
+		fullscreen_event->randr_emu_monitor_rects_count, sizeof(struct wlr_box));
+
+	for (size_t i = 0; i < fullscreen_event->randr_emu_monitor_rects_count; i++) {
+		uint32_t *rect = (uint32_t *)modes + i * 4;
+		fullscreen_event->randr_emu_monitor_rects[i] = (struct wlr_box) {
+			.x = rect[0],
+			.y = rect[1],
+			.width = rect[2],
+			.height = rect[3],
+		};
+	}
+
+	free(reply);
+}
+
 static void xwm_handle_net_wm_state_message(struct wlr_xwm *xwm,
 		xcb_client_message_event_t *client_message) {
 	struct wlr_xwayland_surface *xsurface =
@@ -1311,7 +1350,10 @@ static void xwm_handle_net_wm_state_message(struct wlr_xwm *xwm,
 			xsurface->saved_height = xsurface->height;
 		}
 
-		wl_signal_emit_mutable(&xsurface->events.request_fullscreen, xsurface);
+		struct wlr_xwayland_fullscreen_event fullscreen_event = {0};
+		read_xwayland_randr_emu_monitor_rects(xsurface, &fullscreen_event);
+		wl_signal_emit_mutable(&xsurface->events.request_fullscreen, &fullscreen_event);
+		free(fullscreen_event.randr_emu_monitor_rects);
 	}
 
 	if (maximized != xsurface_is_maximized(xsurface)) {
