@@ -4,22 +4,30 @@
 #include <wlr/types/wlr_presentation_time.h>
 #include "types/wlr_scene.h"
 
-static void handle_scene_buffer_output_enter(
+static void handle_scene_buffer_outputs_update(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
-		wl_container_of(listener, surface, output_enter);
-	struct wlr_scene_output *output = data;
+		wl_container_of(listener, surface, outputs_update);
+	struct wlr_scene_outputs_update_event *event = data;
 
-	wlr_surface_send_enter(surface->surface, output->output);
-}
+	struct wlr_surface_output *surface_output;
+	wl_list_for_each(surface_output, &surface->surface->current_outputs, link) {
+		bool found = false;
+		for (size_t i = 0; i < event->size; i++) {
+			if (event->active[i]->output == surface_output->output) {
+				found = true;
+				break;
+			}
+		}
 
-static void handle_scene_buffer_output_leave(
-		struct wl_listener *listener, void *data) {
-	struct wlr_scene_surface *surface =
-		wl_container_of(listener, surface, output_leave);
-	struct wlr_scene_output *output = data;
+		if (!found) {
+			wlr_surface_send_leave(surface->surface, surface_output->output);
+		}
+	}
 
-	wlr_surface_send_leave(surface->surface, output->output);
+	for (size_t i = 0; i < event->size; i++) {
+		wlr_surface_send_enter(surface->surface, event->active[i]->output);
+	}
 }
 
 static void handle_scene_buffer_output_present(
@@ -140,8 +148,7 @@ static void surface_addon_destroy(struct wlr_addon *addon) {
 
 	wlr_addon_finish(&surface->addon);
 
-	wl_list_remove(&surface->output_enter.link);
-	wl_list_remove(&surface->output_leave.link);
+	wl_list_remove(&surface->outputs_update.link);
 	wl_list_remove(&surface->output_present.link);
 	wl_list_remove(&surface->frame_done.link);
 	wl_list_remove(&surface->surface_destroy.link);
@@ -184,11 +191,8 @@ struct wlr_scene_surface *wlr_scene_surface_create(struct wlr_scene_tree *parent
 	surface->surface = wlr_surface;
 	scene_buffer->point_accepts_input = scene_buffer_point_accepts_input;
 
-	surface->output_enter.notify = handle_scene_buffer_output_enter;
-	wl_signal_add(&scene_buffer->events.output_enter, &surface->output_enter);
-
-	surface->output_leave.notify = handle_scene_buffer_output_leave;
-	wl_signal_add(&scene_buffer->events.output_leave, &surface->output_leave);
+	surface->outputs_update.notify = handle_scene_buffer_outputs_update;
+	wl_signal_add(&scene_buffer->events.outputs_update, &surface->outputs_update);
 
 	surface->output_present.notify = handle_scene_buffer_output_present;
 	wl_signal_add(&scene_buffer->events.output_present, &surface->output_present);
