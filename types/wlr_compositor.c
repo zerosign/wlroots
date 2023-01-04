@@ -897,11 +897,24 @@ static void surface_handle_output_bind(struct wl_listener *listener,
 	}
 }
 
+static void surface_send_leave(struct wlr_surface_output *surface_output) {
+	struct wl_client *client = wl_resource_get_client(surface_output->surface->resource);
+
+	struct wl_resource *resource;
+	wl_resource_for_each(resource, &surface_output->output->resources) {
+		if (client == wl_resource_get_client(resource)) {
+			wl_surface_send_leave(surface_output->surface->resource, resource);
+		}
+	}
+
+	surface_output_destroy(surface_output);
+}
+
 static void surface_handle_output_destroy(struct wl_listener *listener,
 		void *data) {
 	struct wlr_surface_output *surface_output =
 		wl_container_of(listener, surface_output, destroy);
-	surface_output_destroy(surface_output);
+	surface_send_leave(surface_output);
 }
 
 void wlr_surface_send_enter(struct wlr_surface *surface,
@@ -939,19 +952,12 @@ void wlr_surface_send_enter(struct wlr_surface *surface,
 
 void wlr_surface_send_leave(struct wlr_surface *surface,
 		struct wlr_output *output) {
-	struct wl_client *client = wl_resource_get_client(surface->resource);
 	struct wlr_surface_output *surface_output, *tmp;
-	struct wl_resource *resource;
 
 	wl_list_for_each_safe(surface_output, tmp,
 			&surface->current_outputs, link) {
 		if (surface_output->output == output) {
-			surface_output_destroy(surface_output);
-			wl_resource_for_each(resource, &output->resources) {
-				if (client == wl_resource_get_client(resource)) {
-					wl_surface_send_leave(surface->resource, resource);
-				}
-			}
+			surface_send_leave(surface_output);
 			break;
 		}
 	}
