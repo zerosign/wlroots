@@ -386,11 +386,12 @@ void wlr_output_destroy(struct wlr_output *output) {
 	}
 
 	wl_list_remove(&output->display_destroy.link);
-	wlr_output_destroy_global(output);
 	output_clear_back_buffer(output);
 
 	wl_signal_emit_mutable(&output->events.destroy, output);
 	wlr_addon_set_finish(&output->addons);
+
+	wlr_output_destroy_global(output);
 
 	// The backend is responsible for free-ing the list of modes
 
