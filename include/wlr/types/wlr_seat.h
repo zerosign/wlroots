@@ -103,18 +103,14 @@ struct wlr_pointer_grab {
 	void (*cancel)(void *data);
 };
 
-struct wlr_seat_keyboard_grab;
-
-struct wlr_keyboard_grab_interface {
-	void (*enter)(struct wlr_seat_keyboard_grab *grab,
-			struct wlr_surface *surface, uint32_t keycodes[],
-			size_t num_keycodes, struct wlr_keyboard_modifiers *modifiers);
-	void (*clear_focus)(struct wlr_seat_keyboard_grab *grab);
-	void (*key)(struct wlr_seat_keyboard_grab *grab, uint32_t time_msec,
-			uint32_t key, uint32_t state);
-	void (*modifiers)(struct wlr_seat_keyboard_grab *grab,
-			struct wlr_keyboard_modifiers *modifiers);
-	void (*cancel)(struct wlr_seat_keyboard_grab *grab);
+struct wlr_keyboard_grab {
+	void (*enter)(void *data,
+		struct wlr_surface *surface, uint32_t keycodes[],
+		size_t num_keycodes, struct wlr_keyboard_modifiers *modifiers);
+	void (*clear_focus)(void *data);
+	void (*key)(void *data, uint32_t time_msec, uint32_t key, uint32_t state);
+	void (*modifiers)(void *data, struct wlr_keyboard_modifiers *modifiers);
+	void (*cancel)(void *data);
 };
 
 struct wlr_seat_touch_grab;
@@ -142,16 +138,6 @@ struct wlr_touch_grab_interface {
  */
 struct wlr_seat_touch_grab {
 	const struct wlr_touch_grab_interface *interface;
-	struct wlr_seat *seat;
-	void *data;
-};
-
-/**
- * Passed to wlr_seat_keyboard_start_grab() to start a grab of the keyboard.
- * The grabber is responsible for handling keyboard events for the seat.
- */
-struct wlr_seat_keyboard_grab {
-	const struct wlr_keyboard_grab_interface *interface;
 	struct wlr_seat *seat;
 	void *data;
 };
@@ -197,8 +183,8 @@ struct wlr_seat_keyboard_state {
 
 	struct wl_listener surface_destroy;
 
-	struct wlr_seat_keyboard_grab *grab;
-	struct wlr_seat_keyboard_grab *default_grab;
+	const struct wlr_keyboard_grab *grab;
+	void *grab_data;
 
 	struct {
 		struct wl_signal focus_change; // struct wlr_seat_keyboard_focus_change_event
@@ -550,7 +536,7 @@ void wlr_seat_keyboard_notify_clear_focus(struct wlr_seat *wlr_seat);
  * handling all keyboard events until the grab ends.
  */
 void wlr_seat_keyboard_start_grab(struct wlr_seat *wlr_seat,
-		struct wlr_seat_keyboard_grab *grab);
+	const struct wlr_keyboard_grab *grab, void *data);
 
 /**
  * End the grab of the keyboard of this seat. This reverts the grab back to the

@@ -309,35 +309,34 @@ static const struct wlr_touch_grab_interface
 	.cancel = drag_handle_touch_cancel,
 };
 
-static void drag_handle_keyboard_enter(struct wlr_seat_keyboard_grab *grab,
+static void drag_handle_keyboard_enter(void *data,
 		struct wlr_surface *surface, uint32_t keycodes[], size_t num_keycodes,
 		struct wlr_keyboard_modifiers *modifiers) {
 	// nothing has keyboard focus during drags
 }
 
-static void drag_handle_keyboard_clear_focus(struct wlr_seat_keyboard_grab *grab) {
+static void drag_handle_keyboard_clear_focus(void *data) {
 	// nothing has keyboard focus during drags
 }
 
-static void drag_handle_keyboard_key(struct wlr_seat_keyboard_grab *grab,
+static void drag_handle_keyboard_key(void *data,
 		uint32_t time, uint32_t key, uint32_t state) {
 	// no keyboard input during drags
 }
 
-static void drag_handle_keyboard_modifiers(struct wlr_seat_keyboard_grab *grab,
+static void drag_handle_keyboard_modifiers(void *data,
 		struct wlr_keyboard_modifiers *modifiers) {
 	//struct wlr_keyboard *keyboard = grab->seat->keyboard_state.keyboard;
 	// TODO change the dnd action based on what modifier is pressed on the
 	// keyboard
 }
 
-static void drag_handle_keyboard_cancel(struct wlr_seat_keyboard_grab *grab) {
-	struct wlr_drag *drag = grab->data;
+static void drag_handle_keyboard_cancel(void *data) {
+	struct wlr_drag *drag = data;
 	drag_destroy(drag);
 }
 
-static const struct wlr_keyboard_grab_interface
-		data_device_keyboard_drag_interface = {
+static const struct wlr_keyboard_grab drag_keyboard_grab = {
 	.enter = drag_handle_keyboard_enter,
 	.clear_focus = drag_handle_keyboard_clear_focus,
 	.key = drag_handle_keyboard_key,
@@ -438,9 +437,6 @@ struct wlr_drag *wlr_drag_create(struct wlr_seat_client *seat_client,
 	drag->touch_grab.data = drag;
 	drag->touch_grab.interface = &data_device_touch_drag_interface;
 
-	drag->keyboard_grab.data = drag;
-	drag->keyboard_grab.interface = &data_device_keyboard_drag_interface;
-
 	return drag;
 }
 
@@ -476,7 +472,7 @@ void wlr_seat_start_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 	assert(!drag->started);
 	drag->started = true;
 
-	wlr_seat_keyboard_start_grab(seat, &drag->keyboard_grab);
+	wlr_seat_keyboard_start_grab(seat, &drag_keyboard_grab, drag);
 
 	seat->drag = drag;
 	seat->drag_serial = serial;

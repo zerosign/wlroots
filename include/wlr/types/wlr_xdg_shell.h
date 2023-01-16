@@ -117,7 +117,6 @@ struct wlr_xdg_popup {
 // each seat gets a popup grab
 struct wlr_xdg_popup_grab {
 	struct wl_client *client;
-	struct wlr_seat_keyboard_grab keyboard_grab;
 	struct wlr_seat_touch_grab touch_grab;
 	struct wlr_seat *seat;
 	struct wl_list popups;

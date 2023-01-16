@@ -110,31 +110,34 @@ static const struct wlr_pointer_grab xdg_pointer_grab = {
 	.frame = xdg_pointer_grab_frame,
 };
 
-static void xdg_keyboard_grab_enter(struct wlr_seat_keyboard_grab *grab,
+static void xdg_keyboard_grab_enter(void *data,
 		struct wlr_surface *surface, uint32_t keycodes[], size_t num_keycodes,
 		struct wlr_keyboard_modifiers *modifiers) {
 	// keyboard focus should remain on the popup
 }
 
-static void xdg_keyboard_grab_clear_focus(struct wlr_seat_keyboard_grab *grab) {
+static void xdg_keyboard_grab_clear_focus(void *data) {
 	// keyboard focus should remain on the popup
 }
 
-static void xdg_keyboard_grab_key(struct wlr_seat_keyboard_grab *grab, uint32_t time,
+static void xdg_keyboard_grab_key(void *data, uint32_t time,
 		uint32_t key, uint32_t state) {
-	wlr_seat_keyboard_send_key(grab->seat, time, key, state);
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_keyboard_send_key(popup_grab->seat, time, key, state);
 }
 
-static void xdg_keyboard_grab_modifiers(struct wlr_seat_keyboard_grab *grab,
+static void xdg_keyboard_grab_modifiers(void *data,
 		struct wlr_keyboard_modifiers *modifiers) {
-	wlr_seat_keyboard_send_modifiers(grab->seat, modifiers);
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_keyboard_send_modifiers(popup_grab->seat, modifiers);
 }
 
-static void xdg_keyboard_grab_cancel(struct wlr_seat_keyboard_grab *grab) {
-	wlr_seat_pointer_end_grab(grab->seat);
+static void xdg_keyboard_grab_cancel(void *data) {
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_pointer_end_grab(popup_grab->seat);
 }
 
-static const struct wlr_keyboard_grab_interface xdg_keyboard_grab_impl = {
+static const struct wlr_keyboard_grab xdg_keyboard_grab = {
 	.enter = xdg_keyboard_grab_enter,
 	.clear_focus = xdg_keyboard_grab_clear_focus,
 	.key = xdg_keyboard_grab_key,
@@ -224,8 +227,6 @@ static struct wlr_xdg_popup_grab *get_xdg_shell_popup_grab_from_seat(
 		return NULL;
 	}
 
-	xdg_grab->keyboard_grab.data = xdg_grab;
-	xdg_grab->keyboard_grab.interface = &xdg_keyboard_grab_impl;
 	xdg_grab->touch_grab.data = xdg_grab;
 	xdg_grab->touch_grab.interface = &xdg_touch_grab_impl;
 
@@ -301,9 +302,9 @@ static void xdg_popup_handle_grab(struct wl_client *client,
 
 	wlr_seat_pointer_start_grab(seat_client->seat,
 		&xdg_pointer_grab, popup_grab);
-
 	wlr_seat_keyboard_start_grab(seat_client->seat,
-		&popup_grab->keyboard_grab);
+		&xdg_keyboard_grab, popup_grab);
+
 	wlr_seat_touch_start_grab(seat_client->seat,
 		&popup_grab->touch_grab);
 }
@@ -441,7 +442,7 @@ void unmap_xdg_popup(struct wlr_xdg_popup *popup) {
 			if (grab->seat->pointer_state.grab == &xdg_pointer_grab) {
 				wlr_seat_pointer_end_grab(grab->seat);
 			}
-			if (grab->seat->keyboard_state.grab == &grab->keyboard_grab) {
+			if (grab->seat->keyboard_state.grab == &xdg_keyboard_grab) {
 				wlr_seat_keyboard_end_grab(grab->seat);
 			}
 			if (grab->seat->touch_state.grab == &grab->touch_grab) {
