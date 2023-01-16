@@ -256,15 +256,15 @@ static const struct wlr_pointer_grab drag_pointer_grab = {
 	.cancel = drag_handle_pointer_cancel,
 };
 
-static uint32_t drag_handle_touch_down(struct wlr_seat_touch_grab *grab,
+static uint32_t drag_handle_touch_down(void *data,
 		uint32_t time, struct wlr_touch_point *point) {
 	// eat the event
 	return 0;
 }
 
-static void drag_handle_touch_up(struct wlr_seat_touch_grab *grab,
+static void drag_handle_touch_up(void *data,
 		uint32_t time, struct wlr_touch_point *point) {
-	struct wlr_drag *drag = grab->data;
+	struct wlr_drag *drag = data;
 	if (drag->grab_touch_id != point->touch_id) {
 		return;
 	}
@@ -276,9 +276,9 @@ static void drag_handle_touch_up(struct wlr_seat_touch_grab *grab,
 	drag_destroy(drag);
 }
 
-static void drag_handle_touch_motion(struct wlr_seat_touch_grab *grab,
+static void drag_handle_touch_motion(void *data,
 		uint32_t time, struct wlr_touch_point *point) {
-	struct wlr_drag *drag = grab->data;
+	struct wlr_drag *drag = data;
 	if (drag->focus && drag->focus_client) {
 		struct wl_resource *resource;
 		wl_resource_for_each(resource, &drag->focus_client->data_devices) {
@@ -289,19 +289,18 @@ static void drag_handle_touch_motion(struct wlr_seat_touch_grab *grab,
 	}
 }
 
-static void drag_handle_touch_enter(struct wlr_seat_touch_grab *grab,
+static void drag_handle_touch_enter(void *data,
 		uint32_t time, struct wlr_touch_point *point) {
-	struct wlr_drag *drag = grab->data;
+	struct wlr_drag *drag = data;
 	drag_set_focus(drag, point->focus_surface, point->sx, point->sy);
 }
 
-static void drag_handle_touch_cancel(struct wlr_seat_touch_grab *grab) {
-	struct wlr_drag *drag = grab->data;
+static void drag_handle_touch_cancel(void *data) {
+	struct wlr_drag *drag = data;
 	drag_destroy(drag);
 }
 
-static const struct wlr_touch_grab_interface
-		data_device_touch_drag_interface = {
+static const struct wlr_touch_grab drag_touch_grab = {
 	.down = drag_handle_touch_down,
 	.up = drag_handle_touch_up,
 	.motion = drag_handle_touch_motion,
@@ -434,9 +433,6 @@ struct wlr_drag *wlr_drag_create(struct wlr_seat_client *seat_client,
 		wl_signal_add(&source->events.destroy, &drag->source_destroy);
 	}
 
-	drag->touch_grab.data = drag;
-	drag->touch_grab.interface = &data_device_touch_drag_interface;
-
 	return drag;
 }
 
@@ -505,7 +501,7 @@ void wlr_seat_start_touch_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 	drag->grab_touch_id = seat->touch_state.grab_id;
 	drag->touch_id = point->touch_id;
 
-	wlr_seat_touch_start_grab(seat, &drag->touch_grab);
+	wlr_seat_touch_start_grab(seat, &drag_touch_grab, drag);
 	drag_set_focus(drag, point->surface, point->sx, point->sy);
 
 	wlr_seat_start_drag(seat, drag, serial);

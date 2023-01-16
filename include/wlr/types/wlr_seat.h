@@ -115,31 +115,20 @@ struct wlr_keyboard_grab {
 
 struct wlr_seat_touch_grab;
 
-struct wlr_touch_grab_interface {
-	uint32_t (*down)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
-			struct wlr_touch_point *point);
-	void (*up)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
-			struct wlr_touch_point *point);
-	void (*motion)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
-			struct wlr_touch_point *point);
-	void (*enter)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
-			struct wlr_touch_point *point);
-	void (*frame)(struct wlr_seat_touch_grab *grab);
+struct wlr_touch_grab {
+	uint32_t (*down)(void *data, uint32_t time_msec,
+		struct wlr_touch_point *point);
+	void (*up)(void *data, uint32_t time_msec,
+		struct wlr_touch_point *point);
+	void (*motion)(void *data, uint32_t time_msec,
+		struct wlr_touch_point *point);
+	void (*enter)(void *data, uint32_t time_msec,
+		struct wlr_touch_point *point);
+	void (*frame)(void *data);
 	// Cancel grab
-	void (*cancel)(struct wlr_seat_touch_grab *grab);
+	void (*cancel)(void *data);
 	// Send wl_touch::cancel
-	void (*wl_cancel)(struct wlr_seat_touch_grab *grab,
-			struct wlr_surface *surface);
-};
-
-/**
- * Passed to wlr_seat_touch_start_grab() to start a grab of the touch device.
- * The grabber is responsible for handling touch events for the seat.
- */
-struct wlr_seat_touch_grab {
-	const struct wlr_touch_grab_interface *interface;
-	struct wlr_seat *seat;
-	void *data;
+	void (*wl_cancel)(void *data, struct wlr_surface *surface);
 };
 
 #define WLR_POINTER_BUTTONS_CAP 16
@@ -198,8 +187,8 @@ struct wlr_seat_touch_state {
 	uint32_t grab_serial;
 	uint32_t grab_id;
 
-	struct wlr_seat_touch_grab *grab;
-	struct wlr_seat_touch_grab *default_grab;
+	const struct wlr_touch_grab *grab;
+	void *grab_data;
 };
 
 struct wlr_primary_selection_source;
@@ -654,7 +643,7 @@ int wlr_seat_touch_num_points(struct wlr_seat *seat);
  * handling all touch events until the grab ends.
  */
 void wlr_seat_touch_start_grab(struct wlr_seat *wlr_seat,
-		struct wlr_seat_touch_grab *grab);
+	const struct wlr_touch_grab *grab, void *data);
 
 /**
  * End the grab of the touch device of this seat. This reverts the grab back to

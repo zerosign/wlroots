@@ -6,8 +6,7 @@
 
 extern const struct wlr_pointer_grab default_pointer_grab;
 extern const struct wlr_keyboard_grab default_keyboard_grab;
-
-extern const struct wlr_touch_grab_interface default_touch_grab_impl;
+extern const struct wlr_touch_grab default_touch_grab;
 
 void seat_client_create_pointer(struct wlr_seat_client *seat_client,
 	uint32_t version, uint32_t id);

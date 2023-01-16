@@ -109,7 +109,6 @@ enum wlr_drag_grab_type {
 
 struct wlr_drag {
 	enum wlr_drag_grab_type grab_type;
-	struct wlr_seat_touch_grab touch_grab;
 
 	struct wlr_seat *seat;
 	struct wlr_seat_client *seat_client;

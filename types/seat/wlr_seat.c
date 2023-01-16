@@ -211,7 +211,6 @@ void wlr_seat_destroy(struct wlr_seat *seat) {
 	}
 
 	wlr_global_destroy_safe(seat->global);
-	free(seat->touch_state.default_grab);
 	free(seat->name);
 	free(seat);
 }
@@ -247,24 +246,15 @@ struct wlr_seat *wlr_seat_create(struct wl_display *display, const char *name) {
 	wl_signal_init(&seat->keyboard_state.events.focus_change);
 
 	// touch state
-	struct wlr_seat_touch_grab *touch_grab =
-		calloc(1, sizeof(struct wlr_seat_touch_grab));
-	if (!touch_grab) {
-		free(seat);
-		return NULL;
-	}
-	touch_grab->interface = &default_touch_grab_impl;
-	touch_grab->seat = seat;
-	seat->touch_state.default_grab = touch_grab;
-	seat->touch_state.grab = touch_grab;
-
 	seat->touch_state.seat = seat;
 	wl_list_init(&seat->touch_state.touch_points);
+
+	seat->touch_state.grab = &default_touch_grab;
+	seat->touch_state.grab_data = seat;
 
 	seat->global = wl_global_create(display, &wl_seat_interface,
 		SEAT_VERSION, seat, seat_handle_bind);
 	if (seat->global == NULL) {
-		free(touch_grab);
 		free(seat);
 		return NULL;
 	}
