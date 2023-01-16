@@ -12,9 +12,6 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_seat.h>
 
-extern const struct wlr_pointer_grab_interface
-	wlr_data_device_pointer_drag_interface;
-
 extern const struct wlr_keyboard_grab_interface
 	wlr_data_device_keyboard_drag_interface;
 
@@ -113,7 +110,6 @@ enum wlr_drag_grab_type {
 struct wlr_drag {
 	enum wlr_drag_grab_type grab_type;
 	struct wlr_seat_keyboard_grab keyboard_grab;
-	struct wlr_seat_pointer_grab pointer_grab;
 	struct wlr_seat_touch_grab touch_grab;
 
 	struct wlr_seat *seat;

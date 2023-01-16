@@ -9,41 +9,41 @@
 #include "types/wlr_seat.h"
 #include "util/set.h"
 
-static void default_pointer_enter(struct wlr_seat_pointer_grab *grab,
+static void default_pointer_enter(void *data,
 		struct wlr_surface *surface, double sx, double sy) {
-	wlr_seat_pointer_enter(grab->seat, surface, sx, sy);
+	wlr_seat_pointer_enter(data, surface, sx, sy);
 }
 
-static void default_pointer_clear_focus(struct wlr_seat_pointer_grab *grab) {
-	wlr_seat_pointer_clear_focus(grab->seat);
+static void default_pointer_clear_focus(void *data) {
+	wlr_seat_pointer_clear_focus(data);
 }
 
-static void default_pointer_motion(struct wlr_seat_pointer_grab *grab,
+static void default_pointer_motion(void *data,
 		uint32_t time, double sx, double sy) {
-	wlr_seat_pointer_send_motion(grab->seat, time, sx, sy);
+	wlr_seat_pointer_send_motion(data, time, sx, sy);
 }
 
-static uint32_t default_pointer_button(struct wlr_seat_pointer_grab *grab,
+static uint32_t default_pointer_button(void *data,
 		uint32_t time, uint32_t button, enum wlr_button_state state) {
-	return wlr_seat_pointer_send_button(grab->seat, time, button, state);
+	return wlr_seat_pointer_send_button(data, time, button, state);
 }
 
-static void default_pointer_axis(struct wlr_seat_pointer_grab *grab,
+static void default_pointer_axis(void *data,
 		uint32_t time, enum wlr_axis_orientation orientation, double value,
 		int32_t value_discrete, enum wlr_axis_source source) {
-	wlr_seat_pointer_send_axis(grab->seat, time, orientation, value,
+	wlr_seat_pointer_send_axis(data, time, orientation, value,
 		value_discrete, source);
 }
 
-static void default_pointer_frame(struct wlr_seat_pointer_grab *grab) {
-	wlr_seat_pointer_send_frame(grab->seat);
+static void default_pointer_frame(void *data) {
+	wlr_seat_pointer_send_frame(data);
 }
 
-static void default_pointer_cancel(struct wlr_seat_pointer_grab *grab) {
+static void default_pointer_cancel(void *data) {
 	// cannot be cancelled
 }
 
-const struct wlr_pointer_grab_interface default_pointer_grab_impl = {
+const struct wlr_pointer_grab default_pointer_grab = {
 	.enter = default_pointer_enter,
 	.clear_focus = default_pointer_clear_focus,
 	.motion = default_pointer_motion,
@@ -52,7 +52,6 @@ const struct wlr_pointer_grab_interface default_pointer_grab_impl = {
 	.frame = default_pointer_frame,
 	.cancel = default_pointer_cancel,
 };
-
 
 static void pointer_send_frame(struct wl_resource *resource) {
 	if (wl_resource_get_version(resource) >=
@@ -397,21 +396,23 @@ void wlr_seat_pointer_send_frame(struct wlr_seat *wlr_seat) {
 }
 
 void wlr_seat_pointer_start_grab(struct wlr_seat *wlr_seat,
-		struct wlr_seat_pointer_grab *grab) {
-	assert(wlr_seat);
-	grab->seat = wlr_seat;
+		const struct wlr_pointer_grab *grab, void *data) {
 	wlr_seat->pointer_state.grab = grab;
+	wlr_seat->pointer_state.grab_data = data;
 
-	wl_signal_emit_mutable(&wlr_seat->events.pointer_grab_begin, grab);
+	wl_signal_emit_mutable(&wlr_seat->events.pointer_grab_begin, NULL);
 }
 
 void wlr_seat_pointer_end_grab(struct wlr_seat *wlr_seat) {
-	struct wlr_seat_pointer_grab *grab = wlr_seat->pointer_state.grab;
-	if (grab != wlr_seat->pointer_state.default_grab) {
-		wlr_seat->pointer_state.grab = wlr_seat->pointer_state.default_grab;
-		wl_signal_emit_mutable(&wlr_seat->events.pointer_grab_end, grab);
-		if (grab->interface->cancel) {
-			grab->interface->cancel(grab);
+	const struct wlr_pointer_grab *grab = wlr_seat->pointer_state.grab;
+	void *grab_data = wlr_seat->pointer_state.grab_data;
+
+	if (grab != &default_pointer_grab) {
+		wlr_seat->pointer_state.grab = &default_pointer_grab;
+		wlr_seat->pointer_state.grab_data = wlr_seat;
+		wl_signal_emit_mutable(&wlr_seat->events.pointer_grab_end, NULL);
+		if (grab->cancel != NULL) {
+			grab->cancel(grab_data);
 		}
 	}
 }
@@ -421,27 +422,27 @@ void wlr_seat_pointer_notify_enter(struct wlr_seat *wlr_seat,
 	// NULL surfaces are prohibited in the grab-compatible API. Use
 	// wlr_seat_pointer_notify_clear_focus() instead.
 	assert(surface);
-	struct wlr_seat_pointer_grab *grab = wlr_seat->pointer_state.grab;
-	grab->interface->enter(grab, surface, sx, sy);
+	struct wlr_seat_pointer_state *pointer_state = &wlr_seat->pointer_state;
+	pointer_state->grab->enter(pointer_state->grab_data, surface, sx, sy);
 }
 
 void wlr_seat_pointer_notify_clear_focus(struct wlr_seat *wlr_seat) {
-	struct wlr_seat_pointer_grab *grab = wlr_seat->pointer_state.grab;
-	grab->interface->clear_focus(grab);
+	struct wlr_seat_pointer_state *pointer_state = &wlr_seat->pointer_state;
+	pointer_state->grab->clear_focus(pointer_state->grab_data);
 }
 
 void wlr_seat_pointer_notify_motion(struct wlr_seat *wlr_seat, uint32_t time,
 		double sx, double sy) {
 	clock_gettime(CLOCK_MONOTONIC, &wlr_seat->last_event);
-	struct wlr_seat_pointer_grab *grab = wlr_seat->pointer_state.grab;
-	grab->interface->motion(grab, time, sx, sy);
+	struct wlr_seat_pointer_state *pointer_state = &wlr_seat->pointer_state;
+	pointer_state->grab->motion(pointer_state->grab_data, time, sx, sy);
 }
 
 uint32_t wlr_seat_pointer_notify_button(struct wlr_seat *wlr_seat,
 		uint32_t time, uint32_t button, enum wlr_button_state state) {
 	clock_gettime(CLOCK_MONOTONIC, &wlr_seat->last_event);
 
-	struct wlr_seat_pointer_state* pointer_state = &wlr_seat->pointer_state;
+	struct wlr_seat_pointer_state *pointer_state = &wlr_seat->pointer_state;
 
 	if (state == WLR_BUTTON_PRESSED) {
 		if (pointer_state->button_count == 0) {
@@ -455,9 +456,8 @@ uint32_t wlr_seat_pointer_notify_button(struct wlr_seat *wlr_seat,
 			WLR_POINTER_BUTTONS_CAP, button);
 	}
 
-
-	struct wlr_seat_pointer_grab *grab = pointer_state->grab;
-	uint32_t serial = grab->interface->button(grab, time, button, state);
+	uint32_t serial =
+		pointer_state->grab->button(pointer_state->grab_data, time, button, state);
 
 	if (serial && pointer_state->button_count == 1 &&
 			state == WLR_BUTTON_PRESSED) {
@@ -471,23 +471,22 @@ void wlr_seat_pointer_notify_axis(struct wlr_seat *wlr_seat, uint32_t time,
 		enum wlr_axis_orientation orientation, double value,
 		int32_t value_discrete, enum wlr_axis_source source) {
 	clock_gettime(CLOCK_MONOTONIC, &wlr_seat->last_event);
-	struct wlr_seat_pointer_grab *grab = wlr_seat->pointer_state.grab;
-	grab->interface->axis(grab, time, orientation, value, value_discrete,
-		source);
+	struct wlr_seat_pointer_state *pointer_state = &wlr_seat->pointer_state;
+	pointer_state->grab->axis(pointer_state->grab_data, time, orientation,
+		value, value_discrete, source);
 }
 
 void wlr_seat_pointer_notify_frame(struct wlr_seat *wlr_seat) {
 	clock_gettime(CLOCK_MONOTONIC, &wlr_seat->last_event);
-	struct wlr_seat_pointer_grab *grab = wlr_seat->pointer_state.grab;
-	if (grab->interface->frame) {
-		grab->interface->frame(grab);
+	struct wlr_seat_pointer_state *pointer_state = &wlr_seat->pointer_state;
+	if (pointer_state->grab->frame != NULL) {
+		pointer_state->grab->frame(pointer_state->grab_data);
 	}
 }
 
 bool wlr_seat_pointer_has_grab(struct wlr_seat *seat) {
-	return seat->pointer_state.grab->interface != &default_pointer_grab_impl;
+	return seat->pointer_state.grab != &default_pointer_grab;
 }
-
 
 void seat_client_create_pointer(struct wlr_seat_client *seat_client,
 		uint32_t version, uint32_t id) {

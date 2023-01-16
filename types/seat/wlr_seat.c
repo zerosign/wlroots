@@ -211,7 +211,6 @@ void wlr_seat_destroy(struct wlr_seat *seat) {
 	}
 
 	wlr_global_destroy_safe(seat->global);
-	free(seat->pointer_state.default_grab);
 	free(seat->keyboard_state.default_grab);
 	free(seat->touch_state.default_grab);
 	free(seat->name);
@@ -234,16 +233,8 @@ struct wlr_seat *wlr_seat_create(struct wl_display *display, const char *name) {
 	seat->pointer_state.seat = seat;
 	wl_list_init(&seat->pointer_state.surface_destroy.link);
 
-	struct wlr_seat_pointer_grab *pointer_grab =
-		calloc(1, sizeof(struct wlr_seat_pointer_grab));
-	if (!pointer_grab) {
-		free(seat);
-		return NULL;
-	}
-	pointer_grab->interface = &default_pointer_grab_impl;
-	pointer_grab->seat = seat;
-	seat->pointer_state.default_grab = pointer_grab;
-	seat->pointer_state.grab = pointer_grab;
+	seat->pointer_state.grab = &default_pointer_grab;
+	seat->pointer_state.grab_data = seat;
 
 	wl_signal_init(&seat->pointer_state.events.focus_change);
 
@@ -251,7 +242,6 @@ struct wlr_seat *wlr_seat_create(struct wl_display *display, const char *name) {
 	struct wlr_seat_keyboard_grab *keyboard_grab =
 		calloc(1, sizeof(struct wlr_seat_keyboard_grab));
 	if (!keyboard_grab) {
-		free(pointer_grab);
 		free(seat);
 		return NULL;
 	}
@@ -269,7 +259,6 @@ struct wlr_seat *wlr_seat_create(struct wl_display *display, const char *name) {
 	struct wlr_seat_touch_grab *touch_grab =
 		calloc(1, sizeof(struct wlr_seat_touch_grab));
 	if (!touch_grab) {
-		free(pointer_grab);
 		free(keyboard_grab);
 		free(seat);
 		return NULL;
@@ -286,7 +275,6 @@ struct wlr_seat *wlr_seat_create(struct wl_display *display, const char *name) {
 		SEAT_VERSION, seat, seat_handle_bind);
 	if (seat->global == NULL) {
 		free(touch_grab);
-		free(pointer_grab);
 		free(keyboard_grab);
 		free(seat);
 		return NULL;

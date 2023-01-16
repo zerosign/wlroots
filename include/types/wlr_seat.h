@@ -4,7 +4,8 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_seat.h>
 
-extern const struct wlr_pointer_grab_interface default_pointer_grab_impl;
+extern const struct wlr_pointer_grab default_pointer_grab;
+
 extern const struct wlr_keyboard_grab_interface default_keyboard_grab_impl;
 extern const struct wlr_touch_grab_interface default_touch_grab_impl;
 

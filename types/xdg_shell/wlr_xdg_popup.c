@@ -49,53 +49,58 @@ static void xdg_popup_grab_end(struct wlr_xdg_popup_grab *popup_grab) {
 	wlr_seat_touch_end_grab(popup_grab->seat);
 }
 
-static void xdg_pointer_grab_enter(struct wlr_seat_pointer_grab *grab,
+static void xdg_pointer_grab_enter(void *data,
 		struct wlr_surface *surface, double sx, double sy) {
-	struct wlr_xdg_popup_grab *popup_grab = grab->data;
+	struct wlr_xdg_popup_grab *popup_grab = data;
 	if (wl_resource_get_client(surface->resource) == popup_grab->client) {
-		wlr_seat_pointer_enter(grab->seat, surface, sx, sy);
+		wlr_seat_pointer_enter(popup_grab->seat, surface, sx, sy);
 	} else {
-		wlr_seat_pointer_clear_focus(grab->seat);
+		wlr_seat_pointer_clear_focus(popup_grab->seat);
 	}
 }
 
-static void xdg_pointer_grab_clear_focus(struct wlr_seat_pointer_grab *grab) {
-	wlr_seat_pointer_clear_focus(grab->seat);
+static void xdg_pointer_grab_clear_focus(void *data) {
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_pointer_clear_focus(popup_grab->seat);
 }
 
-static void xdg_pointer_grab_motion(struct wlr_seat_pointer_grab *grab,
+static void xdg_pointer_grab_motion(void *data,
 		uint32_t time, double sx, double sy) {
-	wlr_seat_pointer_send_motion(grab->seat, time, sx, sy);
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_pointer_send_motion(popup_grab->seat, time, sx, sy);
 }
 
-static uint32_t xdg_pointer_grab_button(struct wlr_seat_pointer_grab *grab,
+static uint32_t xdg_pointer_grab_button(void *data,
 		uint32_t time, uint32_t button, uint32_t state) {
+	struct wlr_xdg_popup_grab *popup_grab = data;
 	uint32_t serial =
-		wlr_seat_pointer_send_button(grab->seat, time, button, state);
+		wlr_seat_pointer_send_button(popup_grab->seat, time, button, state);
 	if (serial) {
 		return serial;
 	} else {
-		xdg_popup_grab_end(grab->data);
+		xdg_popup_grab_end(data);
 		return 0;
 	}
 }
 
-static void xdg_pointer_grab_axis(struct wlr_seat_pointer_grab *grab,
+static void xdg_pointer_grab_axis(void *data,
 		uint32_t time, enum wlr_axis_orientation orientation, double value,
 		int32_t value_discrete, enum wlr_axis_source source) {
-	wlr_seat_pointer_send_axis(grab->seat, time, orientation, value,
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_pointer_send_axis(popup_grab->seat, time, orientation, value,
 		value_discrete, source);
 }
 
-static void xdg_pointer_grab_frame(struct wlr_seat_pointer_grab *grab) {
-	wlr_seat_pointer_send_frame(grab->seat);
+static void xdg_pointer_grab_frame(void *data) {
+	struct wlr_xdg_popup_grab *popup_grab = data;
+	wlr_seat_pointer_send_frame(popup_grab->seat);
 }
 
-static void xdg_pointer_grab_cancel(struct wlr_seat_pointer_grab *grab) {
-	xdg_popup_grab_end(grab->data);
+static void xdg_pointer_grab_cancel(void *data) {
+	xdg_popup_grab_end(data);
 }
 
-static const struct wlr_pointer_grab_interface xdg_pointer_grab_impl = {
+static const struct wlr_pointer_grab xdg_pointer_grab = {
 	.enter = xdg_pointer_grab_enter,
 	.clear_focus = xdg_pointer_grab_clear_focus,
 	.motion = xdg_pointer_grab_motion,
@@ -219,8 +224,6 @@ static struct wlr_xdg_popup_grab *get_xdg_shell_popup_grab_from_seat(
 		return NULL;
 	}
 
-	xdg_grab->pointer_grab.data = xdg_grab;
-	xdg_grab->pointer_grab.interface = &xdg_pointer_grab_impl;
 	xdg_grab->keyboard_grab.data = xdg_grab;
 	xdg_grab->keyboard_grab.interface = &xdg_keyboard_grab_impl;
 	xdg_grab->touch_grab.data = xdg_grab;
@@ -297,7 +300,8 @@ static void xdg_popup_handle_grab(struct wl_client *client,
 	wl_list_insert(&popup_grab->popups, &popup->grab_link);
 
 	wlr_seat_pointer_start_grab(seat_client->seat,
-		&popup_grab->pointer_grab);
+		&xdg_pointer_grab, popup_grab);
+
 	wlr_seat_keyboard_start_grab(seat_client->seat,
 		&popup_grab->keyboard_grab);
 	wlr_seat_touch_start_grab(seat_client->seat,
@@ -434,7 +438,7 @@ void unmap_xdg_popup(struct wlr_xdg_popup *popup) {
 		wl_list_remove(&popup->grab_link);
 
 		if (wl_list_empty(&grab->popups)) {
-			if (grab->seat->pointer_state.grab == &grab->pointer_grab) {
+			if (grab->seat->pointer_state.grab == &xdg_pointer_grab) {
 				wlr_seat_pointer_end_grab(grab->seat);
 			}
 			if (grab->seat->keyboard_state.grab == &grab->keyboard_grab) {

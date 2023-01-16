@@ -160,20 +160,20 @@ static void drag_destroy(struct wlr_drag *drag) {
 	free(drag);
 }
 
-static void drag_handle_pointer_enter(struct wlr_seat_pointer_grab *grab,
+static void drag_handle_pointer_enter(void *data,
 		struct wlr_surface *surface, double sx, double sy) {
-	struct wlr_drag *drag = grab->data;
+	struct wlr_drag *drag = data;
 	drag_set_focus(drag, surface, sx, sy);
 }
 
-static void drag_handle_pointer_clear_focus(struct wlr_seat_pointer_grab *grab) {
-	struct wlr_drag *drag = grab->data;
+static void drag_handle_pointer_clear_focus(void *data) {
+	struct wlr_drag *drag = data;
 	drag_set_focus(drag, NULL, 0, 0);
 }
 
-static void drag_handle_pointer_motion(struct wlr_seat_pointer_grab *grab,
+static void drag_handle_pointer_motion(void *data,
 		uint32_t time, double sx, double sy) {
-	struct wlr_drag *drag = grab->data;
+	struct wlr_drag *drag = data;
 	if (drag->focus != NULL && drag->focus_client != NULL) {
 		struct wl_resource *resource;
 		wl_resource_for_each(resource, &drag->focus_client->data_devices) {
@@ -211,12 +211,12 @@ static void drag_drop(struct wlr_drag *drag, uint32_t time) {
 	wl_signal_emit_mutable(&drag->events.drop, &event);
 }
 
-static uint32_t drag_handle_pointer_button(struct wlr_seat_pointer_grab *grab,
+static uint32_t drag_handle_pointer_button(void *data,
 		uint32_t time, uint32_t button, uint32_t state) {
-	struct wlr_drag *drag = grab->data;
+	struct wlr_drag *drag = data;
 
 	if (drag->source &&
-			grab->seat->pointer_state.grab_button == button &&
+			drag->seat->pointer_state.grab_button == button &&
 			state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		if (drag->focus_client && drag->source->current_dnd_action &&
 				drag->source->accepted) {
@@ -228,7 +228,7 @@ static uint32_t drag_handle_pointer_button(struct wlr_seat_pointer_grab *grab,
 		}
 	}
 
-	if (grab->seat->pointer_state.button_count == 0 &&
+	if (drag->seat->pointer_state.button_count == 0 &&
 			state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		drag_destroy(drag);
 	}
@@ -236,19 +236,18 @@ static uint32_t drag_handle_pointer_button(struct wlr_seat_pointer_grab *grab,
 	return 0;
 }
 
-static void drag_handle_pointer_axis(struct wlr_seat_pointer_grab *grab,
+static void drag_handle_pointer_axis(void *data,
 		uint32_t time, enum wlr_axis_orientation orientation, double value,
 		int32_t value_discrete, enum wlr_axis_source source) {
 	// This space is intentionally left blank
 }
 
-static void drag_handle_pointer_cancel(struct wlr_seat_pointer_grab *grab) {
-	struct wlr_drag *drag = grab->data;
+static void drag_handle_pointer_cancel(void *data) {
+	struct wlr_drag *drag = data;
 	drag_destroy(drag);
 }
 
-static const struct wlr_pointer_grab_interface
-		data_device_pointer_drag_interface = {
+static const struct wlr_pointer_grab drag_pointer_grab = {
 	.enter = drag_handle_pointer_enter,
 	.clear_focus = drag_handle_pointer_clear_focus,
 	.motion = drag_handle_pointer_motion,
@@ -436,9 +435,6 @@ struct wlr_drag *wlr_drag_create(struct wlr_seat_client *seat_client,
 		wl_signal_add(&source->events.destroy, &drag->source_destroy);
 	}
 
-	drag->pointer_grab.data = drag;
-	drag->pointer_grab.interface = &data_device_pointer_drag_interface;
-
 	drag->touch_grab.data = drag;
 	drag->touch_grab.interface = &data_device_touch_drag_interface;
 
@@ -502,7 +498,7 @@ void wlr_seat_start_pointer_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 	drag->grab_type = WLR_DRAG_GRAB_KEYBOARD_POINTER;
 
 	wlr_seat_pointer_clear_focus(seat);
-	wlr_seat_pointer_start_grab(seat, &drag->pointer_grab);
+	wlr_seat_pointer_start_grab(seat, &drag_pointer_grab, drag);
 
 	wlr_seat_start_drag(seat, drag, serial);
 }

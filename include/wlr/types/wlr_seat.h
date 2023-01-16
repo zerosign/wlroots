@@ -89,21 +89,18 @@ struct wlr_touch_point {
 	struct wl_list link;
 };
 
-struct wlr_seat_pointer_grab;
-
-struct wlr_pointer_grab_interface {
-	void (*enter)(struct wlr_seat_pointer_grab *grab,
-			struct wlr_surface *surface, double sx, double sy);
-	void (*clear_focus)(struct wlr_seat_pointer_grab *grab);
-	void (*motion)(struct wlr_seat_pointer_grab *grab, uint32_t time_msec,
-			double sx, double sy);
-	uint32_t (*button)(struct wlr_seat_pointer_grab *grab, uint32_t time_msec,
-			uint32_t button, enum wlr_button_state state);
-	void (*axis)(struct wlr_seat_pointer_grab *grab, uint32_t time_msec,
-			enum wlr_axis_orientation orientation, double value,
-			int32_t value_discrete, enum wlr_axis_source source);
-	void (*frame)(struct wlr_seat_pointer_grab *grab);
-	void (*cancel)(struct wlr_seat_pointer_grab *grab);
+struct wlr_pointer_grab {
+	void (*enter)(void *data, struct wlr_surface *surface, double sx, double sy);
+	void (*clear_focus)(void *data);
+	void (*motion)(void *data, uint32_t time_msec,
+		double sx, double sy);
+	uint32_t (*button)(void *data, uint32_t time_msec,
+		uint32_t button, enum wlr_button_state state);
+	void (*axis)(void *data, uint32_t time_msec,
+		enum wlr_axis_orientation orientation, double value,
+		int32_t value_discrete, enum wlr_axis_source source);
+	void (*frame)(void *data);
+	void (*cancel)(void *data);
 };
 
 struct wlr_seat_keyboard_grab;
@@ -159,16 +156,6 @@ struct wlr_seat_keyboard_grab {
 	void *data;
 };
 
-/**
- * Passed to wlr_seat_pointer_start_grab() to start a grab of the pointer. The
- * grabber is responsible for handling pointer events for the seat.
- */
-struct wlr_seat_pointer_grab {
-	const struct wlr_pointer_grab_interface *interface;
-	struct wlr_seat *seat;
-	void *data;
-};
-
 #define WLR_POINTER_BUTTONS_CAP 16
 
 struct wlr_seat_pointer_state {
@@ -177,8 +164,8 @@ struct wlr_seat_pointer_state {
 	struct wlr_surface *focused_surface;
 	double sx, sy;
 
-	struct wlr_seat_pointer_grab *grab;
-	struct wlr_seat_pointer_grab *default_grab;
+	const struct wlr_pointer_grab *grab;
+	void *grab_data;
 
 	bool sent_axis_source;
 	enum wlr_axis_source cached_axis_source;
@@ -473,7 +460,7 @@ void wlr_seat_pointer_notify_frame(struct wlr_seat *wlr_seat);
  * handling all pointer events until the grab ends.
  */
 void wlr_seat_pointer_start_grab(struct wlr_seat *wlr_seat,
-		struct wlr_seat_pointer_grab *grab);
+	const struct wlr_pointer_grab *grab, void *data);
 
 /**
  * End the grab of the pointer of this seat. This reverts the grab back to the
