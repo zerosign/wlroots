@@ -12,6 +12,7 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_input_mapper.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_output_layout.h>
@@ -24,35 +25,17 @@
 
 struct sample_state {
 	struct wl_display *display;
-	struct compositor_state *compositor;
 	struct wlr_renderer *renderer;
 	struct wlr_allocator *allocator;
 	struct wlr_xcursor_manager *xcursor_manager;
 	struct wlr_cursor *cursor;
-	double cur_x, cur_y;
 	float default_color[4];
 	float clear_color[4];
 	struct wlr_output_layout *layout;
-	struct wl_list devices;
-	struct timespec last_frame;
+	struct wlr_input_mapper *input_mapper;
 
 	struct wl_listener new_output;
 	struct wl_listener new_input;
-	struct wl_listener cursor_motion;
-	struct wl_listener cursor_motion_absolute;
-	struct wl_listener cursor_button;
-	struct wl_listener cursor_axis;
-
-	struct wl_listener touch_motion;
-	struct wl_listener touch_up;
-	struct wl_listener touch_down;
-	struct wl_listener touch_cancel;
-	struct wl_list touch_points;
-
-	struct wl_listener tablet_tool_axis;
-	struct wl_listener tablet_tool_proxmity;
-	struct wl_listener tablet_tool_tip;
-	struct wl_listener tablet_tool_button;
 };
 
 struct touch_point {
@@ -75,23 +58,59 @@ struct sample_keyboard {
 	struct wl_listener destroy;
 };
 
-static void warp_to_touch(struct sample_state *state,
-		struct wlr_input_device *dev) {
-	if (wl_list_empty(&state->touch_points)) {
+struct sample_pointer {
+	struct sample_state *state;
+	struct wlr_pointer *wlr_pointer;
+	struct wl_listener motion;
+	struct wl_listener motion_absolute;
+	struct wl_listener button;
+	struct wl_listener axis;
+	struct wl_listener frame;
+	struct wl_listener destroy;
+};
+
+struct sample_touch {
+	struct sample_state *state;
+	struct wlr_touch *wlr_touch;
+	struct wl_list points;
+	struct wl_listener motion;
+	struct wl_listener down;
+	struct wl_listener up;
+	struct wl_listener destroy;
+};
+
+struct sample_tablet {
+	struct sample_state *state;
+	struct wlr_tablet *wlr_tablet;
+	double x, y;
+	struct wl_listener axis;
+	struct wl_listener destroy;
+};
+
+static void warp_absolute(struct sample_state *state,
+		struct wlr_input_device *device, double x, double y) {
+	double lx, ly;
+	wlr_input_mapper_absolute_to_layout(state->input_mapper,
+		device, x, y, &lx, &ly);
+	wlr_cursor_warp(state->cursor, lx, ly);
+}
+
+static void warp_to_touch(struct sample_touch *touch) {
+	if (wl_list_empty(&touch->points)) {
 		return;
 	}
 
 	double x = 0, y = 0;
 	size_t n = 0;
 	struct touch_point *point;
-	wl_list_for_each(point, &state->touch_points, link) {
+	wl_list_for_each(point, &touch->points, link) {
 		x += point->x;
 		y += point->y;
 		n++;
 	}
 	x /= n;
 	y /= n;
-	wlr_cursor_warp_absolute(state->cursor, dev, x, y);
+	warp_absolute(touch->state, &touch->wlr_touch->base, x, y);
 }
 
 static void output_frame_notify(struct wl_listener *listener, void *data) {
@@ -109,31 +128,29 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	wlr_output_commit(wlr_output);
 }
 
-static void handle_cursor_motion(struct wl_listener *listener, void *data) {
-	struct sample_state *sample =
-		wl_container_of(listener, sample, cursor_motion);
+static void pointer_motion_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer = wl_container_of(listener, pointer, motion);
 	struct wlr_pointer_motion_event *event = data;
-	wlr_cursor_move(sample->cursor, &event->pointer->base, event->delta_x,
-			event->delta_y);
+
+	struct sample_state *sample = pointer->state;
+
+	wlr_cursor_warp(sample->cursor, sample->cursor->x + event->delta_x,
+		sample->cursor->y + event->delta_y);
 }
 
-static void handle_cursor_motion_absolute(struct wl_listener *listener,
-		void *data) {
-	struct sample_state *sample =
-		wl_container_of(listener, sample, cursor_motion_absolute);
+static void pointer_motion_absolute_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer =
+		wl_container_of(listener, pointer, motion_absolute);
 	struct wlr_pointer_motion_absolute_event *event = data;
 
-	sample->cur_x = event->x;
-	sample->cur_y = event->y;
-
-	wlr_cursor_warp_absolute(sample->cursor, &event->pointer->base,
-		sample->cur_x, sample->cur_y);
+	warp_absolute(pointer->state, &pointer->wlr_pointer->base, event->x, event->y);
 }
 
-static void handle_cursor_button(struct wl_listener *listener, void *data) {
-	struct sample_state *sample =
-		wl_container_of(listener, sample, cursor_button);
+static void pointer_button_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer = wl_container_of(listener, pointer, button);
 	struct wlr_pointer_button_event *event = data;
+
+	struct sample_state *sample = pointer->state;
 
 	float (*color)[4];
 	if (event->state == WLR_BUTTON_RELEASED) {
@@ -147,10 +164,11 @@ static void handle_cursor_button(struct wl_listener *listener, void *data) {
 	}
 }
 
-static void handle_cursor_axis(struct wl_listener *listener, void *data) {
-	struct sample_state *sample =
-		wl_container_of(listener, sample, cursor_axis);
+static void pointer_axis_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer = wl_container_of(listener, pointer, axis);
 	struct wlr_pointer_axis_event *event = data;
+
+	struct sample_state *sample = pointer->state;
 
 	for (size_t i = 0; i < 3; ++i) {
 		sample->default_color[i] += event->delta > 0 ? -0.05f : 0.05f;
@@ -166,40 +184,50 @@ static void handle_cursor_axis(struct wl_listener *listener, void *data) {
 			sizeof(sample->clear_color));
 }
 
-static void handle_touch_up(struct wl_listener *listener, void *data) {
-	struct sample_state *sample = wl_container_of(listener, sample, touch_up);
-	struct wlr_touch_up_event  *event = data;
+static void pointer_destroy_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer = wl_container_of(listener, pointer, destroy);
+	wl_list_remove(&pointer->destroy.link);
+	wl_list_remove(&pointer->motion.link);
+	wl_list_remove(&pointer->motion_absolute.link);
+	wl_list_remove(&pointer->button.link);
+	wl_list_remove(&pointer->axis.link);
+	free(pointer);
+}
+
+static void touch_up_notify(struct wl_listener *listener, void *data) {
+	struct sample_touch *touch = wl_container_of(listener, touch, up);
+	struct wlr_touch_up_event *event = data;
 
 	struct touch_point *point, *tmp;
-	wl_list_for_each_safe(point, tmp, &sample->touch_points, link) {
+	wl_list_for_each_safe(point, tmp, &touch->points, link) {
 		if (point->touch_id == event->touch_id) {
 			wl_list_remove(&point->link);
 			break;
 		}
 	}
 
-	warp_to_touch(sample, &event->touch->base);
+	warp_to_touch(touch);
 }
 
-static void handle_touch_down(struct wl_listener *listener, void *data) {
-	struct sample_state *sample = wl_container_of(listener, sample, touch_down);
-	struct wlr_touch_down_event  *event = data;
+static void touch_down_notify(struct wl_listener *listener, void *data) {
+	struct sample_touch *touch = wl_container_of(listener, touch, down);
+	struct wlr_touch_down_event *event = data;
+
 	struct touch_point *point = calloc(1, sizeof(struct touch_point));
 	point->touch_id = event->touch_id;
 	point->x = event->x;
 	point->y = event->y;
-	wl_list_insert(&sample->touch_points, &point->link);
+	wl_list_insert(&touch->points, &point->link);
 
-	warp_to_touch(sample, &event->touch->base);
+	warp_to_touch(touch);
 }
 
-static void handle_touch_motion(struct wl_listener *listener, void *data) {
-	struct sample_state *sample =
-		wl_container_of(listener, sample, touch_motion);
-	struct wlr_touch_motion_event  *event = data;
+static void touch_motion_notify(struct wl_listener *listener, void *data) {
+	struct sample_touch *touch = wl_container_of(listener, touch, motion);
+	struct wlr_touch_motion_event *event = data;
 
 	struct touch_point *point;
-	wl_list_for_each(point, &sample->touch_points, link) {
+	wl_list_for_each(point, &touch->points, link) {
 		if (point->touch_id == event->touch_id) {
 			point->x = event->x;
 			point->y = event->y;
@@ -207,22 +235,36 @@ static void handle_touch_motion(struct wl_listener *listener, void *data) {
 		}
 	}
 
-	warp_to_touch(sample, &event->touch->base);
+	warp_to_touch(touch);
 }
 
-static void handle_touch_cancel(struct wl_listener *listener, void *data) {
-	wlr_log(WLR_DEBUG, "TODO: touch cancel");
+static void touch_destroy_notify(struct wl_listener *listener, void *data) {
+	struct sample_touch *touch = wl_container_of(listener, touch, destroy);
+	wl_list_remove(&touch->destroy.link);
+	wl_list_remove(&touch->up.link);
+	wl_list_remove(&touch->down.link);
+	wl_list_remove(&touch->motion.link);
+	free(touch);
 }
 
-static void handle_tablet_tool_axis(struct wl_listener *listener, void *data) {
-	struct sample_state *sample =
-		wl_container_of(listener, sample, tablet_tool_axis);
+static void tablet_axis_notify(struct wl_listener *listener, void *data) {
+	struct sample_tablet *tablet = wl_container_of(listener, tablet, axis);
 	struct wlr_tablet_tool_axis_event *event = data;
-	if ((event->updated_axes & WLR_TABLET_TOOL_AXIS_X) &&
-			(event->updated_axes & WLR_TABLET_TOOL_AXIS_Y)) {
-		wlr_cursor_warp_absolute(sample->cursor, &event->tablet->base,
-			event->x, event->y);
+
+	if ((event->updated_axes & WLR_TABLET_TOOL_AXIS_X) != 0) {
+		tablet->x = event->x;
 	}
+	if ((event->updated_axes & WLR_TABLET_TOOL_AXIS_Y) != 0) {
+		tablet->y = event->y;
+	}
+	warp_absolute(tablet->state, &tablet->wlr_tablet->base, tablet->x, tablet->y);
+}
+
+static void tablet_destroy_notify(struct wl_listener *listener, void *data) {
+	struct sample_tablet *tablet = wl_container_of(listener, tablet, destroy);
+	wl_list_remove(&tablet->destroy.link);
+	wl_list_remove(&tablet->axis.link);
+	free(tablet);
 }
 
 static void keyboard_key_notify(struct wl_listener *listener, void *data) {
@@ -239,6 +281,13 @@ static void keyboard_key_notify(struct wl_listener *listener, void *data) {
 			wl_display_terminate(sample->display);
 		}
 	}
+}
+
+static void keyboard_destroy_notify(struct wl_listener *listener, void *data) {
+	struct sample_keyboard *keyboard = wl_container_of(listener, keyboard, destroy);
+	wl_list_remove(&keyboard->destroy.link);
+	wl_list_remove(&keyboard->key.link);
+	free(keyboard);
 }
 
 static void output_remove_notify(struct wl_listener *listener, void *data) {
@@ -277,24 +326,49 @@ static void new_output_notify(struct wl_listener *listener, void *data) {
 	wlr_output_commit(output);
 }
 
-
-static void keyboard_destroy_notify(struct wl_listener *listener, void *data) {
-	struct sample_keyboard *keyboard = wl_container_of(listener, keyboard, destroy);
-	wl_list_remove(&keyboard->destroy.link);
-	wl_list_remove(&keyboard->key.link);
-	free(keyboard);
-}
-
 static void new_input_notify(struct wl_listener *listener, void *data) {
 	struct wlr_input_device *device = data;
 	struct sample_state *state = wl_container_of(listener, state, new_input);
 	switch (device->type) {
-	case WLR_INPUT_DEVICE_POINTER:
-	case WLR_INPUT_DEVICE_TOUCH:
-	case WLR_INPUT_DEVICE_TABLET_TOOL:
-		wlr_cursor_attach_input_device(state->cursor, device);
+	case WLR_INPUT_DEVICE_POINTER:;
+		struct sample_pointer *pointer = calloc(1, sizeof(struct sample_pointer));
+		pointer->wlr_pointer = wlr_pointer_from_input_device(device);
+		pointer->state = state;
+		wl_signal_add(&device->events.destroy, &pointer->destroy);
+		pointer->destroy.notify = pointer_destroy_notify;
+		wl_signal_add(&pointer->wlr_pointer->events.motion, &pointer->motion);
+		pointer->motion.notify = pointer_motion_notify;
+		wl_signal_add(&pointer->wlr_pointer->events.motion_absolute,
+			&pointer->motion_absolute);
+		pointer->motion_absolute.notify = pointer_motion_absolute_notify;
+		wl_signal_add(&pointer->wlr_pointer->events.button, &pointer->button);
+		pointer->button.notify = pointer_button_notify;
+		wl_signal_add(&pointer->wlr_pointer->events.axis, &pointer->axis);
+		pointer->axis.notify = pointer_axis_notify;
 		break;
-
+	case WLR_INPUT_DEVICE_TOUCH:;
+		struct sample_touch *touch = calloc(1, sizeof(struct sample_touch));
+		touch->wlr_touch = wlr_touch_from_input_device(device);
+		touch->state = state;
+		wl_list_init(&touch->points);
+		wl_signal_add(&device->events.destroy, &touch->destroy);
+		touch->destroy.notify = touch_destroy_notify;
+		wl_signal_add(&touch->wlr_touch->events.up, &touch->up);
+		touch->up.notify = touch_up_notify;
+		wl_signal_add(&touch->wlr_touch->events.down, &touch->down);
+		touch->down.notify = touch_down_notify;
+		wl_signal_add(&touch->wlr_touch->events.motion, &touch->motion);
+		touch->motion.notify = touch_motion_notify;
+		break;
+	case WLR_INPUT_DEVICE_TABLET_TOOL:;
+		struct sample_tablet *tablet = calloc(1, sizeof(struct sample_tablet));
+		tablet->wlr_tablet = wlr_tablet_from_input_device(device);
+		tablet->state = state;
+		wl_signal_add(&device->events.destroy, &tablet->destroy);
+		tablet->destroy.notify = tablet_destroy_notify;
+		wl_signal_add(&tablet->wlr_tablet->events.axis, &tablet->axis);
+		tablet->axis.notify = tablet_axis_notify;
+		break;
 	case WLR_INPUT_DEVICE_KEYBOARD:;
 		struct sample_keyboard *keyboard = calloc(1, sizeof(struct sample_keyboard));
 		keyboard->wlr_keyboard = wlr_keyboard_from_input_device(device);
@@ -330,7 +404,7 @@ int main(int argc, char *argv[]) {
 	struct sample_state state = {
 		.default_color = { 0.25f, 0.25f, 0.25f, 1 },
 		.clear_color = { 0.25f, 0.25f, 0.25f, 1 },
-		.display = display
+		.display = display,
 	};
 
 	struct wlr_backend *wlr = wlr_backend_autocreate(display, NULL);
@@ -341,50 +415,17 @@ int main(int argc, char *argv[]) {
 	state.renderer = wlr_renderer_autocreate(wlr);
 	state.allocator = wlr_allocator_autocreate(wlr, state.renderer);
 
-	state.cursor = wlr_cursor_create();
 	state.layout = wlr_output_layout_create();
-	wlr_cursor_attach_output_layout(state.cursor, state.layout);
-	//wlr_cursor_map_to_region(state.cursor, state.config->cursor.mapped_box);
-	wl_list_init(&state.devices);
-	wl_list_init(&state.touch_points);
+	state.cursor = wlr_cursor_create(state.layout);
 
-	// pointer events
-	wl_signal_add(&state.cursor->events.motion, &state.cursor_motion);
-	state.cursor_motion.notify = handle_cursor_motion;
-
-	wl_signal_add(&state.cursor->events.motion_absolute,
-		&state.cursor_motion_absolute);
-	state.cursor_motion_absolute.notify = handle_cursor_motion_absolute;
-
-	wl_signal_add(&state.cursor->events.button, &state.cursor_button);
-	state.cursor_button.notify = handle_cursor_button;
-
-	wl_signal_add(&state.cursor->events.axis, &state.cursor_axis);
-	state.cursor_axis.notify = handle_cursor_axis;
-
-	// touch events
-	wl_signal_add(&state.cursor->events.touch_up, &state.touch_up);
-	state.touch_up.notify = handle_touch_up;
-
-	wl_signal_add(&state.cursor->events.touch_down, &state.touch_down);
-	state.touch_down.notify = handle_touch_down;
-
-	wl_signal_add(&state.cursor->events.touch_motion, &state.touch_motion);
-	state.touch_motion.notify = handle_touch_motion;
-
-	wl_signal_add(&state.cursor->events.touch_cancel, &state.touch_cancel);
-	state.touch_cancel.notify = handle_touch_cancel;
+	state.input_mapper = wlr_input_mapper_create();
+	wlr_input_mapper_attach_output_layout(state.input_mapper, state.layout);
 
 	wl_signal_add(&wlr->events.new_input, &state.new_input);
 	state.new_input.notify = new_input_notify;
 
 	wl_signal_add(&wlr->events.new_output, &state.new_output);
 	state.new_output.notify = new_output_notify;
-
-	// tool events
-	wl_signal_add(&state.cursor->events.tablet_tool_axis,
-		&state.tablet_tool_axis);
-	state.tablet_tool_axis.notify = handle_tablet_tool_axis;
 
 	state.xcursor_manager = wlr_xcursor_manager_create("default", 24);
 	if (!state.xcursor_manager) {
@@ -394,8 +435,6 @@ int main(int argc, char *argv[]) {
 
 	wlr_xcursor_manager_set_cursor_image(state.xcursor_manager, "left_ptr",
 		state.cursor);
-
-	clock_gettime(CLOCK_MONOTONIC, &state.last_frame);
 
 	if (!wlr_backend_start(wlr)) {
 		wlr_log(WLR_ERROR, "Failed to start backend");
