@@ -17,6 +17,8 @@ struct wlr_drm_interface {
 	bool (*crtc_commit)(struct wlr_drm_connector *conn,
 		const struct wlr_drm_connector_state *state, uint32_t flags,
 		bool test_only);
+	bool (*snapshot_state)(struct wlr_drm_backend *drm);
+	bool (*restore_state)(struct wlr_drm_backend *drm);
 };
 
 extern const struct wlr_drm_interface atomic_iface;
@@ -24,5 +26,6 @@ extern const struct wlr_drm_interface legacy_iface;
 
 bool drm_legacy_crtc_set_gamma(struct wlr_drm_backend *drm,
 	struct wlr_drm_crtc *crtc, size_t size, uint16_t *lut);
+bool legacy_restore_state(struct wlr_drm_backend *drm);
 
 #endif

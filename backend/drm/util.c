@@ -276,3 +276,87 @@ size_t match_obj(size_t num_objs, const uint32_t objs[static restrict num_objs],
 	match_obj_(&st, 0, 0, 0, 0);
 	return st.score;
 }
+
+static bool snapshot_drm_object(int drm_fd, drmModeAtomicReq *req,
+		uint32_t object_id) {
+	drmModeObjectProperties *props =
+		drmModeObjectGetProperties(drm_fd, object_id, DRM_MODE_OBJECT_ANY);
+	if (props == NULL) {
+		wlr_log_errno(WLR_ERROR, "drmModeObjectGetProperties failed");
+		return false;
+	}
+
+	bool ok = true;
+	for (uint32_t i = 0; i < props->count_props; i++) {
+		uint32_t prop_id = props->props[i];
+		uint64_t value = props->prop_values[i];
+
+		drmModePropertyRes *prop = drmModeGetProperty(drm_fd, prop_id);
+		if (prop == NULL) {
+			wlr_log_errno(WLR_ERROR, "drmModeGetProperty failed");
+			ok = false;
+			break;
+		}
+		bool immutable = prop->flags & DRM_MODE_PROP_IMMUTABLE;
+		bool dpms = strcmp(prop->name, "DPMS") == 0;
+		drmModeFreeProperty(prop);
+		if (immutable || dpms) {
+			// DPMS is a bit special: it can only be set from the legacy uAPI. Restoring it from the
+			// atomic uAPI will fail.
+			continue;
+		}
+
+		if (drmModeAtomicAddProperty(req, object_id, prop_id, value) < 0) {
+			wlr_log_errno(WLR_ERROR, "drmModeAtomicAddProperty failed");
+			ok = false;
+			break;
+		}
+	}
+
+	drmModeFreeObjectProperties(props);
+	return ok;
+}
+
+drmModeAtomicReq *snapshot_drm_state(int drm_fd) {
+	drmModeAtomicReq *req = drmModeAtomicAlloc();
+	if (req == NULL) {
+		wlr_log_errno(WLR_ERROR, "drmModeAtomicAlloc failed");
+		return false;
+	}
+
+	bool ok = true;
+	drmModeRes *res = drmModeGetResources(drm_fd);
+	if (res == NULL) {
+		wlr_log_errno(WLR_ERROR, "drmModeGetResources failed");
+		goto error;
+	}
+	for (int i = 0; i < res->count_crtcs; i++) {
+		ok = ok && snapshot_drm_object(drm_fd, req, res->crtcs[i]);
+	}
+	for (int i = 0; i < res->count_connectors; i++) {
+		ok = ok && snapshot_drm_object(drm_fd, req, res->connectors[i]);
+	}
+	drmModeFreeResources(res);
+	if (!ok) {
+		goto error;
+	}
+
+	drmModePlaneRes *planes = drmModeGetPlaneResources(drm_fd);
+	if (planes == NULL) {
+		wlr_log_errno(WLR_ERROR, "drmModeGetPlaneResources failed");
+		return false;
+	}
+	for (uint32_t i = 0; i < planes->count_planes; i++) {
+		ok = ok && snapshot_drm_object(drm_fd, req, planes->planes[i]);
+	}
+	drmModeFreePlaneResources(planes);
+	if (!ok) {
+		goto error;
+	}
+
+	return req;
+
+error:
+	drmModeAtomicFree(req);
+	return NULL;
+}

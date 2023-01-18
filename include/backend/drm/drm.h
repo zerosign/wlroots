@@ -85,6 +85,8 @@ struct wlr_drm_backend {
 	uint64_t cursor_width, cursor_height;
 
 	struct wlr_drm_format_set mgpu_formats;
+
+	drmModeAtomicReq *atomic_snapshot;
 };
 
 struct wlr_drm_mode {
