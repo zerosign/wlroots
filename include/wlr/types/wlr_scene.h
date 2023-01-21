@@ -136,8 +136,6 @@ struct wlr_scene_buffer {
 
 	struct {
 		struct wl_signal outputs_update; // struct wlr_scene_outputs_update_event
-		struct wl_signal output_enter; // struct wlr_scene_output
-		struct wl_signal output_leave; // struct wlr_scene_output
 		struct wl_signal output_present; // struct wlr_scene_output
 		struct wl_signal frame_done; // struct timespec
 	} events;
