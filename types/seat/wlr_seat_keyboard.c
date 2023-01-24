@@ -9,38 +9,37 @@
 #include "types/wlr_data_device.h"
 #include "types/wlr_seat.h"
 
-static void default_keyboard_enter(struct wlr_seat_keyboard_grab *grab,
+static void default_keyboard_enter(void *data,
 		struct wlr_surface *surface, uint32_t keycodes[], size_t num_keycodes,
 		struct wlr_keyboard_modifiers *modifiers) {
-	wlr_seat_keyboard_enter(grab->seat, surface, keycodes, num_keycodes, modifiers);
+	wlr_seat_keyboard_enter(data, surface, keycodes, num_keycodes, modifiers);
 }
 
-static void default_keyboard_clear_focus(struct wlr_seat_keyboard_grab *grab) {
-	wlr_seat_keyboard_clear_focus(grab->seat);
+static void default_keyboard_clear_focus(void *data) {
+	wlr_seat_keyboard_clear_focus(data);
 }
 
-static void default_keyboard_key(struct wlr_seat_keyboard_grab *grab,
+static void default_keyboard_key(void *data,
 		uint32_t time, uint32_t key, uint32_t state) {
-	wlr_seat_keyboard_send_key(grab->seat, time, key, state);
+	wlr_seat_keyboard_send_key(data, time, key, state);
 }
 
-static void default_keyboard_modifiers(struct wlr_seat_keyboard_grab *grab,
+static void default_keyboard_modifiers(void *data,
 		struct wlr_keyboard_modifiers *modifiers) {
-	wlr_seat_keyboard_send_modifiers(grab->seat, modifiers);
+	wlr_seat_keyboard_send_modifiers(data, modifiers);
 }
 
-static void default_keyboard_cancel(struct wlr_seat_keyboard_grab *grab) {
+static void default_keyboard_cancel(void *data) {
 	// cannot be cancelled
 }
 
-const struct wlr_keyboard_grab_interface default_keyboard_grab_impl = {
+const struct wlr_keyboard_grab default_keyboard_grab = {
 	.enter = default_keyboard_enter,
 	.clear_focus = default_keyboard_clear_focus,
 	.key = default_keyboard_key,
 	.modifiers = default_keyboard_modifiers,
 	.cancel = default_keyboard_cancel,
 };
-
 
 static void keyboard_release(struct wl_client *client,
 		struct wl_resource *resource) {
@@ -62,7 +61,6 @@ static void keyboard_handle_resource_destroy(struct wl_resource *resource) {
 	wl_list_remove(wl_resource_get_link(resource));
 	seat_client_destroy_keyboard(resource);
 }
-
 
 void wlr_seat_keyboard_send_key(struct wlr_seat *wlr_seat, uint32_t time,
 		uint32_t key, uint32_t state) {
@@ -163,21 +161,24 @@ struct wlr_keyboard *wlr_seat_get_keyboard(struct wlr_seat *seat) {
 }
 
 void wlr_seat_keyboard_start_grab(struct wlr_seat *wlr_seat,
-		struct wlr_seat_keyboard_grab *grab) {
-	grab->seat = wlr_seat;
+		const struct wlr_keyboard_grab *grab, void *data) {
 	wlr_seat->keyboard_state.grab = grab;
+	wlr_seat->keyboard_state.grab_data = data;
 
-	wl_signal_emit_mutable(&wlr_seat->events.keyboard_grab_begin, grab);
+	wl_signal_emit_mutable(&wlr_seat->events.keyboard_grab_begin, NULL);
 }
 
 void wlr_seat_keyboard_end_grab(struct wlr_seat *wlr_seat) {
-	struct wlr_seat_keyboard_grab *grab = wlr_seat->keyboard_state.grab;
+	const struct wlr_keyboard_grab *grab = wlr_seat->keyboard_state.grab;
+	void *grab_data = wlr_seat->keyboard_state.grab_data;
 
-	if (grab != wlr_seat->keyboard_state.default_grab) {
-		wlr_seat->keyboard_state.grab = wlr_seat->keyboard_state.default_grab;
-		wl_signal_emit_mutable(&wlr_seat->events.keyboard_grab_end, grab);
-		if (grab->interface->cancel) {
-			grab->interface->cancel(grab);
+	if (grab != &default_keyboard_grab) {
+		wlr_seat->keyboard_state.grab = &default_keyboard_grab;
+		wlr_seat->keyboard_state.grab_data = wlr_seat;
+
+		wl_signal_emit_mutable(&wlr_seat->events.keyboard_grab_end, NULL);
+		if (grab->cancel) {
+			grab->cancel(grab_data);
 		}
 	}
 }
@@ -311,8 +312,9 @@ void wlr_seat_keyboard_notify_enter(struct wlr_seat *seat,
 	// NULL surfaces are prohibited in the grab-compatible API. Use
 	// wlr_seat_keyboard_notify_clear_focus() instead.
 	assert(surface);
-	struct wlr_seat_keyboard_grab *grab = seat->keyboard_state.grab;
-	grab->interface->enter(grab, surface, keycodes, num_keycodes, modifiers);
+	struct wlr_seat_keyboard_state *keyboard_state = &seat->keyboard_state;
+	keyboard_state->grab->enter(keyboard_state->grab_data,
+		surface, keycodes, num_keycodes, modifiers);
 }
 
 void wlr_seat_keyboard_clear_focus(struct wlr_seat *seat) {
@@ -320,28 +322,27 @@ void wlr_seat_keyboard_clear_focus(struct wlr_seat *seat) {
 }
 
 void wlr_seat_keyboard_notify_clear_focus(struct wlr_seat *seat) {
-	struct wlr_seat_keyboard_grab *grab = seat->keyboard_state.grab;
-	grab->interface->clear_focus(grab);
+	struct wlr_seat_keyboard_state *keyboard_state = &seat->keyboard_state;
+	keyboard_state->grab->clear_focus(keyboard_state->grab_data);
 }
 
 bool wlr_seat_keyboard_has_grab(struct wlr_seat *seat) {
-	return seat->keyboard_state.grab->interface != &default_keyboard_grab_impl;
+	return seat->keyboard_state.grab != &default_keyboard_grab;
 }
 
 void wlr_seat_keyboard_notify_modifiers(struct wlr_seat *seat,
 		struct wlr_keyboard_modifiers *modifiers) {
 	clock_gettime(CLOCK_MONOTONIC, &seat->last_event);
-	struct wlr_seat_keyboard_grab *grab = seat->keyboard_state.grab;
-	grab->interface->modifiers(grab, modifiers);
+	struct wlr_seat_keyboard_state *keyboard_state = &seat->keyboard_state;
+	keyboard_state->grab->modifiers(keyboard_state->grab_data, modifiers);
 }
 
 void wlr_seat_keyboard_notify_key(struct wlr_seat *seat, uint32_t time,
 		uint32_t key, uint32_t state) {
 	clock_gettime(CLOCK_MONOTONIC, &seat->last_event);
-	struct wlr_seat_keyboard_grab *grab = seat->keyboard_state.grab;
-	grab->interface->key(grab, time, key, state);
+	struct wlr_seat_keyboard_state *keyboard_state = &seat->keyboard_state;
+	keyboard_state->grab->key(keyboard_state->grab_data, time, key, state);
 }
-
 
 static void seat_client_send_keymap(struct wlr_seat_client *client,
 		struct wlr_keyboard *keyboard) {
