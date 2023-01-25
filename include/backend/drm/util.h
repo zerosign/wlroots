@@ -40,4 +40,6 @@ size_t match_obj(size_t num_objs, const uint32_t objs[static restrict num_objs],
 		size_t num_res, const uint32_t res[static restrict num_res],
 		uint32_t out[static restrict num_res]);
 
+char *get_drm_bus_str(const drmDevice *dev);
+
 #endif

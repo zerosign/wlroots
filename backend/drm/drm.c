@@ -1446,6 +1446,35 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 
 	free(subconnector);
 
+	char *path = NULL;
+	if (wlr_conn->props.path != 0) {
+		size_t size = 0;
+		void *data = get_drm_prop_blob(drm->fd, wlr_conn->id, wlr_conn->props.path, &size);
+		if (data != NULL) {
+			path = strndup(data, size);
+		}
+		free(data);
+	} else {
+		size_t index = 0;
+		struct wlr_drm_connector *c;
+		wl_list_for_each(c, &drm->connectors, link) {
+			if (c == wlr_conn) {
+				break;
+			}
+			index++;
+		}
+
+		char fallback_path[64];
+		snprintf(fallback_path, sizeof(fallback_path), "connector:%zu", index);
+		path = strdup(fallback_path);
+	}
+	if (path != NULL) {
+		size_t port_size = strlen(drm->bus) + strlen("/") + strlen(path);
+		output->port = malloc(port_size);
+		snprintf(output->port, port_size, "%s/%s", drm->bus, path);
+	}
+	free(path);
+
 	// Before iterating on the conn's modes, get the current KMS mode
 	// in use from the connector's CRTC.
 	drmModeModeInfo *current_modeinfo = connector_get_current_mode(wlr_conn);
