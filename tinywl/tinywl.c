@@ -14,6 +14,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_input_mapper.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
@@ -44,13 +45,10 @@ struct tinywl_server {
 	struct wl_listener new_xdg_surface;
 	struct wl_list views;
 
+	struct wlr_input_mapper *input_mapper;
+
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *cursor_mgr;
-	struct wl_listener cursor_motion;
-	struct wl_listener cursor_motion_absolute;
-	struct wl_listener cursor_button;
-	struct wl_listener cursor_axis;
-	struct wl_listener cursor_frame;
 
 	struct wlr_seat *seat;
 	struct wl_listener new_input;
@@ -101,6 +99,18 @@ struct tinywl_keyboard {
 	struct wl_listener destroy;
 };
 
+struct tinywl_pointer {
+	struct tinywl_server *server;
+	struct wlr_pointer *wlr_pointer;
+
+	struct wl_listener motion;
+	struct wl_listener motion_absolute;
+	struct wl_listener button;
+	struct wl_listener axis;
+	struct wl_listener frame;
+	struct wl_listener destroy;
+};
+
 static void focus_view(struct tinywl_view *view, struct wlr_surface *surface) {
 	/* Note: this function only deals with keyboard focus. */
 	if (view == NULL) {
@@ -140,6 +150,34 @@ static void focus_view(struct tinywl_view *view, struct wlr_surface *surface) {
 		wlr_seat_keyboard_notify_enter(seat, view->xdg_toplevel->base->surface,
 			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
 	}
+}
+
+static struct tinywl_view *desktop_view_at(
+		struct tinywl_server *server, double lx, double ly,
+		struct wlr_surface **surface, double *sx, double *sy) {
+	/* This returns the topmost node in the scene at the given layout coords.
+	 * we only care about surface nodes as we are specifically looking for a
+	 * surface in the surface tree of a tinywl_view. */
+	struct wlr_scene_node *node = wlr_scene_node_at(
+		&server->scene->tree.node, lx, ly, sx, sy);
+	if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
+		return NULL;
+	}
+	struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+	struct wlr_scene_surface *scene_surface =
+		wlr_scene_surface_from_buffer(scene_buffer);
+	if (!scene_surface) {
+		return NULL;
+	}
+
+	*surface = scene_surface->surface;
+	/* Find the node corresponding to the tinywl_view at the root of this
+	 * surface tree, it is the only one for which we set the data field. */
+	struct wlr_scene_tree *tree = node->parent;
+	while (tree != NULL && tree->node.data == NULL) {
+		tree = tree->node.parent;
+	}
+	return tree->node.data;
 }
 
 static void keyboard_handle_modifiers(
@@ -270,99 +308,6 @@ static void server_new_keyboard(struct tinywl_server *server,
 	wl_list_insert(&server->keyboards, &keyboard->link);
 }
 
-static void server_new_pointer(struct tinywl_server *server,
-		struct wlr_input_device *device) {
-	/* We don't do anything special with pointers. All of our pointer handling
-	 * is proxied through wlr_cursor. On another compositor, you might take this
-	 * opportunity to do libinput configuration on the device to set
-	 * acceleration, etc. */
-	wlr_cursor_attach_input_device(server->cursor, device);
-}
-
-static void server_new_input(struct wl_listener *listener, void *data) {
-	/* This event is raised by the backend when a new input device becomes
-	 * available. */
-	struct tinywl_server *server =
-		wl_container_of(listener, server, new_input);
-	struct wlr_input_device *device = data;
-	switch (device->type) {
-	case WLR_INPUT_DEVICE_KEYBOARD:
-		server_new_keyboard(server, device);
-		break;
-	case WLR_INPUT_DEVICE_POINTER:
-		server_new_pointer(server, device);
-		break;
-	default:
-		break;
-	}
-	/* We need to let the wlr_seat know what our capabilities are, which is
-	 * communiciated to the client. In TinyWL we always have a cursor, even if
-	 * there are no pointer devices, so we always include that capability. */
-	uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-	if (!wl_list_empty(&server->keyboards)) {
-		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-	}
-	wlr_seat_set_capabilities(server->seat, caps);
-}
-
-static void seat_request_cursor(struct wl_listener *listener, void *data) {
-	struct tinywl_server *server = wl_container_of(
-			listener, server, request_cursor);
-	/* This event is raised by the seat when a client provides a cursor image */
-	struct wlr_seat_pointer_request_set_cursor_event *event = data;
-	struct wlr_seat_client *focused_client =
-		server->seat->pointer_state.focused_client;
-	/* This can be sent by any client, so we check to make sure this one is
-	 * actually has pointer focus first. */
-	if (focused_client == event->seat_client) {
-		/* Once we've vetted the client, we can tell the cursor to use the
-		 * provided surface as the cursor image. It will set the hardware cursor
-		 * on the output that it's currently on and continue to do so as the
-		 * cursor moves between outputs. */
-		wlr_cursor_set_surface(server->cursor, event->surface,
-				event->hotspot_x, event->hotspot_y);
-	}
-}
-
-static void seat_request_set_selection(struct wl_listener *listener, void *data) {
-	/* This event is raised by the seat when a client wants to set the selection,
-	 * usually when the user copies something. wlroots allows compositors to
-	 * ignore such requests if they so choose, but in tinywl we always honor
-	 */
-	struct tinywl_server *server = wl_container_of(
-			listener, server, request_set_selection);
-	struct wlr_seat_request_set_selection_event *event = data;
-	wlr_seat_set_selection(server->seat, event->source, event->serial);
-}
-
-static struct tinywl_view *desktop_view_at(
-		struct tinywl_server *server, double lx, double ly,
-		struct wlr_surface **surface, double *sx, double *sy) {
-	/* This returns the topmost node in the scene at the given layout coords.
-	 * we only care about surface nodes as we are specifically looking for a
-	 * surface in the surface tree of a tinywl_view. */
-	struct wlr_scene_node *node = wlr_scene_node_at(
-		&server->scene->tree.node, lx, ly, sx, sy);
-	if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
-		return NULL;
-	}
-	struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-	struct wlr_scene_surface *scene_surface =
-		wlr_scene_surface_from_buffer(scene_buffer);
-	if (!scene_surface) {
-		return NULL;
-	}
-
-	*surface = scene_surface->surface;
-	/* Find the node corresponding to the tinywl_view at the root of this
-	 * surface tree, it is the only one for which we set the data field. */
-	struct wlr_scene_tree *tree = node->parent;
-	while (tree != NULL && tree->node.data == NULL) {
-		tree = tree->node.parent;
-	}
-	return tree->node.data;
-}
-
 static void reset_cursor_mode(struct tinywl_server *server) {
 	/* Reset the cursor mode to passthrough. */
 	server->cursor_mode = TINYWL_CURSOR_PASSTHROUGH;
@@ -429,7 +374,13 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 	wlr_xdg_toplevel_set_size(view->xdg_toplevel, new_width, new_height);
 }
 
-static void process_cursor_motion(struct tinywl_server *server, uint32_t time) {
+static void process_cursor_motion(struct tinywl_server *server,
+		struct wlr_input_device *device, uint32_t time, double lx, double ly) {
+	/* Move the cursor to the closest point in the output layout, ensuring that
+	 * it doesn't go outside of it. */
+	wlr_input_mapper_closest_point(server->input_mapper, device, lx, ly, &lx, &ly);
+	wlr_cursor_warp(server->cursor, lx, ly);
+
 	/* If the mode is non-passthrough, delegate to those functions. */
 	if (server->cursor_mode == TINYWL_CURSOR_MOVE) {
 		process_cursor_move(server, time);
@@ -443,8 +394,7 @@ static void process_cursor_motion(struct tinywl_server *server, uint32_t time) {
 	double sx, sy;
 	struct wlr_seat *seat = server->seat;
 	struct wlr_surface *surface = NULL;
-	struct tinywl_view *view = desktop_view_at(server,
-			server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+	struct tinywl_view *view = desktop_view_at(server, lx, ly, &surface, &sx, &sy);
 	if (!view) {
 		/* If there's no view under the cursor, set the cursor image to a
 		 * default. This is what makes the cursor image appear when you move it
@@ -473,51 +423,56 @@ static void process_cursor_motion(struct tinywl_server *server, uint32_t time) {
 	}
 }
 
-static void server_cursor_motion(struct wl_listener *listener, void *data) {
-	/* This event is forwarded by the cursor when a pointer emits a _relative_
-	 * pointer motion event (i.e. a delta) */
-	struct tinywl_server *server =
-		wl_container_of(listener, server, cursor_motion);
+static void pointer_handle_motion(struct wl_listener *listener, void *data) {
+	/* This event is raised on _relative_ pointer motion (i.e. a delta). */
+	struct tinywl_pointer *pointer = wl_container_of(listener, pointer, motion);
 	struct wlr_pointer_motion_event *event = data;
-	/* The cursor doesn't move unless we tell it to. The cursor automatically
-	 * handles constraining the motion to the output layout, as well as any
-	 * special configuration applied for the specific input device which
-	 * generated the event. You can pass NULL for the device if you want to move
-	 * the cursor around without any input. */
-	wlr_cursor_move(server->cursor, &event->pointer->base,
-			event->delta_x, event->delta_y);
-	process_cursor_motion(server, event->time_msec);
+
+	struct tinywl_server *server = pointer->server;
+
+	double lx = server->cursor->x + event->delta_x;
+	double ly = server->cursor->y + event->delta_y;
+	process_cursor_motion(server, &pointer->wlr_pointer->base,
+		event->time_msec, lx, ly);
 }
 
-static void server_cursor_motion_absolute(
+static void pointer_handle_motion_absolute(
 		struct wl_listener *listener, void *data) {
-	/* This event is forwarded by the cursor when a pointer emits an _absolute_
-	 * motion event, from 0..1 on each axis. This happens, for example, when
-	 * wlroots is running under a Wayland window rather than KMS+DRM, and you
-	 * move the mouse over the window. You could enter the window from any edge,
-	 * so we have to warp the mouse there. There is also some hardware which
-	 * emits these events. */
-	struct tinywl_server *server =
-		wl_container_of(listener, server, cursor_motion_absolute);
+	/* This event is raised on _absolute_ pointer motion, in 0..1 range on
+	 * each axis. This happens, for example, when wlroots is running under
+	 * a Wayland window rather than KMS+DRM, and you move the mouse over
+	 * the window. You could enter the window from any edge, so we have to warp
+	 * the mouse there. There is also some hardware which emits these events. */
+	struct tinywl_pointer *pointer =
+		wl_container_of(listener, pointer, motion_absolute);
 	struct wlr_pointer_motion_absolute_event *event = data;
-	wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x,
-		event->y);
-	process_cursor_motion(server, event->time_msec);
+
+	struct tinywl_server *server = pointer->server;
+
+	/* Convert absolute coordinates in 0..1 range to layout-local
+	 * coordinates. */
+	struct wlr_input_device *device = &pointer->wlr_pointer->base;
+	double lx, ly;
+	wlr_input_mapper_absolute_to_layout(server->input_mapper,
+		device, event->x, event->y, &lx, &ly);
+
+	process_cursor_motion(server, device, event->time_msec, lx, ly);
 }
 
-static void server_cursor_button(struct wl_listener *listener, void *data) {
-	/* This event is forwarded by the cursor when a pointer emits a button
-	 * event. */
-	struct tinywl_server *server =
-		wl_container_of(listener, server, cursor_button);
+static void pointer_handle_button(struct wl_listener *listener, void *data) {
+	/* This event is raised a button is pressed or released. */
+	struct tinywl_pointer *pointer = wl_container_of(listener, pointer, button);
 	struct wlr_pointer_button_event *event = data;
+
+	struct tinywl_server *server = pointer->server;
+
 	/* Notify the client with pointer focus that a button press has occurred */
 	wlr_seat_pointer_notify_button(server->seat,
-			event->time_msec, event->button, event->state);
+		event->time_msec, event->button, event->state);
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
 	struct tinywl_view *view = desktop_view_at(server,
-			server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+		server->cursor->x, server->cursor->y, &surface, &sx, &sy);
 	if (event->state == WLR_BUTTON_RELEASED) {
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		reset_cursor_mode(server);
@@ -527,27 +482,120 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 	}
 }
 
-static void server_cursor_axis(struct wl_listener *listener, void *data) {
-	/* This event is forwarded by the cursor when a pointer emits an axis event,
-	 * for example when you move the scroll wheel. */
-	struct tinywl_server *server =
-		wl_container_of(listener, server, cursor_axis);
+static void pointer_handle_axis(struct wl_listener *listener, void *data) {
+	/* This event is raised, for example, when you roll the scroll wheel. */
+	struct tinywl_pointer *pointer = wl_container_of(listener, pointer, axis);
 	struct wlr_pointer_axis_event *event = data;
 	/* Notify the client with pointer focus of the axis event. */
-	wlr_seat_pointer_notify_axis(server->seat,
-			event->time_msec, event->orientation, event->delta,
-			event->delta_discrete, event->source);
+	wlr_seat_pointer_notify_axis(pointer->server->seat,
+		event->time_msec, event->orientation, event->delta,
+		event->delta_discrete, event->source);
 }
 
-static void server_cursor_frame(struct wl_listener *listener, void *data) {
-	/* This event is forwarded by the cursor when a pointer emits an frame
-	 * event. Frame events are sent after regular pointer events to group
-	 * multiple events together. For instance, two axis events may happen at the
-	 * same time, in which case a frame event won't be sent in between. */
-	struct tinywl_server *server =
-		wl_container_of(listener, server, cursor_frame);
+static void pointer_handle_frame(struct wl_listener *listener, void *data) {
+	/* This event is sent after regular pointer events to group multiple
+	 * events together. For instance, two axis events may happen at the same
+	 * time, in which case a frame event won't be sent in between. */
+	struct tinywl_pointer *pointer = wl_container_of(listener, pointer, frame);
 	/* Notify the client with pointer focus of the frame event. */
-	wlr_seat_pointer_notify_frame(server->seat);
+	wlr_seat_pointer_notify_frame(pointer->server->seat);
+}
+
+static void pointer_handle_destroy(struct wl_listener *listener, void *data) {
+	/* This event is raised by the pointer base wlr_input_device to signal
+	 * the destruction of the wlr_pointer. It will no longer receive events
+	 * and should be destroyed.
+	 */
+	struct tinywl_pointer *pointer =
+		wl_container_of(listener, pointer, destroy);
+	wl_list_remove(&pointer->motion.link);
+	wl_list_remove(&pointer->motion_absolute.link);
+	wl_list_remove(&pointer->button.link);
+	wl_list_remove(&pointer->axis.link);
+	wl_list_remove(&pointer->frame.link);
+	wl_list_remove(&pointer->destroy.link);
+	free(pointer);
+}
+
+static void server_new_pointer(struct tinywl_server *server,
+		struct wlr_input_device *device) {
+	struct wlr_pointer *wlr_pointer = wlr_pointer_from_input_device(device);
+
+	struct tinywl_pointer *pointer =
+		calloc(1, sizeof(struct tinywl_pointer));
+	pointer->server = server;
+	pointer->wlr_pointer = wlr_pointer;
+
+	/* Here we set up listeners for pointer events. */
+	pointer->motion.notify = pointer_handle_motion;
+	wl_signal_add(&wlr_pointer->events.motion, &pointer->motion);
+	pointer->motion_absolute.notify = pointer_handle_motion_absolute;
+	wl_signal_add(&wlr_pointer->events.motion_absolute,
+		&pointer->motion_absolute);
+	pointer->button.notify = pointer_handle_button;
+	wl_signal_add(&wlr_pointer->events.button, &pointer->button);
+	pointer->axis.notify = pointer_handle_axis;
+	wl_signal_add(&wlr_pointer->events.axis, &pointer->axis);
+	pointer->frame.notify = pointer_handle_frame;
+	wl_signal_add(&wlr_pointer->events.frame, &pointer->frame);
+	pointer->destroy.notify = pointer_handle_destroy;
+	wl_signal_add(&device->events.destroy, &pointer->destroy);
+}
+
+static void server_new_input(struct wl_listener *listener, void *data) {
+	/* This event is raised by the backend when a new input device becomes
+	 * available. */
+	struct tinywl_server *server =
+		wl_container_of(listener, server, new_input);
+	struct wlr_input_device *device = data;
+	switch (device->type) {
+	case WLR_INPUT_DEVICE_KEYBOARD:
+		server_new_keyboard(server, device);
+		break;
+	case WLR_INPUT_DEVICE_POINTER:
+		server_new_pointer(server, device);
+		break;
+	default:
+		break;
+	}
+	/* We need to let the wlr_seat know what our capabilities are, which is
+	 * communiciated to the client. In TinyWL we always have a cursor, even if
+	 * there are no pointer devices, so we always include that capability. */
+	uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+	if (!wl_list_empty(&server->keyboards)) {
+		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+	}
+	wlr_seat_set_capabilities(server->seat, caps);
+}
+
+static void seat_request_cursor(struct wl_listener *listener, void *data) {
+	struct tinywl_server *server = wl_container_of(
+			listener, server, request_cursor);
+	/* This event is raised by the seat when a client provides a cursor image */
+	struct wlr_seat_pointer_request_set_cursor_event *event = data;
+	struct wlr_seat_client *focused_client =
+		server->seat->pointer_state.focused_client;
+	/* This can be sent by any client, so we check to make sure this one is
+	 * actually has pointer focus first. */
+	if (focused_client == event->seat_client) {
+		/* Once we've vetted the client, we can tell the cursor to use the
+		 * provided surface as the cursor image. It will set the hardware cursor
+		 * on the output that it's currently on and continue to do so as the
+		 * cursor moves between outputs. */
+		wlr_cursor_set_surface(server->cursor, event->surface,
+				event->hotspot_x, event->hotspot_y);
+	}
+}
+
+static void seat_request_set_selection(struct wl_listener *listener, void *data) {
+	/* This event is raised by the seat when a client wants to set the selection,
+	 * usually when the user copies something. wlroots allows compositors to
+	 * ignore such requests if they so choose, but in tinywl we always honor
+	 */
+	struct tinywl_server *server = wl_container_of(
+			listener, server, request_set_selection);
+	struct wlr_seat_request_set_selection_event *event = data;
+	wlr_seat_set_selection(server->seat, event->source, event->serial);
 }
 
 static void output_frame(struct wl_listener *listener, void *data) {
@@ -913,12 +961,18 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.xdg_shell->events.new_surface,
 			&server.new_xdg_surface);
 
+	/* Create an input mapper, which is a wlroots utility for converting
+	 * absolute coordinates received from input devices to layout-local
+	 * coordinates and applying coordinate constraints. */
+	server.input_mapper = wlr_input_mapper_create();
+	wlr_input_mapper_attach_output_layout(server.input_mapper,
+		server.output_layout);
+
 	/*
 	 * Creates a cursor, which is a wlroots utility for tracking the cursor
 	 * image shown on screen.
 	 */
-	server.cursor = wlr_cursor_create();
-	wlr_cursor_attach_output_layout(server.cursor, server.output_layout);
+	server.cursor = wlr_cursor_create(server.output_layout);
 
 	/* Creates an xcursor manager, another wlroots utility which loads up
 	 * Xcursor themes to source cursor images from and makes sure that cursor
@@ -927,30 +981,7 @@ int main(int argc, char *argv[]) {
 	server.cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
 	wlr_xcursor_manager_load(server.cursor_mgr, 1);
 
-	/*
-	 * wlr_cursor *only* displays an image on screen. It does not move around
-	 * when the pointer moves. However, we can attach input devices to it, and
-	 * it will generate aggregate events for all of them. In these events, we
-	 * can choose how we want to process them, forwarding them to clients and
-	 * moving the cursor around. More detail on this process is described in my
-	 * input handling blog post:
-	 *
-	 * https://drewdevault.com/2018/07/17/Input-handling-in-wlroots.html
-	 *
-	 * And more comments are sprinkled throughout the notify functions above.
-	 */
 	server.cursor_mode = TINYWL_CURSOR_PASSTHROUGH;
-	server.cursor_motion.notify = server_cursor_motion;
-	wl_signal_add(&server.cursor->events.motion, &server.cursor_motion);
-	server.cursor_motion_absolute.notify = server_cursor_motion_absolute;
-	wl_signal_add(&server.cursor->events.motion_absolute,
-			&server.cursor_motion_absolute);
-	server.cursor_button.notify = server_cursor_button;
-	wl_signal_add(&server.cursor->events.button, &server.cursor_button);
-	server.cursor_axis.notify = server_cursor_axis;
-	wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
-	server.cursor_frame.notify = server_cursor_frame;
-	wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
 
 	/*
 	 * Configures a seat, which is a single "seat" at which a user sits and

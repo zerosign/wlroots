@@ -12,6 +12,7 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_input_mapper.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_output_layout.h>
@@ -28,30 +29,11 @@ struct sample_state {
 	float default_color[4];
 	float clear_color[4];
 	struct wlr_output_layout *layout;
-	struct wl_list cursors; // sample_cursor::link
-	struct wl_list pointers; // sample_pointer::link
-	struct wl_list outputs; // sample_output::link
-	struct timespec last_frame;
+	struct wlr_input_mapper *input_mapper;
+	struct wl_list outputs; // sample_output.link
+	struct wl_list pointers; // sample_pointers.link
 	struct wl_listener new_output;
 	struct wl_listener new_input;
-};
-
-struct sample_cursor {
-	struct sample_state *sample;
-	struct wlr_input_device *device;
-	struct wlr_cursor *cursor;
-	struct wl_list link;
-
-	struct wl_listener cursor_motion;
-	struct wl_listener cursor_motion_absolute;
-	struct wl_listener cursor_button;
-	struct wl_listener cursor_axis;
-	struct wl_listener destroy;
-};
-
-struct sample_pointer {
-	struct wlr_input_device *device;
-	struct wl_list link;
 };
 
 struct sample_output {
@@ -69,25 +51,15 @@ struct sample_keyboard {
 	struct wl_listener destroy;
 };
 
-static void configure_cursor(struct wlr_cursor *cursor, struct wlr_input_device *device,
-		 struct sample_state *sample) {
-	struct sample_output *output;
-	wlr_log(WLR_INFO, "Configuring cursor %p for device %p", cursor, device);
-
-	// reset mappings
-	wlr_cursor_map_to_output(cursor, NULL);
-	wlr_cursor_detach_input_device(cursor, device);
-	wlr_cursor_map_input_to_output(cursor, device, NULL);
-
-	wlr_cursor_attach_input_device(cursor, device);
-
-	// configure device to output mappings
-	wl_list_for_each(output, &sample->outputs, link) {
-		wlr_cursor_map_to_output(cursor, output->output);
-
-		wlr_cursor_map_input_to_output(cursor, device, output->output);
-	}
-}
+struct sample_pointer {
+	struct sample_state *sample;
+	struct wlr_pointer *wlr_pointer;
+	struct wlr_cursor *cursor;
+	struct wl_listener motion;
+	struct wl_listener motion_absolute;
+	struct wl_listener destroy;
+	struct wl_list link;
+};
 
 static void output_frame_notify(struct wl_listener *listener, void *data) {
 	struct sample_output *output = wl_container_of(listener, output, frame);
@@ -106,43 +78,39 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 	wlr_output_commit(wlr_output);
 }
 
-static void handle_cursor_motion(struct wl_listener *listener, void *data) {
-	struct sample_cursor *cursor =
-		wl_container_of(listener, cursor, cursor_motion);
+static void pointer_motion_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer = wl_container_of(listener, pointer, motion);
 	struct wlr_pointer_motion_event *event = data;
-	wlr_cursor_move(cursor->cursor, &event->pointer->base, event->delta_x,
-		event->delta_y);
+	wlr_cursor_warp(pointer->cursor, pointer->cursor->x + event->delta_x,
+		pointer->cursor->y + event->delta_y);
 }
 
-static void handle_cursor_motion_absolute(struct wl_listener *listener,
-		void *data) {
-	struct sample_cursor *cursor =
-		wl_container_of(listener, cursor, cursor_motion_absolute);
+static void pointer_motion_absolute_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer =
+		wl_container_of(listener, pointer, motion_absolute);
 	struct wlr_pointer_motion_absolute_event *event = data;
-	wlr_cursor_warp_absolute(cursor->cursor, &event->pointer->base, event->x,
-		event->y);
+	double lx, ly;
+	wlr_input_mapper_absolute_to_layout(pointer->sample->input_mapper,
+		&pointer->wlr_pointer->base, event->x, event->y, &lx, &ly);
+	wlr_cursor_warp(pointer->cursor, lx, ly);
 }
 
-static void cursor_destroy(struct sample_cursor *cursor) {
-	wl_list_remove(&cursor->link);
-	wl_list_remove(&cursor->cursor_motion.link);
-	wl_list_remove(&cursor->cursor_motion_absolute.link);
-	wlr_cursor_destroy(cursor->cursor);
-	free(cursor);
+static void pointer_destroy_notify(struct wl_listener *listener, void *data) {
+	struct sample_pointer *pointer = wl_container_of(listener, pointer, destroy);
+	wlr_cursor_destroy(pointer->cursor);
+	wl_list_remove(&pointer->link);
+	wl_list_remove(&pointer->destroy.link);
+	wl_list_remove(&pointer->motion.link);
+	wl_list_remove(&pointer->motion_absolute.link);
+	free(pointer);
 }
 
 static void output_remove_notify(struct wl_listener *listener, void *data) {
 	struct sample_output *sample_output = wl_container_of(listener, sample_output, destroy);
-	struct sample_state *sample = sample_output->sample;
 	wl_list_remove(&sample_output->frame.link);
 	wl_list_remove(&sample_output->destroy.link);
 	wl_list_remove(&sample_output->link);
 	free(sample_output);
-
-	struct sample_cursor *cursor;
-	wl_list_for_each(cursor, &sample->cursors, link) {
-		configure_cursor(cursor->cursor, cursor->device, sample);
-	}
 }
 
 static void new_output_notify(struct wl_listener *listener, void *data) {
@@ -161,18 +129,14 @@ static void new_output_notify(struct wl_listener *listener, void *data) {
 
 	wlr_output_layout_add_auto(sample->layout, output);
 
-	struct sample_cursor *cursor;
-	wl_list_for_each(cursor, &sample->cursors, link) {
-		configure_cursor(cursor->cursor, cursor->device, sample);
-
-		struct wlr_xcursor_image *image = sample->xcursor->images[0];
-		wlr_cursor_set_image(cursor->cursor, image->buffer, image->width * 4,
-			image->width, image->height, image->hotspot_x, image->hotspot_y, 0);
-
-		wlr_cursor_warp(cursor->cursor, NULL, cursor->cursor->x,
-			cursor->cursor->y);
-	}
 	wl_list_insert(&sample->outputs, &sample_output->link);
+
+	struct sample_pointer *pointer;
+	wl_list_for_each(pointer, &sample->pointers, link) {
+		struct wlr_xcursor_image *image = sample->xcursor->images[0];
+		wlr_cursor_set_image(pointer->cursor, image->buffer, image->width * 4,
+			image->width, image->height, image->hotspot_x, image->hotspot_y, 0);
+	}
 
 	struct wlr_output_mode *mode = wlr_output_preferred_mode(output);
 	if (mode != NULL) {
@@ -233,31 +197,24 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 		xkb_context_unref(context);
 		break;
 	case WLR_INPUT_DEVICE_POINTER:;
-		struct sample_cursor *cursor = calloc(1, sizeof(struct sample_cursor));
 		struct sample_pointer *pointer = calloc(1, sizeof(struct sample_pointer));
-		pointer->device = device;
-		cursor->sample = sample;
-		cursor->device = device;
+		pointer->wlr_pointer = wlr_pointer_from_input_device(device);
+		pointer->sample = sample;
+		pointer->cursor = wlr_cursor_create(sample->layout);
 
-		cursor->cursor = wlr_cursor_create();
+		wl_list_insert(&sample->pointers, &pointer->link);
 
-		wlr_cursor_attach_output_layout(cursor->cursor, sample->layout);
-
-		wl_signal_add(&cursor->cursor->events.motion, &cursor->cursor_motion);
-		cursor->cursor_motion.notify = handle_cursor_motion;
-		wl_signal_add(&cursor->cursor->events.motion_absolute,
-			&cursor->cursor_motion_absolute);
-		cursor->cursor_motion_absolute.notify = handle_cursor_motion_absolute;
-
-		wlr_cursor_attach_input_device(cursor->cursor, device);
-		configure_cursor(cursor->cursor, device, sample);
+		wl_signal_add(&device->events.destroy, &pointer->destroy);
+		pointer->destroy.notify = pointer_destroy_notify;
+		wl_signal_add(&pointer->wlr_pointer->events.motion, &pointer->motion);
+		pointer->motion.notify = pointer_motion_notify;
+		wl_signal_add(&pointer->wlr_pointer->events.motion_absolute,
+			&pointer->motion_absolute);
+		pointer->motion_absolute.notify = pointer_motion_absolute_notify;
 
 		struct wlr_xcursor_image *image = sample->xcursor->images[0];
-		wlr_cursor_set_image(cursor->cursor, image->buffer, image->width * 4,
+		wlr_cursor_set_image(pointer->cursor, image->buffer, image->width * 4,
 			image->width, image->height, image->hotspot_x, image->hotspot_y, 0);
-
-		wl_list_insert(&sample->cursors, &cursor->link);
-		wl_list_insert(&sample->pointers, &pointer->link);
 		break;
 	default:
 		break;
@@ -280,18 +237,15 @@ int main(int argc, char *argv[]) {
 	state.renderer = wlr_renderer_autocreate(wlr);
 	state.allocator = wlr_allocator_autocreate(wlr, state.renderer);
 
-	wl_list_init(&state.cursors);
-	wl_list_init(&state.pointers);
 	wl_list_init(&state.outputs);
-
 	state.layout = wlr_output_layout_create();
+
+	wl_list_init(&state.pointers);
 
 	wl_signal_add(&wlr->events.new_output, &state.new_output);
 	state.new_output.notify = new_output_notify;
 	wl_signal_add(&wlr->events.new_input, &state.new_input);
 	state.new_input.notify = new_input_notify;
-
-	clock_gettime(CLOCK_MONOTONIC, &state.last_frame);
 
 	struct wlr_xcursor_theme *theme = wlr_xcursor_theme_load("default", 16);
 	if (!theme) {
@@ -311,16 +265,6 @@ int main(int argc, char *argv[]) {
 	}
 	wl_display_run(display);
 	wl_display_destroy(display);
-
-	struct sample_cursor *cursor, *tmp_cursor;
-	wl_list_for_each_safe(cursor, tmp_cursor, &state.cursors, link) {
-		cursor_destroy(cursor);
-	}
-
-	struct sample_pointer *pointer, *tmp_pointer;
-	wl_list_for_each_safe(pointer, tmp_pointer, &state.pointers, link) {
-		free(pointer);
-	}
 
 	wlr_xcursor_theme_destroy(theme);
 	wlr_output_layout_destroy(state.layout);
