@@ -22,6 +22,13 @@ struct wlr_gles2_pixel_format {
 	bool has_alpha;
 };
 
+struct wlr_gles2_quad_shader {
+	GLuint program;
+	GLint proj;
+	GLint color;
+	GLint pos_attrib;
+};
+
 struct wlr_gles2_tex_shader {
 	GLuint program;
 	GLint proj;
@@ -57,15 +64,11 @@ struct wlr_gles2_renderer {
 		PFNGLPUSHDEBUGGROUPKHRPROC glPushDebugGroupKHR;
 		PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
 		PFNGLGETGRAPHICSRESETSTATUSKHRPROC glGetGraphicsResetStatusKHR;
+		PFNGLTEXIMAGE3DOESPROC glTexImage3DOES;
 	} procs;
 
 	struct {
-		struct {
-			GLuint program;
-			GLint proj;
-			GLint color;
-			GLint pos_attrib;
-		} quad;
+		struct wlr_gles2_quad_shader quad;
 		struct wlr_gles2_tex_shader tex_rgba;
 		struct wlr_gles2_tex_shader tex_rgbx;
 		struct wlr_gles2_tex_shader tex_ext;
@@ -112,6 +115,22 @@ struct wlr_gles2_texture {
 	struct wlr_addon buffer_addon;
 };
 
+enum wlr_gles2_shader_source {
+	WLR_GLES2_SHADER_SOURCE_SINGLE_COLOR = 1,
+	WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBA = 2,
+	WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBX = 3,
+	WLR_GLES2_SHADER_SOURCE_TEXTURE_EXTERNAL = 4,
+};
+
+enum wlr_gles2_shader_color_transform {
+	WLR_GLES2_SHADER_COLOR_TRANSFORM_IDENTITY = 0,
+	WLR_GLES2_SHADER_COLOR_TRANSFORM_LUT_3D = 1,
+};
+
+struct wlr_gles2_shader_params {
+	enum wlr_gles2_shader_source source;
+	enum wlr_gles2_shader_color_transform color_transform;
+};
 
 bool is_gles2_pixel_format_supported(const struct wlr_gles2_renderer *renderer,
 	const struct wlr_gles2_pixel_format *format);

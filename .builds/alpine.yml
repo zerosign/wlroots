@@ -3,6 +3,7 @@ packages:
   - eudev-dev
   - ffmpeg-dev
   - glslang
+  - lcms2-dev
   - libinput-dev
   - libxkbcommon-dev
   - mesa-dev

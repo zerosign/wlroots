@@ -20,10 +20,7 @@
 #include "types/wlr_matrix.h"
 
 #include "common_vert_src.h"
-#include "quad_frag_src.h"
-#include "tex_rgba_frag_src.h"
-#include "tex_rgbx_frag_src.h"
-#include "tex_external_frag_src.h"
+#include "common_frag_src.h"
 
 static const GLfloat verts[] = {
 	1, 0, // top right
@@ -610,11 +607,11 @@ static void gles2_log(GLenum src, GLenum type, GLuint id, GLenum severity,
 }
 
 static GLuint compile_shader(struct wlr_gles2_renderer *renderer,
-		GLuint type, const GLchar *src) {
+		GLuint type, const GLchar **srcs, size_t srcs_len) {
 	push_gles2_debug(renderer);
 
 	GLuint shader = glCreateShader(type);
-	glShaderSource(shader, 1, &src, NULL);
+	glShaderSource(shader, srcs_len, srcs, NULL);
 	glCompileShader(shader);
 
 	GLint ok;
@@ -630,15 +627,24 @@ static GLuint compile_shader(struct wlr_gles2_renderer *renderer,
 }
 
 static GLuint link_program(struct wlr_gles2_renderer *renderer,
-		const GLchar *vert_src, const GLchar *frag_src) {
+		const struct wlr_gles2_shader_params *params) {
+	static char frag_preamble[1024];
+	snprintf(frag_preamble, sizeof(frag_preamble),
+		"#define SOURCE %d\n"
+		"#define COLOR_TRANSFORM %d\n",
+		params->source, params->color_transform);
+
 	push_gles2_debug(renderer);
 
-	GLuint vert = compile_shader(renderer, GL_VERTEX_SHADER, vert_src);
+	const GLchar *vert_src = common_vert_src;
+	GLuint vert = compile_shader(renderer, GL_VERTEX_SHADER, &vert_src, 1);
 	if (!vert) {
 		goto error;
 	}
 
-	GLuint frag = compile_shader(renderer, GL_FRAGMENT_SHADER, frag_src);
+	const GLchar *frag_srcs[2] = { frag_preamble, common_frag_src };
+	GLuint frag =
+		compile_shader(renderer, GL_FRAGMENT_SHADER, frag_srcs, 2);
 	if (!frag) {
 		glDeleteShader(vert);
 		goto error;
@@ -668,6 +674,23 @@ static GLuint link_program(struct wlr_gles2_renderer *renderer,
 error:
 	pop_gles2_debug(renderer);
 	return 0;
+}
+
+static bool link_tex_program(struct wlr_gles2_renderer *renderer,
+		struct wlr_gles2_tex_shader *shader,
+		const struct wlr_gles2_shader_params *params) {
+	shader->program = link_program(renderer, params);
+	if (!shader->program) {
+		return false;
+	}
+
+	shader->proj = glGetUniformLocation(shader->program, "proj");
+	shader->tex = glGetUniformLocation(shader->program, "tex");
+	shader->alpha = glGetUniformLocation(shader->program, "alpha");
+	shader->pos_attrib = glGetAttribLocation(shader->program, "pos");
+	shader->tex_attrib = glGetAttribLocation(shader->program, "texcoord");
+
+	return true;
 }
 
 static bool check_gl_ext(const char *exts, const char *ext) {
@@ -808,6 +831,10 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 		}
 	}
 
+	if (check_gl_ext(exts_str, "GL_OES_texture_3D")) {
+		load_gl_proc(&renderer->procs.glTexImage3DOES, "glTexImage3DOES");
+	}
+
 	if (renderer->exts.KHR_debug) {
 		glEnable(GL_DEBUG_OUTPUT_KHR);
 		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
@@ -822,9 +849,18 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 
 	push_gles2_debug(renderer);
 
+	enum wlr_gles2_shader_color_transform color_transform =
+		WLR_GLES2_SHADER_COLOR_TRANSFORM_IDENTITY;
+	if (renderer->procs.glTexImage3DOES != NULL) {
+		color_transform = WLR_GLES2_SHADER_COLOR_TRANSFORM_LUT_3D;
+	}
+
 	GLuint prog;
 	renderer->shaders.quad.program = prog =
-		link_program(renderer, common_vert_src, quad_frag_src);
+		link_program(renderer, &(struct wlr_gles2_shader_params){
+			.source = WLR_GLES2_SHADER_SOURCE_SINGLE_COLOR,
+			.color_transform = color_transform,
+		});
 	if (!renderer->shaders.quad.program) {
 		goto error;
 	}
@@ -832,39 +868,27 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	renderer->shaders.quad.color = glGetUniformLocation(prog, "color");
 	renderer->shaders.quad.pos_attrib = glGetAttribLocation(prog, "pos");
 
-	renderer->shaders.tex_rgba.program = prog =
-		link_program(renderer, common_vert_src, tex_rgba_frag_src);
-	if (!renderer->shaders.tex_rgba.program) {
+	if (!link_tex_program(renderer, &renderer->shaders.tex_rgba,
+			&(struct wlr_gles2_shader_params){
+				.source = WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBA,
+				.color_transform = color_transform,
+			})) {
 		goto error;
 	}
-	renderer->shaders.tex_rgba.proj = glGetUniformLocation(prog, "proj");
-	renderer->shaders.tex_rgba.tex = glGetUniformLocation(prog, "tex");
-	renderer->shaders.tex_rgba.alpha = glGetUniformLocation(prog, "alpha");
-	renderer->shaders.tex_rgba.pos_attrib = glGetAttribLocation(prog, "pos");
-	renderer->shaders.tex_rgba.tex_attrib = glGetAttribLocation(prog, "texcoord");
-
-	renderer->shaders.tex_rgbx.program = prog =
-		link_program(renderer, common_vert_src, tex_rgbx_frag_src);
-	if (!renderer->shaders.tex_rgbx.program) {
+	if (!link_tex_program(renderer, &renderer->shaders.tex_rgbx,
+			&(struct wlr_gles2_shader_params){
+				.source = WLR_GLES2_SHADER_SOURCE_TEXTURE_RGBX,
+				.color_transform = color_transform,
+			})) {
 		goto error;
 	}
-	renderer->shaders.tex_rgbx.proj = glGetUniformLocation(prog, "proj");
-	renderer->shaders.tex_rgbx.tex = glGetUniformLocation(prog, "tex");
-	renderer->shaders.tex_rgbx.alpha = glGetUniformLocation(prog, "alpha");
-	renderer->shaders.tex_rgbx.pos_attrib = glGetAttribLocation(prog, "pos");
-	renderer->shaders.tex_rgbx.tex_attrib = glGetAttribLocation(prog, "texcoord");
-
-	if (renderer->exts.OES_egl_image_external) {
-		renderer->shaders.tex_ext.program = prog =
-			link_program(renderer, common_vert_src, tex_external_frag_src);
-		if (!renderer->shaders.tex_ext.program) {
-			goto error;
-		}
-		renderer->shaders.tex_ext.proj = glGetUniformLocation(prog, "proj");
-		renderer->shaders.tex_ext.tex = glGetUniformLocation(prog, "tex");
-		renderer->shaders.tex_ext.alpha = glGetUniformLocation(prog, "alpha");
-		renderer->shaders.tex_ext.pos_attrib = glGetAttribLocation(prog, "pos");
-		renderer->shaders.tex_ext.tex_attrib = glGetAttribLocation(prog, "texcoord");
+	if (renderer->exts.OES_egl_image_external &&
+			!link_tex_program(renderer, &renderer->shaders.tex_ext,
+			&(struct wlr_gles2_shader_params){
+				.source = WLR_GLES2_SHADER_SOURCE_TEXTURE_EXTERNAL,
+				.color_transform = color_transform,
+			})) {
+		goto error;
 	}
 
 	pop_gles2_debug(renderer);

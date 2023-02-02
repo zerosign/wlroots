@@ -2,6 +2,7 @@ image: archlinux
 packages:
   - clang
   - ffmpeg
+  - lcms2
   - libinput
   - libxkbcommon
   - mesa
