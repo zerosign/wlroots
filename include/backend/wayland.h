@@ -104,6 +104,7 @@ struct wlr_wl_output {
 	struct {
 		struct wlr_wl_pointer *pointer;
 		struct wl_surface *surface;
+		struct wlr_buffer *buffer;
 		int32_t hotspot_x, hotspot_y;
 	} cursor;
 };
