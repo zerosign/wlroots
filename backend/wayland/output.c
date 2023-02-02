@@ -366,34 +366,18 @@ static bool output_commit(struct wlr_output *wlr_output,
 static bool output_set_cursor(struct wlr_output *wlr_output,
 		struct wlr_buffer *wlr_buffer, int hotspot_x, int hotspot_y) {
 	struct wlr_wl_output *output = get_wl_output_from_output(wlr_output);
-	struct wlr_wl_backend *backend = output->backend;
 
 	output->cursor.hotspot_x = hotspot_x;
 	output->cursor.hotspot_y = hotspot_y;
 
-	if (output->cursor.surface == NULL) {
-		output->cursor.surface =
-			wl_compositor_create_surface(backend->compositor);
-	}
-	struct wl_surface *surface = output->cursor.surface;
+	wlr_buffer_unlock(output->cursor.buffer);
+	output->cursor.buffer = NULL;
 
-	if (wlr_buffer != NULL) {
-		struct wlr_wl_buffer *buffer =
-			get_or_create_wl_buffer(output->backend, wlr_buffer);
-		if (buffer == NULL) {
-			return false;
-		}
-
-		wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
-		wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
-		wl_surface_commit(surface);
-	} else {
-		wl_surface_attach(surface, NULL, 0, 0);
-		wl_surface_commit(surface);
+	if (wlr_buffer) {
+		output->cursor.buffer = wlr_buffer_lock(wlr_buffer);
 	}
 
 	update_wl_output_cursor(output);
-	wl_display_flush(backend->remote_display);
 	return true;
 }
 
@@ -442,15 +426,41 @@ static void output_destroy(struct wlr_output *wlr_output) {
 
 void update_wl_output_cursor(struct wlr_wl_output *output) {
 	struct wlr_wl_pointer *pointer = output->cursor.pointer;
-	if (pointer) {
-		assert(pointer->output == output);
-		assert(output->enter_serial);
-
-		struct wlr_wl_seat *seat = pointer->seat;
-		wl_pointer_set_cursor(seat->wl_pointer, output->enter_serial,
-			output->cursor.surface, output->cursor.hotspot_x,
-			output->cursor.hotspot_y);
+	if (!pointer || !output->cursor.buffer) {
+		return;
 	}
+
+	assert(pointer->output == output);
+	assert(output->enter_serial);
+
+	struct wlr_wl_backend *backend = output->backend;
+
+	if (output->cursor.surface == NULL) {
+		output->cursor.surface =
+			wl_compositor_create_surface(backend->compositor);
+	}
+
+	struct wl_surface *surface = output->cursor.surface;
+	if (!surface) {
+		return;
+	}
+
+	struct wlr_wl_buffer *buffer =
+		get_or_create_wl_buffer(output->backend, output->cursor.buffer);
+	if (!buffer) {
+		return;
+	}
+
+	wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
+	wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
+	wl_surface_commit(surface);
+
+	wl_display_flush(backend->remote_display);
+
+	struct wlr_wl_seat *seat = pointer->seat;
+	wl_pointer_set_cursor(seat->wl_pointer, output->enter_serial,
+		output->cursor.surface, output->cursor.hotspot_x,
+		output->cursor.hotspot_y);
 }
 
 static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
