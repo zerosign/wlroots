@@ -95,17 +95,6 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
 	if (node->type == WLR_SCENE_NODE_BUFFER) {
 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
 
-		uint64_t active = scene_buffer->active_outputs;
-		if (active) {
-			struct wlr_scene_output *scene_output;
-			wl_list_for_each(scene_output, &scene->outputs, link) {
-				if (active & (1ull << scene_output->index)) {
-					wl_signal_emit_mutable(&scene_buffer->events.output_leave,
-						scene_output);
-				}
-			}
-		}
-
 		wlr_texture_destroy(scene_buffer->texture);
 		wlr_buffer_unlock(scene_buffer->buffer);
 		pixman_region32_fini(&scene_buffer->opaque_region);
@@ -312,12 +301,6 @@ static void update_node_update_outputs(struct wlr_scene_node *node,
 	size_t count = 0;
 	uint64_t active_outputs = 0;
 
-	// let's update the outputs in two steps:
-	//  - the primary outputs
-	//  - the enter/leave signals
-	// This ensures that the enter/leave signals can rely on the primary output
-	// to have a reasonable value. Otherwise, they may get a value that's in
-	// the middle of a calculation.
 	struct wlr_scene_output *scene_output;
 	wl_list_for_each(scene_output, outputs, link) {
 		if (scene_output == ignore) {
@@ -354,27 +337,12 @@ static void update_node_update_outputs(struct wlr_scene_node *node,
 		pixman_region32_fini(&intersection);
 	}
 
-	uint64_t old_active = scene_buffer->active_outputs;
-	scene_buffer->active_outputs = active_outputs;
-
-	wl_list_for_each(scene_output, outputs, link) {
-		uint64_t mask = 1ull << scene_output->index;
-		bool intersects = active_outputs & mask;
-		bool intersects_before = old_active & mask;
-
-		if (intersects && !intersects_before) {
-			wl_signal_emit_mutable(&scene_buffer->events.output_enter, scene_output);
-		} else if (!intersects && intersects_before) {
-			wl_signal_emit_mutable(&scene_buffer->events.output_leave, scene_output);
-		}
-	}
-
 	// if there are active outputs on this node, we should always have a primary
 	// output
-	assert(!scene_buffer->active_outputs || scene_buffer->primary_output);
+	assert(!active_outputs || scene_buffer->primary_output);
 
 	// if no outputs changes intersection status, skip calling outputs_update
-	if (old_active == active_outputs) {
+	if (scene_buffer->active_outputs == active_outputs) {
 		return;
 	}
 
@@ -394,6 +362,7 @@ static void update_node_update_outputs(struct wlr_scene_node *node,
 		outputs_array[i++] = scene_output;
 	}
 
+	scene_buffer->active_outputs = active_outputs;
 	wl_signal_emit_mutable(&scene_buffer->events.outputs_update, &event);
 }
 
@@ -574,8 +543,6 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
 	}
 
 	wl_signal_init(&scene_buffer->events.outputs_update);
-	wl_signal_init(&scene_buffer->events.output_enter);
-	wl_signal_init(&scene_buffer->events.output_leave);
 	wl_signal_init(&scene_buffer->events.output_present);
 	wl_signal_init(&scene_buffer->events.frame_done);
 	pixman_region32_init(&scene_buffer->opaque_region);
