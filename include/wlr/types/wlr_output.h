@@ -14,6 +14,7 @@
 #include <time.h>
 #include <wayland-server-protocol.h>
 #include <wayland-util.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/util/addon.h>
 
@@ -192,7 +193,7 @@ struct wlr_output {
 
 	struct wl_list cursors; // wlr_output_cursor::link
 	struct wlr_output_cursor *hardware_cursor;
-	struct wlr_swapchain *cursor_swapchain;
+	struct wlr_swapchain cursor_swapchain;
 	struct wlr_buffer *cursor_front_buffer;
 	int software_cursor_locks; // number of locks forcing software cursors
 
@@ -200,7 +201,7 @@ struct wlr_output {
 
 	struct wlr_allocator *allocator;
 	struct wlr_renderer *renderer;
-	struct wlr_swapchain *swapchain;
+	struct wlr_swapchain swapchain;
 	struct wlr_buffer *back_buffer;
 
 	struct wl_listener display_destroy;

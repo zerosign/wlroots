@@ -26,10 +26,10 @@ struct wlr_swapchain {
 	struct wl_listener allocator_destroy;
 };
 
-struct wlr_swapchain *wlr_swapchain_create(
+bool wlr_swapchain_init(struct wlr_swapchain *swapchain,
 	struct wlr_allocator *alloc, int width, int height,
 	const struct wlr_drm_format *format);
-void wlr_swapchain_destroy(struct wlr_swapchain *swapchain);
+void wlr_swapchain_finish(struct wlr_swapchain *swapchain);
 /**
  * Acquire a buffer from the swap chain.
  *

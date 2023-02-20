@@ -7,7 +7,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <wayland-util.h>
-#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/log.h>
@@ -53,24 +52,22 @@ static void finish_drm_surface(struct wlr_drm_surface *surf) {
 		return;
 	}
 
-	wlr_swapchain_destroy(surf->swapchain);
-
+	wlr_swapchain_finish(&surf->swapchain);
 	memset(surf, 0, sizeof(*surf));
 }
 
 bool init_drm_surface(struct wlr_drm_surface *surf,
 		struct wlr_drm_renderer *renderer, int width, int height,
 		const struct wlr_drm_format *drm_format) {
-	if (surf->swapchain != NULL && surf->swapchain->width == width &&
-			surf->swapchain->height == height) {
+	if (surf->swapchain.width == width &&
+			surf->swapchain.height == height) {
 		return true;
 	}
 
 	finish_drm_surface(surf);
 
-	surf->swapchain = wlr_swapchain_create(renderer->allocator, width, height,
-			drm_format);
-	if (surf->swapchain == NULL) {
+	if (!wlr_swapchain_init(&surf->swapchain, renderer->allocator,
+			width, height, drm_format)) {
 		wlr_log(WLR_ERROR, "Failed to create swapchain");
 		return false;
 	}
@@ -84,8 +81,8 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		struct wlr_buffer *buffer) {
 	struct wlr_renderer *renderer = surf->renderer->wlr_rend;
 
-	if (surf->swapchain->width != buffer->width ||
-			surf->swapchain->height != buffer->height) {
+	if (surf->swapchain.width != buffer->width ||
+			surf->swapchain.height != buffer->height) {
 		wlr_log(WLR_ERROR, "Surface size doesn't match buffer size");
 		return NULL;
 	}
@@ -96,7 +93,7 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		return NULL;
 	}
 
-	struct wlr_buffer *dst = wlr_swapchain_acquire(surf->swapchain, NULL);
+	struct wlr_buffer *dst = wlr_swapchain_acquire(&surf->swapchain, NULL);
 	if (!dst) {
 		wlr_log(WLR_ERROR, "Failed to acquire multi-GPU swapchain buffer");
 		wlr_texture_destroy(tex);
@@ -105,7 +102,7 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 
 	float mat[9];
 	wlr_matrix_identity(mat);
-	wlr_matrix_scale(mat, surf->swapchain->width, surf->swapchain->height);
+	wlr_matrix_scale(mat, surf->swapchain.width, surf->swapchain.height);
 
 	if (!wlr_renderer_begin_with_buffer(renderer, dst)) {
 		wlr_log(WLR_ERROR, "Failed to bind multi-GPU destination buffer");

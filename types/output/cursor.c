@@ -260,9 +260,8 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 		}
 	}
 
-	if (output->cursor_swapchain == NULL ||
-			output->cursor_swapchain->width != width ||
-			output->cursor_swapchain->height != height) {
+	if (output->cursor_swapchain.width != width ||
+			output->cursor_swapchain.height != height) {
 		struct wlr_drm_format *format =
 			output_pick_cursor_format(output);
 		if (format == NULL) {
@@ -270,18 +269,19 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 			return NULL;
 		}
 
-		wlr_swapchain_destroy(output->cursor_swapchain);
-		output->cursor_swapchain = wlr_swapchain_create(allocator,
+		wlr_swapchain_finish(&output->cursor_swapchain);
+		bool ok = wlr_swapchain_init(&output->cursor_swapchain, allocator,
 			width, height, format);
 		free(format);
-		if (output->cursor_swapchain == NULL) {
+		if (!ok) {
+			memset(&output->cursor_swapchain, 0, sizeof(output->cursor_swapchain));
 			wlr_log(WLR_ERROR, "Failed to create cursor swapchain");
 			return NULL;
 		}
 	}
 
 	struct wlr_buffer *buffer =
-		wlr_swapchain_acquire(output->cursor_swapchain, NULL);
+		wlr_swapchain_acquire(&output->cursor_swapchain, NULL);
 	if (buffer == NULL) {
 		return NULL;
 	}

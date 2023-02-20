@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/interface.h>
-#include <wlr/render/swapchain.h>
 #include <wlr/util/log.h>
 #include <xf86drm.h>
 #include "backend/backend.h"
@@ -31,11 +30,11 @@ bool wlr_output_init_render(struct wlr_output *output,
 		return false;
 	}
 
-	wlr_swapchain_destroy(output->swapchain);
-	output->swapchain = NULL;
+	wlr_swapchain_finish(&output->swapchain);
+	memset(&output->swapchain, 0, sizeof(output->swapchain));
 
-	wlr_swapchain_destroy(output->cursor_swapchain);
-	output->cursor_swapchain = NULL;
+	wlr_swapchain_finish(&output->cursor_swapchain);
+	memset(&output->cursor_swapchain, 0, sizeof(output->cursor_swapchain));
 
 	output->allocator = allocator;
 	output->renderer = renderer;
@@ -68,10 +67,10 @@ static bool output_create_swapchain(struct wlr_output *output,
 		return false;
 	}
 
-	if (output->swapchain != NULL && output->swapchain->width == width &&
-			output->swapchain->height == height &&
-			output->swapchain->format->format == format->format &&
-			(allow_modifiers || output->swapchain->format->len == 0)) {
+	if (output->swapchain.width == width &&
+			output->swapchain.height == height &&
+			output->swapchain.format->format == format->format &&
+			(allow_modifiers || output->swapchain.format->len == 0)) {
 		// no change, keep existing swapchain
 		free(format);
 		return true;
@@ -93,16 +92,14 @@ static bool output_create_swapchain(struct wlr_output *output,
 		wlr_drm_format_add(&format, DRM_FORMAT_MOD_INVALID);
 	}
 
-	struct wlr_swapchain *swapchain =
-		wlr_swapchain_create(allocator, width, height, format);
+	wlr_swapchain_finish(&output->swapchain);
+	bool ok = wlr_swapchain_init(&output->swapchain, allocator, width, height, format);
 	free(format);
-	if (swapchain == NULL) {
+	if (!ok) {
+		memset(&output->swapchain, 0, sizeof(output->swapchain));
 		wlr_log(WLR_ERROR, "Failed to create output swapchain");
 		return false;
 	}
-
-	wlr_swapchain_destroy(output->swapchain);
-	output->swapchain = swapchain;
 
 	return true;
 }
@@ -119,7 +116,7 @@ static bool output_attach_back_buffer(struct wlr_output *output,
 	assert(renderer != NULL);
 
 	struct wlr_buffer *buffer =
-		wlr_swapchain_acquire(output->swapchain, buffer_age);
+		wlr_swapchain_acquire(&output->swapchain, buffer_age);
 	if (buffer == NULL) {
 		return false;
 	}
@@ -247,7 +244,7 @@ bool output_ensure_buffer(struct wlr_output *output,
 
 	output_clear_back_buffer(output);
 
-	if (output->swapchain->format->len == 0) {
+	if (output->swapchain.format->len == 0) {
 		return false;
 	}
 
@@ -274,8 +271,8 @@ error_destroy_swapchain:
 	// Destroy the modifierless swapchain so that the output does not get stuck
 	// without modifiers. A new swapchain with modifiers will be created when
 	// needed by output_attach_back_buffer().
-	wlr_swapchain_destroy(output->swapchain);
-	output->swapchain = NULL;
+	wlr_swapchain_finish(&output->swapchain);
+	memset(&output->swapchain, 0, sizeof(output->swapchain));
 
 	return false;
 }
@@ -358,12 +355,12 @@ uint32_t wlr_output_preferred_read_format(struct wlr_output *output) {
 
 bool output_is_direct_scanout(struct wlr_output *output,
 		struct wlr_buffer *buffer) {
-	if (output->swapchain == NULL) {
+	if (output->swapchain.width == 0) {
 		return true;
 	}
 
 	for (size_t i = 0; i < WLR_SWAPCHAIN_CAP; i++) {
-		if (output->swapchain->slots[i].buffer == buffer) {
+		if (output->swapchain.slots[i].buffer == buffer) {
 			return false;
 		}
 	}

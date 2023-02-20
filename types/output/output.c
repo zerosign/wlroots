@@ -4,7 +4,6 @@
 #include <drm_fourcc.h>
 #include <stdlib.h>
 #include <wlr/interfaces/wlr_output.h>
-#include <wlr/render/swapchain.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_output_layer.h>
@@ -248,11 +247,10 @@ void wlr_output_update_custom_mode(struct wlr_output *output, int32_t width,
 
 	output->refresh = refresh;
 
-	if (output->swapchain != NULL &&
-			(output->swapchain->width != output->width ||
-			output->swapchain->height != output->height)) {
-		wlr_swapchain_destroy(output->swapchain);
-		output->swapchain = NULL;
+	if (output->swapchain.width != output->width ||
+			output->swapchain.height != output->height) {
+		wlr_swapchain_finish(&output->swapchain);
+		memset(&output->swapchain, 0, sizeof(output->swapchain));
 	}
 
 	struct wl_resource *resource;
@@ -396,10 +394,10 @@ void wlr_output_destroy(struct wlr_output *output) {
 		wlr_output_layer_destroy(layer);
 	}
 
-	wlr_swapchain_destroy(output->cursor_swapchain);
+	wlr_swapchain_finish(&output->cursor_swapchain);
 	wlr_buffer_unlock(output->cursor_front_buffer);
 
-	wlr_swapchain_destroy(output->swapchain);
+	wlr_swapchain_finish(&output->swapchain);
 
 	if (output->idle_frame != NULL) {
 		wl_event_source_remove(output->idle_frame);
@@ -822,10 +820,10 @@ bool wlr_output_commit_state(struct wlr_output *output,
 
 	// Destroy the swapchains when an output is disabled
 	if ((pending.committed & WLR_OUTPUT_STATE_ENABLED) && !pending.enabled) {
-		wlr_swapchain_destroy(output->swapchain);
-		output->swapchain = NULL;
-		wlr_swapchain_destroy(output->cursor_swapchain);
-		output->cursor_swapchain = NULL;
+		wlr_swapchain_finish(&output->swapchain);
+		memset(&output->swapchain, 0, sizeof(output->swapchain));
+		wlr_swapchain_finish(&output->cursor_swapchain);
+		memset(&output->cursor_swapchain, 0, sizeof(output->cursor_swapchain));
 	}
 
 	if (pending.committed & WLR_OUTPUT_STATE_BUFFER) {
@@ -843,8 +841,8 @@ bool wlr_output_commit_state(struct wlr_output *output,
 	}
 
 	if ((pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
-			output->swapchain != NULL) {
-		wlr_swapchain_set_buffer_submitted(output->swapchain, pending.buffer);
+			output->swapchain.width != 0) {
+		wlr_swapchain_set_buffer_submitted(&output->swapchain, pending.buffer);
 	}
 
 	struct wlr_output_event_commit event = {
