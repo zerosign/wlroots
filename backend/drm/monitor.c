@@ -26,8 +26,7 @@ static void handle_add_drm_card(struct wl_listener *listener, void *data) {
 
 	wlr_log(WLR_DEBUG, "Creating DRM backend for %s after hotplug", event->path);
 	struct wlr_backend *child_drm = wlr_drm_backend_create(
-		backend_monitor->display, backend_monitor->session,
-		dev, backend_monitor->primary_drm);
+		backend_monitor->display, backend_monitor->session, dev);
 	if (!child_drm) {
 		wlr_log(WLR_ERROR, "Failed to create DRM backend after hotplug");
 		return;

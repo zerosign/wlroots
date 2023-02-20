@@ -50,13 +50,8 @@ static void backend_destroy(struct wlr_backend *backend) {
 	wl_list_remove(&drm->display_destroy.link);
 	wl_list_remove(&drm->session_destroy.link);
 	wl_list_remove(&drm->session_active.link);
-	wl_list_remove(&drm->parent_destroy.link);
 	wl_list_remove(&drm->dev_change.link);
 	wl_list_remove(&drm->dev_remove.link);
-
-	if (drm->parent) {
-		finish_drm_renderer(&drm->mgpu_renderer);
-	}
 
 	finish_drm_resources(drm);
 
@@ -89,11 +84,6 @@ static const struct wlr_backend_impl backend_impl = {
 
 bool wlr_backend_is_drm(struct wlr_backend *b) {
 	return b->impl == &backend_impl;
-}
-
-struct wlr_backend *wlr_drm_backend_get_parent(struct wlr_backend *backend) {
-	struct wlr_drm_backend *drm = get_drm_backend_from_backend(backend);
-	return drm->parent ? &drm->parent->backend : NULL;
 }
 
 static void handle_session_active(struct wl_listener *listener, void *data) {
@@ -186,17 +176,9 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	backend_destroy(&drm->backend);
 }
 
-static void handle_parent_destroy(struct wl_listener *listener, void *data) {
-	struct wlr_drm_backend *drm =
-		wl_container_of(listener, drm, parent_destroy);
-	backend_destroy(&drm->backend);
-}
-
 struct wlr_backend *wlr_drm_backend_create(struct wl_display *display,
-		struct wlr_session *session, struct wlr_device *dev,
-		struct wlr_backend *parent) {
+		struct wlr_session *session, struct wlr_device *dev) {
 	assert(display && session && dev);
-	assert(!parent || wlr_backend_is_drm(parent));
 
 	char *name = drmGetDeviceNameFromFd2(dev->fd);
 	drmVersion *version = drmGetVersion(dev->fd);
@@ -218,15 +200,6 @@ struct wlr_backend *wlr_drm_backend_create(struct wl_display *display,
 	drm->dev = dev;
 	drm->fd = dev->fd;
 	drm->name = name;
-
-	if (parent != NULL) {
-		drm->parent = get_drm_backend_from_backend(parent);
-
-		drm->parent_destroy.notify = handle_parent_destroy;
-		wl_signal_add(&parent->events.destroy, &drm->parent_destroy);
-	} else {
-		wl_list_init(&drm->parent_destroy.link);
-	}
 
 	drm->dev_change.notify = handle_dev_change;
 	wl_signal_add(&dev->events.change, &drm->dev_change);
@@ -255,36 +228,6 @@ struct wlr_backend *wlr_drm_backend_create(struct wl_display *display,
 		goto error_event;
 	}
 
-	if (drm->parent) {
-		if (!init_drm_renderer(drm, &drm->mgpu_renderer)) {
-			wlr_log(WLR_ERROR, "Failed to initialize renderer");
-			goto error_resources;
-		}
-
-		// We'll perform a multi-GPU copy for all submitted buffers, we need
-		// to be able to texture from them
-		struct wlr_renderer *renderer = drm->mgpu_renderer.wlr_rend;
-		const struct wlr_drm_format_set *texture_formats =
-			wlr_renderer_get_dmabuf_texture_formats(renderer);
-		if (texture_formats == NULL) {
-			wlr_log(WLR_ERROR, "Failed to query renderer texture formats");
-			goto error_mgpu_renderer;
-		}
-
-		// Forbid implicit modifiers, because their meaning changes from one
-		// GPU to another.
-		for (size_t i = 0; i < texture_formats->len; i++) {
-			const struct wlr_drm_format *fmt = &texture_formats->formats[i];
-			for (size_t j = 0; j < fmt->len; j++) {
-				uint64_t mod = fmt->modifiers[j];
-				if (mod == DRM_FORMAT_MOD_INVALID) {
-					continue;
-				}
-				wlr_drm_format_set_add(&drm->mgpu_formats, fmt->format, mod);
-			}
-		}
-	}
-
 	drm->session_destroy.notify = handle_session_destroy;
 	wl_signal_add(&session->events.destroy, &drm->session_destroy);
 
@@ -293,17 +236,12 @@ struct wlr_backend *wlr_drm_backend_create(struct wl_display *display,
 
 	return &drm->backend;
 
-error_mgpu_renderer:
-	finish_drm_renderer(&drm->mgpu_renderer);
-error_resources:
-	finish_drm_resources(drm);
 error_event:
 	wl_list_remove(&drm->session_active.link);
 	wl_event_source_remove(drm->drm_event);
 error_fd:
 	wl_list_remove(&drm->dev_remove.link);
 	wl_list_remove(&drm->dev_change.link);
-	wl_list_remove(&drm->parent_destroy.link);
 	wlr_session_close_file(drm->session, dev);
 	free(drm);
 	return NULL;
