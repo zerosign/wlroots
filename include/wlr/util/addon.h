@@ -41,4 +41,7 @@ void wlr_addon_finish(struct wlr_addon *addon);
 struct wlr_addon *wlr_addon_find(struct wlr_addon_set *set, const void *owner,
 	const struct wlr_addon_interface *impl);
 
+void wlr_addon_find_all(struct wl_array *all, struct wlr_addon_set *set,
+		const struct wlr_addon_interface *impl);
+
 #endif
