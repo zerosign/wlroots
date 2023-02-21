@@ -2,12 +2,12 @@
 #include <drm_fourcc.h>
 #include <stdlib.h>
 #include <wlr/interfaces/wlr_output.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/log.h>
 #include "render/allocator/allocator.h"
-#include "render/swapchain.h"
 #include "types/wlr_buffer.h"
 #include "types/wlr_output.h"
 
@@ -260,9 +260,8 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 		}
 	}
 
-	if (output->cursor_swapchain == NULL ||
-			output->cursor_swapchain->width != width ||
-			output->cursor_swapchain->height != height) {
+	if (output->cursor_swapchain.width != width ||
+			output->cursor_swapchain.height != height) {
 		struct wlr_drm_format *format =
 			output_pick_cursor_format(output);
 		if (format == NULL) {
@@ -270,18 +269,19 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 			return NULL;
 		}
 
-		wlr_swapchain_destroy(output->cursor_swapchain);
-		output->cursor_swapchain = wlr_swapchain_create(allocator,
+		wlr_swapchain_finish(&output->cursor_swapchain);
+		bool ok = wlr_swapchain_init(&output->cursor_swapchain, allocator,
 			width, height, format);
 		free(format);
-		if (output->cursor_swapchain == NULL) {
+		if (!ok) {
+			memset(&output->cursor_swapchain, 0, sizeof(output->cursor_swapchain));
 			wlr_log(WLR_ERROR, "Failed to create cursor swapchain");
 			return NULL;
 		}
 	}
 
 	struct wlr_buffer *buffer =
-		wlr_swapchain_acquire(output->cursor_swapchain, NULL);
+		wlr_swapchain_acquire(&output->cursor_swapchain, NULL);
 	if (buffer == NULL) {
 		return NULL;
 	}

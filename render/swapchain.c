@@ -1,10 +1,10 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <wlr/util/log.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/types/wlr_buffer.h>
 #include "render/allocator/allocator.h"
 #include "render/drm_format_set.h"
-#include "render/swapchain.h"
 
 static void swapchain_handle_allocator_destroy(struct wl_listener *listener,
 		void *data) {
@@ -13,27 +13,25 @@ static void swapchain_handle_allocator_destroy(struct wl_listener *listener,
 	swapchain->allocator = NULL;
 }
 
-struct wlr_swapchain *wlr_swapchain_create(
+bool wlr_swapchain_init(struct wlr_swapchain *swapchain,
 		struct wlr_allocator *alloc, int width, int height,
 		const struct wlr_drm_format *format) {
-	struct wlr_swapchain *swapchain = calloc(1, sizeof(*swapchain));
-	if (swapchain == NULL) {
-		return NULL;
-	}
-	swapchain->allocator = alloc;
-	swapchain->width = width;
-	swapchain->height = height;
+	*swapchain = (struct wlr_swapchain){
+		.allocator = alloc,
+		.width = width,
+		.height = height,
+	};
 
 	swapchain->format = wlr_drm_format_dup(format);
 	if (swapchain->format == NULL) {
 		free(swapchain);
-		return NULL;
+		return false;
 	}
 
 	swapchain->allocator_destroy.notify = swapchain_handle_allocator_destroy;
 	wl_signal_add(&alloc->events.destroy, &swapchain->allocator_destroy);
 
-	return swapchain;
+	return true;
 }
 
 static void slot_reset(struct wlr_swapchain_slot *slot) {
@@ -44,7 +42,7 @@ static void slot_reset(struct wlr_swapchain_slot *slot) {
 	memset(slot, 0, sizeof(*slot));
 }
 
-void wlr_swapchain_destroy(struct wlr_swapchain *swapchain) {
+void wlr_swapchain_finish(struct wlr_swapchain *swapchain) {
 	if (swapchain == NULL) {
 		return;
 	}
@@ -53,7 +51,6 @@ void wlr_swapchain_destroy(struct wlr_swapchain *swapchain) {
 	}
 	wl_list_remove(&swapchain->allocator_destroy.link);
 	free(swapchain->format);
-	free(swapchain);
 }
 
 static void slot_handle_release(struct wl_listener *listener, void *data) {

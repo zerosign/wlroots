@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <wlr/backend.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 
 struct wlr_drm_backend;
@@ -19,7 +20,7 @@ struct wlr_drm_renderer {
 
 struct wlr_drm_surface {
 	struct wlr_drm_renderer *renderer;
-	struct wlr_swapchain *swapchain;
+	struct wlr_swapchain swapchain;
 };
 
 struct wlr_drm_fb {
