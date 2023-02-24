@@ -24,8 +24,8 @@ sources:
 tasks:
   - setup: |
       cd wlroots
-      CC=gcc meson setup build-gcc --fatal-meson-warnings --default-library=both -Dauto_features=enabled --prefix /usr -Db_sanitize=address,undefined
-  - gcc: |
+      meson setup build --fatal-meson-warnings --default-library=both -Dauto_features=enabled --prefix /usr -Db_sanitize=address,undefined
+  - build: |
       cd wlroots/build
       ninja
       sudo ninja install
