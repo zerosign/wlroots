@@ -203,7 +203,7 @@ static struct wlr_backend *attempt_headless_backend(
 }
 
 static bool attempt_drm_backend(struct wl_display *display,
-		struct wlr_backend *backend, struct wlr_session *session) {
+		struct wlr_multi_backend *multi, struct wlr_session *session) {
 #if WLR_HAS_DRM_BACKEND
 	struct wlr_device *gpus[8];
 	ssize_t num_gpus = wlr_session_find_gpus(session, 8, gpus);
@@ -232,7 +232,7 @@ static bool attempt_drm_backend(struct wl_display *display,
 			primary_drm = drm;
 		}
 
-		wlr_multi_backend_add(backend, drm);
+		wlr_multi_backend_add(multi, drm);
 	}
 	if (!primary_drm) {
 		wlr_log(WLR_ERROR, "Could not successfully create backend on any GPU");
@@ -240,7 +240,7 @@ static bool attempt_drm_backend(struct wl_display *display,
 	}
 
 	if (getenv("WLR_DRM_DEVICES") == NULL) {
-		drm_backend_monitor_create(backend, primary_drm, session);
+		drm_backend_monitor_create(multi, primary_drm, session);
 	}
 
 	return true;
@@ -261,7 +261,7 @@ static struct wlr_backend *attempt_libinput_backend(struct wl_display *display,
 }
 
 static bool attempt_backend_by_name(struct wl_display *display,
-		struct wlr_backend *multi, char *name,
+		struct wlr_multi_backend *multi, char *name,
 		struct wlr_session **session_ptr) {
 	struct wlr_backend *backend = NULL;
 	if (strcmp(name, "wayland") == 0) {
@@ -304,7 +304,7 @@ struct wlr_backend *wlr_backend_autocreate(struct wl_display *display,
 	}
 
 	struct wlr_session *session = NULL;
-	struct wlr_backend *multi = wlr_multi_backend_create(display);
+	struct wlr_multi_backend *multi = wlr_multi_backend_create(display);
 	if (!multi) {
 		wlr_log(WLR_ERROR, "could not allocate multibackend");
 		return NULL;
@@ -387,10 +387,10 @@ success:
 	if (session_ptr != NULL) {
 		*session_ptr = session;
 	}
-	return multi;
+	return wlr_multi_backend_base(multi);
 
 error:
-	wlr_backend_destroy(multi);
+	wlr_backend_destroy(wlr_multi_backend_base(multi));
 #if WLR_HAS_SESSION
 	wlr_session_destroy(session);
 #endif

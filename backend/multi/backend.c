@@ -18,10 +18,10 @@ struct subbackend_state {
 	struct wl_list link;
 };
 
-static struct wlr_multi_backend *multi_backend_from_backend(
-		struct wlr_backend *wlr_backend) {
-	assert(wlr_backend_is_multi(wlr_backend));
-	return (struct wlr_multi_backend *)wlr_backend;
+static struct wlr_multi_backend *multi_backend_from_backend(struct wlr_backend *backend) {
+	struct wlr_multi_backend *multi = wlr_multi_backend_try_from(backend);
+	assert(multi != NULL);
+	return multi;
 }
 
 static bool multi_backend_start(struct wlr_backend *wlr_backend) {
@@ -125,7 +125,7 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	multi_backend_destroy((struct wlr_backend*)backend);
 }
 
-struct wlr_backend *wlr_multi_backend_create(struct wl_display *display) {
+struct wlr_multi_backend *wlr_multi_backend_create(struct wl_display *display) {
 	struct wlr_multi_backend *backend =
 		calloc(1, sizeof(struct wlr_multi_backend));
 	if (!backend) {
@@ -142,11 +142,19 @@ struct wlr_backend *wlr_multi_backend_create(struct wl_display *display) {
 	backend->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &backend->display_destroy);
 
-	return &backend->backend;
+	return backend;
 }
 
-bool wlr_backend_is_multi(struct wlr_backend *b) {
-	return b->impl == &backend_impl;
+struct wlr_multi_backend *wlr_multi_backend_try_from(struct wlr_backend *backend) {
+	if (backend->impl != &backend_impl) {
+		return NULL;
+	}
+	struct wlr_multi_backend *multi = wl_container_of(backend, multi, backend);
+	return multi;
+}
+
+struct wlr_backend *wlr_multi_backend_base(struct wlr_multi_backend *backend) {
+	return &backend->backend;
 }
 
 static void new_input_reemit(struct wl_listener *listener, void *data) {
@@ -178,12 +186,9 @@ static struct subbackend_state *multi_backend_get_subbackend(struct wlr_multi_ba
 	return NULL;
 }
 
-bool wlr_multi_backend_add(struct wlr_backend *_multi,
-		struct wlr_backend *backend) {
-	assert(_multi && backend);
-	assert(_multi != backend);
-
-	struct wlr_multi_backend *multi = multi_backend_from_backend(_multi);
+bool wlr_multi_backend_add(struct wlr_multi_backend *multi, struct wlr_backend *backend) {
+	assert(multi && backend);
+	assert(&multi->backend != backend);
 
 	if (multi_backend_get_subbackend(multi, backend)) {
 		// already added
@@ -213,29 +218,20 @@ bool wlr_multi_backend_add(struct wlr_backend *_multi,
 	return true;
 }
 
-void wlr_multi_backend_remove(struct wlr_backend *_multi,
-		struct wlr_backend *backend) {
-	struct wlr_multi_backend *multi = multi_backend_from_backend(_multi);
-
-	struct subbackend_state *sub =
-		multi_backend_get_subbackend(multi, backend);
-
+void wlr_multi_backend_remove(struct wlr_multi_backend *multi, struct wlr_backend *backend) {
+	struct subbackend_state *sub = multi_backend_get_subbackend(multi, backend);
 	if (sub) {
 		wl_signal_emit_mutable(&multi->events.backend_remove, backend);
 		subbackend_state_destroy(sub);
 	}
 }
 
-bool wlr_multi_is_empty(struct wlr_backend *_backend) {
-	assert(wlr_backend_is_multi(_backend));
-	struct wlr_multi_backend *backend = (struct wlr_multi_backend *)_backend;
+bool wlr_multi_backend_is_empty(struct wlr_multi_backend *backend) {
 	return wl_list_length(&backend->backends) < 1;
 }
 
-void wlr_multi_for_each_backend(struct wlr_backend *_backend,
+void wlr_multi_backend_for_each(struct wlr_multi_backend *backend,
 		void (*callback)(struct wlr_backend *backend, void *data), void *data) {
-	assert(wlr_backend_is_multi(_backend));
-	struct wlr_multi_backend *backend = (struct wlr_multi_backend *)_backend;
 	struct subbackend_state *sub;
 	wl_list_for_each(sub, &backend->backends, link) {
 		callback(sub->backend, data);
