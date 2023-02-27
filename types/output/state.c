@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/util/log.h>
+#include <wlr/types/wlr_output_layer.h>
 #include "types/wlr_output.h"
 
 void wlr_output_state_init(struct wlr_output_state *state) {
@@ -149,4 +150,20 @@ bool wlr_output_state_copy(struct wlr_output_state *dst,
 err:
 	wlr_output_state_finish(&copy);
 	return false;
+}
+
+struct wlr_output_layer_state *output_state_get_cursor_layer(
+		const struct wlr_output_state *state) {
+	if (!(state->committed & WLR_OUTPUT_STATE_LAYERS)) {
+		return NULL;
+	}
+	if (state->layers_len == 0) {
+		return NULL;
+	}
+
+	struct wlr_output_layer_state *layer_state = &state->layers[state->layers_len - 1];
+	if (!layer_state->layer->cursor) {
+		return NULL;
+	}
+	return layer_state;
 }
