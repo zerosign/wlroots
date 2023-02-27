@@ -270,6 +270,10 @@ static bool test_layer(struct wlr_wl_output *output, struct wlr_output_layer_sta
 		return true;
 	}
 
+	if (layer_state->layer->cursor) {
+		return false; // TODO: add support for cursor layers
+	}
+
 	int x = layer_state->dst_box.x;
 	int y = layer_state->dst_box.y;
 	int width = layer_state->dst_box.width;
