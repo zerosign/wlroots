@@ -128,4 +128,35 @@ struct wlr_linux_dmabuf_feedback_v1_init_options {
 bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feedback_v1 *feedback,
 	const struct wlr_linux_dmabuf_feedback_v1_init_options *options);
 
+/**
+ * A helper to wait for client DMA-BUFs to be ready.
+ *
+ * When attached to a surface, this helper will delay commits until the GPU
+ * work is done. In other words, wlr_surface.events.commit will only fire when
+ * GPU buffers attached to that commit are ready.
+ */
+struct wlr_surface_dmabuf_waiter {
+	struct wlr_surface *surface;
+
+	// private state
+
+	struct wl_list commits; // wlr_surface_dmabuf_waiter_commit.link
+	struct wl_listener client_commit;
+};
+
+/**
+ * Initialize a DMA-BUF waiter for a surface.
+ *
+ * Callers must call wlr_surface_dmabuf_waiter_finish() to unregister the waiter.
+ */
+void wlr_surface_dmabuf_waiter_init(struct wlr_surface_dmabuf_waiter *waiter,
+	struct wlr_surface *surface);
+/**
+ * Clean up a DMA-BUF waiter.
+ *
+ * Any pending commit waiting on GPU work to complete will be applied
+ * immediately.
+ */
+void wlr_surface_dmabuf_waiter_finish(struct wlr_surface_dmabuf_waiter *waiter);
+
 #endif
