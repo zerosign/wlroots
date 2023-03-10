@@ -110,6 +110,8 @@ struct wlr_scene {
 	enum wlr_scene_debug_damage_option debug_damage_option;
 	bool direct_scanout;
 	bool calculate_visibility;
+
+	struct wl_array render_list;
 };
 
 /** A scene-graph node displaying a single surface. */
@@ -214,8 +216,6 @@ struct wlr_scene_output {
 	struct wl_listener output_needs_frame;
 
 	struct wl_list damage_highlight_regions;
-
-	struct wl_array render_list;
 };
 
 struct wlr_scene_timer {

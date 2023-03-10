@@ -125,6 +125,8 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
 
 			wl_list_remove(&scene->presentation_destroy.link);
 			wl_list_remove(&scene->linux_dmabuf_v1_destroy.link);
+
+			wl_array_release(&scene->render_list);
 		} else {
 			assert(node->parent);
 		}
@@ -1377,7 +1379,6 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 	wl_list_remove(&scene_output->output_damage.link);
 	wl_list_remove(&scene_output->output_needs_frame.link);
 
-	wl_array_release(&scene_output->render_list);
 	free(scene_output);
 }
 
@@ -1718,7 +1719,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	bool calculate_visibility = scene_output->scene->calculate_visibility;
 	struct wlr_scene_node *tree_node = &scene_output->scene->tree.node;
-	struct wl_array *render_list = &scene_output->render_list;
+	struct wl_array *render_list = &scene_output->scene->render_list;
 	int x, y;
 
 	render_list->size = 0;
