@@ -127,8 +127,9 @@ static void touch_coordinates_to_absolute(struct wlr_wl_seat *seat,
 	 */
 	struct wlr_wl_output *output, *tmp;
 	wl_list_for_each_safe(output, tmp, &seat->backend->outputs, link) {
-		*sx = wl_fixed_to_double(x) / output->wlr_output.width;
-		*sy = wl_fixed_to_double(y) / output->wlr_output.height;
+		int scale = ceil(output->wlr_output.scale);
+		*sx = wl_fixed_to_double(x) * scale / output->wlr_output.width;
+		*sy = wl_fixed_to_double(y) * scale / output->wlr_output.height;
 		return; // Choose the first output in the list
 	}
 

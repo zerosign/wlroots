@@ -447,6 +447,12 @@ static bool output_commit(struct wlr_output *wlr_output,
 		return false;
 	}
 
+	bool needs_commit = false;
+	if (state->committed & WLR_OUTPUT_STATE_SCALE) {
+		wl_surface_set_buffer_scale(output->surface, ceil(state->scale));
+		needs_commit = true;
+	}
+
 	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
 		if (output->requested.needs_ack) {
 			output->requested.needs_ack = false;
@@ -501,7 +507,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 				output->surface);
 		}
 
-		wl_surface_commit(output->surface);
+		needs_commit = true;
 
 		if (wp_feedback != NULL) {
 			struct wlr_wl_presentation_feedback *feedback =
@@ -524,6 +530,10 @@ static bool output_commit(struct wlr_output *wlr_output,
 			};
 			wlr_output_send_present(wlr_output, &present_event);
 		}
+	}
+
+	if (needs_commit) {
+		wl_surface_commit(output->surface);
 	}
 
 	wl_display_flush(output->backend->remote_display);
@@ -630,16 +640,18 @@ void update_wl_output_cursor(struct wlr_wl_output *output) {
 		return;
 	}
 
+	int scale = ceil(output->wlr_output.scale);
 	wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
 	wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
+	wl_surface_set_buffer_scale(surface, scale);
 	wl_surface_commit(surface);
 
 	wl_display_flush(backend->remote_display);
 
 	struct wlr_wl_seat *seat = pointer->seat;
 	wl_pointer_set_cursor(seat->wl_pointer, output->enter_serial,
-		output->cursor.surface, output->cursor.hotspot_x,
-		output->cursor.hotspot_y);
+		output->cursor.surface, output->cursor.hotspot_x / scale,
+		output->cursor.hotspot_y / scale);
 }
 
 static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
@@ -666,16 +678,28 @@ void surface_update(struct wlr_wl_output *output) {
 		return;
 	}
 
+	uint32_t scale = 1;
+
+	struct wlr_wl_active_remote_output *active;
+	wl_list_for_each(active, &output->active_remote_outputs, link) {
+		struct wlr_wl_remote_output *output = active->remote_output;
+		if (scale < output->scale) {
+			scale = output->scale;
+		}
+	}
+
 	struct wlr_output_state state = {
-		.committed = WLR_OUTPUT_STATE_MODE,
+		.committed = WLR_OUTPUT_STATE_MODE | WLR_OUTPUT_STATE_SCALE,
 		.mode_type = WLR_OUTPUT_STATE_MODE_CUSTOM,
+		.scale = scale,
 		.custom_mode = {
-			.width = output->requested.width,
-			.height = output->requested.height
+			.width = output->requested.width * scale,
+			.height = output->requested.height * scale
 		},
 	};
 
 	wlr_output_send_request_state(&output->wlr_output, &state);
+	update_wl_output_cursor(output);
 }
 
 static void xdg_surface_handle_configure(void *data,
