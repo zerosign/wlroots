@@ -174,18 +174,18 @@ static uint64_t to_fp16(double v) {
 }
 
 static bool set_layer_props(struct wlr_drm_backend *drm,
-		const struct wlr_output_layer_state *state, uint64_t zpos) {
-	struct wlr_drm_layer *layer = get_drm_layer(drm, state->layer);
+		const struct wlr_drm_layer_state *state, uint64_t zpos) {
+	struct wlr_drm_layer *layer = get_drm_layer(drm, state->base->layer);
 
 	uint32_t width = 0, height = 0;
-	if (state->buffer != NULL) {
-		width = state->buffer->width;
-		height = state->buffer->height;
+	if (state->base->buffer != NULL) {
+		width = state->base->buffer->width;
+		height = state->base->buffer->height;
 	}
 
-	struct wlr_drm_fb *fb = layer->pending_fb;
+	struct wlr_drm_fb *fb = state->fb;
 	int ret = 0;
-	if (state->buffer == NULL) {
+	if (state->base->buffer == NULL) {
 		ret = liftoff_layer_set_property(layer->liftoff, "FB_ID", 0);
 	} else if (fb == NULL) {
 		liftoff_layer_set_fb_composited(layer->liftoff);
@@ -196,8 +196,8 @@ static bool set_layer_props(struct wlr_drm_backend *drm,
 		return false;
 	}
 
-	uint64_t crtc_x = (uint64_t)state->x;
-	uint64_t crtc_y = (uint64_t)state->y;
+	uint64_t crtc_x = (uint64_t)state->base->x;
+	uint64_t crtc_y = (uint64_t)state->base->y;
 	uint64_t crtc_w = (uint64_t)width;
 	uint64_t crtc_h = (uint64_t)height;
 
@@ -383,11 +383,9 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 		liftoff_layer_set_property(crtc->liftoff_composition_layer,
 			"FB_DAMAGE_CLIPS", fb_damage_clips);
 
-		if (state->base->committed & WLR_OUTPUT_STATE_LAYERS) {
-			for (size_t i = 0; i < state->base->layers_len; i++) {
-				const struct wlr_output_layer_state *layer_state = &state->base->layers[i];
-				ok = ok && set_layer_props(drm, layer_state, i + 1);
-			}
+		for (size_t i = 0; i < state->layers_len; i++) {
+			const struct wlr_drm_layer_state *layer_state = &state->layers[i];
+			ok = ok && set_layer_props(drm, layer_state, i + 1);
 		}
 
 		if (crtc->cursor) {

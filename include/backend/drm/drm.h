@@ -43,8 +43,6 @@ struct wlr_drm_layer {
 	struct wlr_addon addon; // wlr_output_layer.addons
 	struct wl_list link; // wlr_drm_crtc.layers
 
-	/* Buffer to be submitted to the kernel on the next page-flip */
-	struct wlr_drm_fb *pending_fb;
 	/* Buffer submitted to the kernel, will be presented on next vblank */
 	struct wlr_drm_fb *queued_fb;
 	/* Buffer currently displayed on screen */
@@ -127,6 +125,13 @@ struct wlr_drm_connector_state {
 	bool active;
 	drmModeModeInfo mode;
 	struct wlr_drm_fb *primary_fb;
+	struct wlr_drm_layer_state *layers;
+	size_t layers_len;
+};
+
+struct wlr_drm_layer_state {
+	struct wlr_output_layer_state *base;
+	struct wlr_drm_fb *fb;
 };
 
 struct wlr_drm_connector {
