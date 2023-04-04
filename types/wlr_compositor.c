@@ -15,7 +15,7 @@
 #include "types/wlr_subcompositor.h"
 #include "util/time.h"
 
-#define COMPOSITOR_VERSION 5
+#define COMPOSITOR_VERSION 6
 #define CALLBACK_VERSION 1
 
 static int min(int fst, int snd) {
@@ -338,6 +338,11 @@ static void surface_state_move(struct wlr_surface_state *state,
 			&next->frame_callback_list);
 		wl_list_init(&next->frame_callback_list);
 	}
+	if (next->committed & WLR_SURFACE_STATE_RELEASE_CALLBACK_LIST) {
+		wl_list_insert_list(&state->release_callback_list,
+			&next->release_callback_list);
+		wl_list_init(&next->release_callback_list);
+	}
 
 	state->committed |= next->committed;
 	next->committed = 0;
@@ -413,6 +418,69 @@ static void surface_update_input_region(struct wlr_surface *surface) {
 		0, 0, surface->current.width, surface->current.height);
 }
 
+struct buffer_release_callback {
+	struct wl_resource *resource;
+	struct wl_listener buffer_release;
+	struct wl_listener resource_destroy;
+};
+
+static void buffer_release_callback_handle_buffer_release(
+		struct wl_listener *listener, void *data) {
+	struct buffer_release_callback *callback =
+		wl_container_of(listener, callback, buffer_release);
+	wl_callback_send_done(callback->resource, 0);
+	wl_resource_destroy(callback->resource);
+}
+
+static void buffer_release_callback_handle_resource_destroy(
+		struct wl_listener *listener, void *data) {
+	struct buffer_release_callback *callback =
+		wl_container_of(listener, callback, resource_destroy);
+	wl_list_remove(&callback->buffer_release.link);
+	free(callback);
+}
+
+static struct buffer_release_callback *buffer_release_callback_create(
+		struct wlr_buffer *buffer, struct wl_resource *resource) {
+	assert(buffer->n_locks > 0); // ensure we'll get a release signal
+
+	struct buffer_release_callback *callback = calloc(1, sizeof(*callback));
+	if (callback == NULL) {
+		return NULL;
+	}
+
+	callback->buffer_release.notify = buffer_release_callback_handle_buffer_release;
+	wl_signal_add(&buffer->events.release, &callback->buffer_release);
+
+	callback->resource_destroy.notify = buffer_release_callback_handle_resource_destroy;
+	wl_resource_add_destroy_listener(resource, &callback->resource_destroy);
+
+	struct wl_list *link = wl_resource_get_link(resource);
+	wl_list_remove(link);
+	wl_list_init(link);
+
+	return callback;
+}
+
+static void surface_update_release_callback_list(struct wlr_surface *surface) {
+	if (surface->buffer == NULL) {
+		wl_resource_post_error(surface->resource, WL_SURFACE_ERROR_NO_ATTACH,
+			"wl_surface.get_release without a buffer attached");
+		return;
+	}
+
+	struct wlr_buffer *buffer = &surface->buffer->base;
+
+	struct wl_resource *resource, *tmp;
+	wl_resource_for_each_safe(resource, tmp,
+			&surface->current.release_callback_list) {
+		if (buffer_release_callback_create(buffer, resource) == NULL) {
+			wl_resource_post_no_memory(surface->resource);
+			return;
+		}
+	}
+}
+
 static void surface_state_init(struct wlr_surface_state *state);
 
 static void surface_cache_pending(struct wlr_surface *surface) {
@@ -467,6 +535,7 @@ static void surface_commit_state(struct wlr_surface *surface,
 	}
 	surface_update_opaque_region(surface);
 	surface_update_input_region(surface);
+	surface_update_release_callback_list(surface);
 
 	// commit subsurface order
 	struct wlr_subsurface *subsurface;
@@ -568,6 +637,25 @@ static void surface_handle_offset(struct wl_client *client,
 	surface->pending.dy = y;
 }
 
+static void surface_handle_get_release(struct wl_client *client,
+		struct wl_resource *resource, uint32_t new_id) {
+	struct wlr_surface *surface = wlr_surface_from_resource(resource);
+
+	struct wl_resource *callback_resource = wl_resource_create(client,
+		&wl_callback_interface, CALLBACK_VERSION, new_id);
+	if (callback_resource == NULL) {
+		wl_resource_post_no_memory(resource);
+		return;
+	}
+	wl_resource_set_implementation(callback_resource, NULL, NULL,
+		callback_handle_resource_destroy);
+
+	wl_list_insert(surface->pending.release_callback_list.prev,
+		wl_resource_get_link(callback_resource));
+
+	surface->pending.committed |= WLR_SURFACE_STATE_RELEASE_CALLBACK_LIST;
+}
+
 static const struct wl_surface_interface surface_implementation = {
 	.destroy = surface_handle_destroy,
 	.attach = surface_handle_attach,
@@ -580,6 +668,7 @@ static const struct wl_surface_interface surface_implementation = {
 	.set_buffer_scale = surface_handle_set_buffer_scale,
 	.damage_buffer = surface_handle_damage_buffer,
 	.offset = surface_handle_offset,
+	.get_release = surface_handle_get_release,
 };
 
 struct wlr_surface *wlr_surface_from_resource(struct wl_resource *resource) {
@@ -598,6 +687,7 @@ static void surface_state_init(struct wlr_surface_state *state) {
 	wl_list_init(&state->subsurfaces_below);
 
 	wl_list_init(&state->frame_callback_list);
+	wl_list_init(&state->release_callback_list);
 
 	pixman_region32_init(&state->surface_damage);
 	pixman_region32_init(&state->buffer_damage);
@@ -611,6 +701,10 @@ static void surface_state_finish(struct wlr_surface_state *state) {
 
 	struct wl_resource *resource, *tmp;
 	wl_resource_for_each_safe(resource, tmp, &state->frame_callback_list) {
+		wl_resource_destroy(resource);
+	}
+
+	wl_resource_for_each_safe(resource, tmp, &state->release_callback_list) {
 		wl_resource_destroy(resource);
 	}
 
