@@ -216,6 +216,8 @@ struct wlr_scene_output {
 	struct wl_listener output_needs_frame;
 
 	struct wl_list damage_highlight_regions;
+
+	struct wl_array output_layers;
 };
 
 struct wlr_scene_timer {

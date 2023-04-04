@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
+#include <wlr/types/wlr_output_layer.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
@@ -1107,6 +1108,7 @@ struct wlr_scene_node *wlr_scene_node_at(struct wlr_scene_node *node,
 
 struct render_list_entry {
 	struct wlr_scene_node *node;
+	struct wlr_output_layer_state *state;
 	bool sent_dmabuf_feedback;
 	int x, y;
 	bool visible;
@@ -1379,6 +1381,8 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 	wl_list_remove(&scene_output->output_damage.link);
 	wl_list_remove(&scene_output->output_needs_frame.link);
 
+	wl_array_release(&scene_output->output_layers);
+
 	free(scene_output);
 }
 
@@ -1635,6 +1639,259 @@ static bool scene_entry_try_direct_scanout(struct render_list_entry *entry,
 	return true;
 }
 
+static bool scene_buffer_can_be_output_layer(struct wlr_scene_buffer *buffer,
+		struct wlr_scene_output *scene_output) {
+	struct wlr_fbox default_box = {0};
+	if (buffer->transform & WL_OUTPUT_TRANSFORM_90) {
+		default_box.width = buffer->buffer->height;
+		default_box.height = buffer->buffer->width;
+	} else {
+		default_box.width = buffer->buffer->width;
+		default_box.height = buffer->buffer->height;
+	}
+
+	if (!wlr_fbox_empty(&buffer->src_box) &&
+			!wlr_fbox_equal(&buffer->src_box, &default_box)) {
+		return false;
+	}
+
+	if (buffer->transform != scene_output->output->transform) {
+		return false;
+	}
+
+	return true;
+}
+
+struct wlr_scene_node_output_layer {
+	struct wlr_addon addon;
+	struct wlr_output_layer *layer;
+	struct wlr_scene_buffer *buffer;
+	struct wlr_scene_output *output;
+	struct render_list_entry *current_render_entry;
+
+	struct wl_listener layer_feedback;
+	struct wl_listener output_destroy;
+};
+
+static void node_output_layer_destroy(struct wlr_scene_node_output_layer *layer) {
+	wlr_output_layer_destroy(layer->layer);
+	wlr_addon_finish(&layer->addon);
+	wl_list_remove(&layer->output_destroy.link);
+	free(layer);
+}
+
+static void handle_output_layer_addon_finish(struct wlr_addon *addon) {
+	struct wlr_scene_node_output_layer *layer = wl_container_of(addon, layer, addon);
+	node_output_layer_destroy(layer);
+}
+
+static void handle_output_layer_output_destroy(struct wl_listener *listener,
+		void *data) {
+	struct wlr_scene_node_output_layer *layer = wl_container_of(listener, layer, output_destroy);
+	wl_list_remove(&layer->layer_feedback.link);
+	node_output_layer_destroy(layer);
+}
+
+static const struct wlr_addon_interface node_addon_output_layer = {
+	.name = "wlr_scene_output_layer",
+	.destroy = handle_output_layer_addon_finish,
+};
+
+static struct wlr_scene_node_output_layer *scene_node_get_output_layer(
+		struct wlr_scene_node *node, struct wlr_scene_output *output) {
+	struct wlr_addon *addon = wlr_addon_find(
+		&node->addons, output, &node_addon_output_layer);
+	if (!addon) {
+		return NULL;
+	}
+
+	struct wlr_scene_node_output_layer *layer = wl_container_of(addon, layer, addon);
+	return layer;
+}
+
+static void output_handle_layer_feedback(struct wl_listener *listener, void *data) {
+	struct wlr_scene_node_output_layer *layer =
+		wl_container_of(listener, layer, layer_feedback);
+	struct wlr_output_layer_feedback_event *event = data;
+	struct wlr_linux_dmabuf_feedback_v1_init_options options = {
+		.main_renderer = layer->buffer->primary_output->output->renderer,
+		.output_layer_feedback_event = event,
+	};
+
+	if (layer->buffer->primary_output == layer->output) {
+		scene_buffer_send_dmabuf_feedback(scene_node_get_root(&layer->buffer->node),
+			layer->buffer, &options);
+		layer->current_render_entry->sent_dmabuf_feedback = true;
+	}
+}
+
+static struct wlr_scene_node_output_layer *scene_buffer_create_output_layer(
+		struct wlr_scene_buffer *buffer, struct wlr_scene_output *output) {
+	struct wlr_scene_node_output_layer *layer = calloc(1, sizeof(*layer));
+	if (!layer) {
+		return NULL;
+	}
+
+	layer->layer = wlr_output_layer_create(output->output);
+	if (!layer->layer) {
+		free(layer);
+		return NULL;
+	}
+
+	layer->layer_feedback.notify = output_handle_layer_feedback;
+	wl_signal_add(&layer->layer->events.feedback, &layer->layer_feedback);
+
+	layer->output_destroy.notify = handle_output_layer_output_destroy;
+	wl_signal_add(&output->output->events.destroy, &layer->output_destroy);
+
+	layer->buffer = buffer;
+	layer->output = output;
+
+	wlr_addon_init(&layer->addon, &buffer->node.addons, output, &node_addon_output_layer);
+	return layer;
+}
+
+static bool scene_submit_output_layers(struct wlr_scene_output *scene_output,
+		struct wlr_output_state *state, struct wl_array *render_list) {
+	// if we render software cursors, that means they will be a part of the
+	// primary plane. If we render output layers, it means we could render
+	// over the cursor. A lock will also be registered if there is screen share.
+	// Screen share cannot use output layers.
+	if (scene_output->output->software_cursor_locks) {
+		return false;
+	}
+
+	if (scene_output->scene->debug_damage_option ==
+			WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT) {
+		return false;
+	}
+
+	struct render_list_entry *list_data = render_list->data;
+	int list_len = render_list->size / sizeof(*list_data);
+
+	scene_output->output_layers.size = 0;
+	if (!array_realloc(&scene_output->output_layers,
+			list_len * sizeof(struct wlr_output_layer_state))) {
+		return false;
+	}
+
+	// area of that the base layer must render (such as rects)
+	pixman_region32_t base_layer_area;
+	pixman_region32_init(&base_layer_area);
+
+	for (int i = 0; i < list_len; i++) {
+		struct render_list_entry *entry = &list_data[i];
+		struct wlr_scene_node *node = entry->node;
+
+		if (node->type != WLR_SCENE_NODE_BUFFER) {
+			continue;
+		}
+
+		struct wlr_box box = { .x = entry->x, .y = entry->y };
+		scene_node_get_size(node, &box.width, &box.height);
+
+		box.x = floor(box.x * scene_output->output->scale) - scene_output->x;
+		box.y = floor(box.y * scene_output->output->scale) - scene_output->y;
+		box.width = ceil(box.width * scene_output->output->scale);
+		box.height = ceil(box.height * scene_output->output->scale);
+
+		struct wlr_scene_node_output_layer *layer =
+			scene_node_get_output_layer(node, scene_output);
+
+		struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
+
+		if (entry->visible && !scene_buffer_can_be_output_layer(buffer, scene_output)) {
+			pixman_region32_union_rect(&base_layer_area, &base_layer_area,
+				box.x, box.y, box.width, box.height);
+
+			if (layer) {
+				node_output_layer_destroy(layer);
+			}
+
+			continue;
+		}
+
+		if (entry->visible && !layer) {
+			layer = scene_buffer_create_output_layer(buffer, scene_output);
+			if (!layer) {
+				pixman_region32_union_rect(&base_layer_area, &base_layer_area,
+					box.x, box.y, box.width, box.height);
+				continue;
+			}
+		}
+
+		if (layer) {
+			// we preallocted the array length, this should never return NULL.
+			entry->state = array_reversed_add(&scene_output->output_layers, sizeof(*entry->state));
+
+			layer->current_render_entry = entry;
+			*entry->state = (struct wlr_output_layer_state){
+				.layer = layer->layer,
+				.buffer = NULL,
+				.dst_box = box,
+			};
+		}
+
+		if (!entry->visible) {
+			continue;
+		}
+
+		pixman_region32_t intersection;
+		pixman_region32_init(&intersection);
+		pixman_region32_intersect_rect(&intersection, &base_layer_area,
+			box.x, box.y, box.width, box.height);
+		if (pixman_region32_not_empty(&intersection)) {
+			pixman_region32_union_rect(&base_layer_area, &base_layer_area,
+				box.x, box.y, box.width, box.height);
+			pixman_region32_fini(&intersection);
+			continue;
+		}
+		pixman_region32_fini(&intersection);
+
+		// only consider nodes that are in the damage
+		pixman_region32_init(&intersection);
+		pixman_region32_intersect_rect(&intersection, &scene_output->damage_ring.current,
+			box.x, box.y, box.width, box.height);
+		if (!pixman_region32_not_empty(&intersection)) {
+			pixman_region32_union_rect(&base_layer_area, &base_layer_area,
+				box.x, box.y, box.width, box.height);
+			pixman_region32_fini(&intersection);
+			continue;
+		}
+
+		if (!buffer_is_opaque(buffer->buffer)) {
+			// With transparent nodes, we can't get away with just having the
+			// node partially in the damage or else the user can see through
+			// the node to find an older version of the node software composited
+			// in the base layer.
+			pixman_region32_t node_box;
+			pixman_region32_init_rect(&node_box, box.x, box.y, box.width, box.height);
+			pixman_region32_subtract(&intersection, &node_box, &intersection);
+			pixman_region32_fini(&node_box);
+			if (pixman_region32_not_empty(&intersection)) {
+				pixman_region32_union_rect(&base_layer_area, &base_layer_area,
+					box.x, box.y, box.width, box.height);
+				pixman_region32_fini(&intersection);
+				continue;
+			}
+		}
+		pixman_region32_fini(&intersection);
+
+		entry->state->buffer = buffer->buffer;
+	}
+
+	pixman_region32_fini(&base_layer_area);
+
+	wlr_output_state_set_layers(state, array_reversed_start(&scene_output->output_layers),
+		scene_output->output_layers.size / sizeof(struct wlr_output_layer_state));
+
+	if (!wlr_output_test_state(scene_output->output, state)) {
+		return false;
+	}
+
+	return true;
+}
+
 bool wlr_scene_output_commit(struct wlr_scene_output *scene_output,
 		const struct wlr_scene_output_state_options *options) {
 	if (!scene_output->output->needs_frame && !pixman_region32_not_empty(
@@ -1733,11 +1990,15 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 	}
 	array_realloc(render_list, render_list->size);
 
+	scene_submit_output_layers(scene_output, state, render_list);
+
 	// Find number of visible render entries. If only one, try direct scanout.
 	struct render_list_entry *list_data = render_list->data;
 	struct render_list_entry *scanout_entry = NULL;
 	int list_len = render_list->size / sizeof(*list_data);
 	int render_count = 0;
+	pixman_region32_t forward_damage;
+	pixman_region32_init(&forward_damage);
 
 	for (int i = list_len - 1; i >= 0; i--) {
 		struct render_list_entry *entry = &list_data[i];
@@ -1745,9 +2006,29 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 			continue;
 		}
 
+		if (entry->state && entry->state->accepted && entry->state->buffer) {
+			// we need to damage the output here for the next frame because since
+			// the we're using output layers here. The contents won't be part
+			// of the primary plane and will therefore have stale contents.
+			pixman_region32_union(&forward_damage, &forward_damage, &entry->node->visible);
+
+			struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(entry->node);
+			struct wlr_scene_output_sample_event sample_event = {
+				.output = scene_output,
+				.direct_scanout = true,
+			};
+			wl_signal_emit_mutable(&buffer->events.output_sample, &sample_event);
+
+			continue;
+		}
+
 		scanout_entry = entry;
 		render_count++;
 	}
+
+	pixman_region32_translate(&forward_damage, -scene_output->x, -scene_output->y);
+	scale_output_damage(&forward_damage, scene_output->output->scale);
+	pixman_region32_intersect(&forward_damage, &forward_damage, &scene_output->damage_ring.current);
 
 	bool scanout = render_count == 1 &&
 		scene_entry_try_direct_scanout(scanout_entry, state, &render_data);
@@ -1769,6 +2050,10 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 			timespec_sub(&duration, &end_time, &start_time);
 			timer->pre_render_duration = timespec_to_nsec(&duration);
 		}
+
+		wlr_damage_ring_add(&scene_output->damage_ring, &forward_damage);
+		pixman_region32_fini(&forward_damage);
+
 		return true;
 	}
 
@@ -1824,6 +2109,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	struct wlr_buffer *buffer = wlr_swapchain_acquire(output->swapchain, NULL);
 	if (buffer == NULL) {
+		pixman_region32_fini(&forward_damage);
 		return false;
 	}
 
@@ -1842,6 +2128,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 	});
 	if (render_pass == NULL) {
 		wlr_buffer_unlock(buffer);
+		pixman_region32_fini(&forward_damage);
 		return false;
 	}
 
@@ -1907,6 +2194,10 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 			continue;
 		}
 
+		if (entry->state && entry->state->accepted && entry->state->buffer) {
+			continue;
+		}
+
 		scene_entry_render(entry, &render_data);
 
 		if (entry->node->type == WLR_SCENE_NODE_BUFFER) {
@@ -1944,6 +2235,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 	pixman_region32_fini(&render_data.damage);
 
 	if (!wlr_render_pass_submit(render_pass)) {
+		pixman_region32_fini(&forward_damage);
 		wlr_buffer_unlock(buffer);
 
 		// if we failed to render the buffer, it will have undefined contents
@@ -1959,6 +2251,9 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 			!wl_list_empty(&scene_output->damage_highlight_regions)) {
 		wlr_output_schedule_frame(scene_output->output);
 	}
+
+	wlr_damage_ring_add(&scene_output->damage_ring, &forward_damage);
+	pixman_region32_fini(&forward_damage);
 
 	return true;
 }
