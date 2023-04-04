@@ -202,6 +202,8 @@ struct wlr_scene_output {
 	struct wl_listener output_needs_frame;
 
 	struct wl_list damage_highlight_regions;
+
+	struct wl_array output_layers;
 };
 
 /** A layer shell scene helper */
