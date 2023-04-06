@@ -67,6 +67,9 @@ struct wlr_cursor_state {
 	struct wl_listener layout_add;
 	struct wl_listener layout_change;
 	struct wl_listener layout_destroy;
+
+	struct wl_array outputs;
+	uint64_t prev_output_mask;
 };
 
 struct wlr_cursor *wlr_cursor_create(void) {
@@ -117,6 +120,8 @@ struct wlr_cursor *wlr_cursor_create(void) {
 	wl_signal_init(&cur->events.tablet_tool_button);
 	wl_signal_init(&cur->events.tablet_tool_proximity);
 
+	wl_signal_init(&cur->events.outputs_update);
+
 	cur->x = 100;
 	cur->y = 100;
 
@@ -128,6 +133,7 @@ static void output_cursor_destroy(
 	wl_list_remove(&output_cursor->layout_output_destroy.link);
 	wl_list_remove(&output_cursor->link);
 	wlr_output_cursor_destroy(output_cursor->output_cursor);
+	output_cursor->cursor->state->prev_output_mask = 0;
 	free(output_cursor);
 }
 
@@ -191,6 +197,7 @@ void wlr_cursor_destroy(struct wlr_cursor *cur) {
 		cursor_device_destroy(device);
 	}
 
+	wl_array_release(&cur->state->outputs);
 	free(cur->state);
 	free(cur);
 }
@@ -216,6 +223,10 @@ static void cursor_warp_unchecked(struct wlr_cursor *cur,
 		return;
 	}
 
+	assert(cur->state->outputs.size == 0);
+
+	size_t i = 0;
+	uint64_t output_mask = 0;
 	struct wlr_cursor_output_cursor *output_cursor;
 	wl_list_for_each(output_cursor, &cur->state->output_cursors, link) {
 		double output_x = lx, output_y = ly;
@@ -223,7 +234,35 @@ static void cursor_warp_unchecked(struct wlr_cursor *cur,
 			output_cursor->output_cursor->output, &output_x, &output_y);
 		wlr_output_cursor_move(output_cursor->output_cursor,
 			output_x, output_y);
+
+		assert(i < 64);
+		uint64_t output_bit = 1 << i;
+		i++;
+
+		if (!output_cursor->output_cursor->visible) {
+			continue;
+		}
+
+		output_mask |= output_bit;
+
+		struct wlr_output **output_ptr =
+			wl_array_add(&cur->state->outputs, sizeof(struct wlr_output *));
+		if (output_ptr == NULL) {
+			wlr_log_errno(WLR_ERROR, "Allocation failed");
+			break;
+		}
+		*output_ptr = output_cursor->output_cursor->output;
 	}
+
+	if (output_mask != cur->state->prev_output_mask) {
+		struct wlr_cursor_outputs_update_event event = {
+			.outputs = cur->state->outputs.data,
+			.outputs_len = cur->state->outputs.size / sizeof(struct wlr_output *),
+		};
+		wl_signal_emit_mutable(&cur->events.outputs_update, &event);
+		cur->state->prev_output_mask = output_mask;
+	}
+	cur->state->outputs.size = 0;
 
 	cur->x = lx;
 	cur->y = ly;
@@ -814,6 +853,7 @@ static void layout_add(struct wlr_cursor_state *state,
 		&output_cursor->layout_output_destroy);
 
 	wl_list_insert(&state->output_cursors, &output_cursor->link);
+	state->prev_output_mask = 0;
 }
 
 static void handle_layout_add(struct wl_listener *listener, void *data) {
