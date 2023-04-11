@@ -626,7 +626,7 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 		// if this node used to not be mapped or its previous displayed
 		// buffer region will be different from what the new buffer would
 		// produce we need to update the node.
-		update = !scene_buffer->buffer ||
+		update = (!scene_buffer->buffer && !scene_buffer->texture) ||
 			(scene_buffer->dst_width == 0 && scene_buffer->dst_height == 0 &&
 				(scene_buffer->buffer->width != buffer->width ||
 				scene_buffer->buffer->height != buffer->height));
@@ -813,12 +813,6 @@ static struct wlr_texture *scene_buffer_get_texture(
 
 	if (!scene_buffer->buffer_locked) {
 		return NULL;
-	}
-
-	struct wlr_client_buffer *client_buffer =
-		wlr_client_buffer_get(scene_buffer->buffer);
-	if (client_buffer != NULL) {
-		return client_buffer->texture;
 	}
 
 	if (scene_buffer->texture == NULL ||
