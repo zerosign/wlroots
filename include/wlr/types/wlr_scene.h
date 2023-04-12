@@ -171,8 +171,10 @@ struct wlr_scene_buffer {
 	struct wlr_fbox src_box;
 	int dst_width, dst_height;
 	enum wl_output_transform transform;
-	pixman_region32_t opaque_region;
+	pixman_region32_t damage, opaque_region;
 	struct wlr_linux_dmabuf_feedback_v1_init_options prev_feedback_options;
+	bool buffer_locked;
+	struct wl_listener buffer_release;
 };
 
 /** A viewport for an output in the scene-graph */

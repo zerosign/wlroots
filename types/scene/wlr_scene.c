@@ -108,7 +108,11 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
 		}
 
 		wlr_texture_destroy(scene_buffer->texture);
-		wlr_buffer_unlock(scene_buffer->buffer);
+		if (scene_buffer->buffer_locked) {
+			wlr_buffer_unlock(scene_buffer->buffer);
+		}
+		wl_list_remove(&scene_buffer->buffer_release.link);
+		pixman_region32_fini(&scene_buffer->damage);
 		pixman_region32_fini(&scene_buffer->opaque_region);
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = scene_tree_from_node(node);
@@ -237,11 +241,11 @@ static void scene_node_opaque_region(struct wlr_scene_node *node, int x, int y,
 	} else if (node->type == WLR_SCENE_NODE_BUFFER) {
 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
 
-		if (!scene_buffer->buffer) {
+		if (!scene_buffer->buffer && !scene_buffer->texture) {
 			return;
 		}
 
-		if (!buffer_is_opaque(scene_buffer->buffer)) {
+		if (!scene_buffer->buffer || !buffer_is_opaque(scene_buffer->buffer)) {
 			pixman_region32_copy(opaque, &scene_buffer->opaque_region);
 			pixman_region32_translate(opaque, x, y);
 			return;
@@ -578,20 +582,28 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
 	assert(parent);
 	scene_node_init(&scene_buffer->node, WLR_SCENE_NODE_BUFFER, parent);
 
-	if (buffer) {
-		scene_buffer->buffer = wlr_buffer_lock(buffer);
-	}
+	wl_list_init(&scene_buffer->buffer_release.link);
 
 	wl_signal_init(&scene_buffer->events.outputs_update);
 	wl_signal_init(&scene_buffer->events.output_enter);
 	wl_signal_init(&scene_buffer->events.output_leave);
 	wl_signal_init(&scene_buffer->events.output_present);
 	wl_signal_init(&scene_buffer->events.frame_done);
+	pixman_region32_init(&scene_buffer->damage);
 	pixman_region32_init(&scene_buffer->opaque_region);
 
+	wlr_scene_buffer_set_buffer(scene_buffer, buffer);
 	scene_node_update(&scene_buffer->node, NULL);
 
 	return scene_buffer;
+}
+
+static void scene_buffer_handle_release(struct wl_listener *listener, void *data) {
+	struct wlr_scene_buffer *scene_buffer =
+		wl_container_of(listener, scene_buffer, buffer_release);
+	wl_list_remove(&scene_buffer->buffer_release.link);
+	wl_list_init(&scene_buffer->buffer_release.link);
+	scene_buffer->buffer = NULL;
 }
 
 void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buffer,
@@ -601,25 +613,38 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	// coordinates.
 	assert(buffer || !damage);
 
+	wl_list_remove(&scene_buffer->buffer_release.link);
+	wl_list_init(&scene_buffer->buffer_release.link);
+	if (scene_buffer->buffer_locked) {
+		wlr_buffer_unlock(scene_buffer->buffer);
+	}
+	scene_buffer->buffer = NULL;
+	scene_buffer->buffer_locked = false;
+
 	bool update = false;
-	wlr_buffer_unlock(scene_buffer->buffer);
-
-	wlr_texture_destroy(scene_buffer->texture);
-	scene_buffer->texture = NULL;
-
 	if (buffer) {
 		// if this node used to not be mapped or its previous displayed
 		// buffer region will be different from what the new buffer would
 		// produce we need to update the node.
-		update = !scene_buffer->buffer ||
+		update = (!scene_buffer->buffer && !scene_buffer->texture) ||
 			(scene_buffer->dst_width == 0 && scene_buffer->dst_height == 0 &&
 				(scene_buffer->buffer->width != buffer->width ||
 				scene_buffer->buffer->height != buffer->height));
 
 		scene_buffer->buffer = wlr_buffer_lock(buffer);
+		scene_buffer->buffer_locked = true;
+		scene_buffer->buffer_release.notify = scene_buffer_handle_release;
+		wl_signal_add(&buffer->events.release, &scene_buffer->buffer_release);
 	} else {
 		update = true;
-		scene_buffer->buffer = NULL;
+	}
+
+	if (damage != NULL) {
+		pixman_region32_union(&scene_buffer->damage, &scene_buffer->damage,
+			damage);
+	} else if (buffer != NULL) {
+		pixman_region32_union_rect(&scene_buffer->damage, &scene_buffer->damage,
+			0, 0, buffer->width, buffer->height);
 	}
 
 	if (update) {
@@ -781,18 +806,30 @@ void wlr_scene_buffer_send_frame_done(struct wlr_scene_buffer *scene_buffer,
 
 static struct wlr_texture *scene_buffer_get_texture(
 		struct wlr_scene_buffer *scene_buffer, struct wlr_renderer *renderer) {
-	struct wlr_client_buffer *client_buffer =
-		wlr_client_buffer_get(scene_buffer->buffer);
-	if (client_buffer != NULL) {
-		return client_buffer->texture;
-	}
-
-	if (scene_buffer->texture != NULL) {
+	if (scene_buffer->texture != NULL &&
+			!pixman_region32_not_empty(&scene_buffer->damage)) {
 		return scene_buffer->texture;
 	}
 
-	scene_buffer->texture =
-		wlr_texture_from_buffer(renderer, scene_buffer->buffer);
+	if (!scene_buffer->buffer_locked) {
+		return NULL;
+	}
+
+	if (scene_buffer->texture == NULL ||
+			!wlr_texture_update_from_buffer(scene_buffer->texture, scene_buffer->buffer, &scene_buffer->damage)) {
+		struct wlr_texture *texture = wlr_texture_from_buffer(renderer, scene_buffer->buffer);
+		if (texture == NULL) {
+			return NULL;
+		}
+		wlr_texture_destroy(scene_buffer->texture);
+		scene_buffer->texture = texture;
+	}
+
+	wlr_buffer_unlock(scene_buffer->buffer);
+	scene_buffer->buffer_locked = false;
+
+	pixman_region32_clear(&scene_buffer->damage);
+
 	return scene_buffer->texture;
 }
 
@@ -814,13 +851,22 @@ static void scene_node_get_size(struct wlr_scene_node *node,
 		if (scene_buffer->dst_width > 0 && scene_buffer->dst_height > 0) {
 			*width = scene_buffer->dst_width;
 			*height = scene_buffer->dst_height;
-		} else if (scene_buffer->buffer) {
-			if (scene_buffer->transform & WL_OUTPUT_TRANSFORM_90) {
-				*height = scene_buffer->buffer->width;
-				*width = scene_buffer->buffer->height;
+		} else if (scene_buffer->buffer || scene_buffer->texture) {
+			int w, h;
+			if (scene_buffer->buffer) {
+				w = scene_buffer->buffer->width;
+				h = scene_buffer->buffer->height;
 			} else {
-				*width = scene_buffer->buffer->width;
-				*height = scene_buffer->buffer->height;
+				w = scene_buffer->texture->width;
+				h = scene_buffer->texture->height;
+			}
+
+			if (scene_buffer->transform & WL_OUTPUT_TRANSFORM_90) {
+				*height = w;
+				*width = h;
+			} else {
+				*width = w;
+				*height = h;
 			}
 		}
 		break;
@@ -1141,7 +1187,6 @@ static void scene_node_render(struct wlr_scene_node *node,
 		break;
 	case WLR_SCENE_NODE_BUFFER:;
 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-		assert(scene_buffer->buffer);
 
 		struct wlr_renderer *renderer = output->renderer;
 		texture = scene_buffer_get_texture(scene_buffer, renderer);
@@ -1373,7 +1418,7 @@ static bool scene_node_invisible(struct wlr_scene_node *node) {
 	} else if (node->type == WLR_SCENE_NODE_BUFFER) {
 		struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
 
-		return buffer->buffer == NULL;
+		return buffer->buffer == NULL && buffer->texture == NULL;
 	}
 
 	return false;
@@ -1486,7 +1531,7 @@ static bool scene_buffer_can_consider_direct_scanout(struct wlr_scene_buffer *bu
 		return false;
 	}
 
-	if (node->type != WLR_SCENE_NODE_BUFFER) {
+	if (node->type != WLR_SCENE_NODE_BUFFER || buffer->buffer == NULL) {
 		return false;
 	}
 
