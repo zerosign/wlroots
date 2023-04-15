@@ -96,4 +96,12 @@ void wlr_presentation_surface_sampled_on_output(
 	struct wlr_presentation *presentation, struct wlr_surface *surface,
 	struct wlr_output *output);
 
+/**
+ * Send the presentation event immediately to this surface if the surface is
+ * asking for presentation events. This must be called during the present handler
+ * of an output.
+ */
+void wlr_presentation_send_presented(struct wlr_presentation *presentation,
+	struct wlr_surface *surface, struct wlr_presentation_event *event);
+
 #endif

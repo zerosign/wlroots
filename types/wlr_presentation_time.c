@@ -325,3 +325,15 @@ void wlr_presentation_surface_sampled_on_output(
 	feedback->output_destroy.notify = feedback_handle_output_destroy;
 	wl_signal_add(&output->events.destroy, &feedback->output_destroy);
 }
+
+void wlr_presentation_send_presented(struct wlr_presentation *presentation,
+		struct wlr_surface *surface, struct wlr_presentation_event *event) {
+	struct wlr_presentation_feedback *feedback =
+		wlr_presentation_surface_sampled(presentation, surface);
+	if (!feedback) {
+		return;
+	}
+
+	wlr_presentation_feedback_send_presented(feedback, event);
+	wlr_presentation_feedback_destroy(feedback);
+}
