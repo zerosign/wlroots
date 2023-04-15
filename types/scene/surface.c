@@ -40,15 +40,23 @@ static void handle_scene_buffer_output_present(
 		struct wl_listener *listener, void *data) {
 	struct wlr_scene_surface *surface =
 		wl_container_of(listener, surface, output_present);
-	struct wlr_scene_output *scene_output = data;
+	struct wlr_output_event_present *output_event = data;
 
-	if (surface->buffer->primary_output == scene_output) {
+	if (surface->buffer->primary_output->output == output_event->output) {
 		struct wlr_scene *root = scene_node_get_root(&surface->buffer->node);
 		struct wlr_presentation *presentation = root->presentation;
 
 		if (presentation) {
-			wlr_presentation_surface_sampled_on_output(
-				presentation, surface->surface, scene_output->output);
+			struct wlr_presentation_event event = {
+				.output = output_event->output,
+				.tv_sec = (uint64_t)output_event->when->tv_sec,
+				.tv_nsec = (uint32_t)output_event->when->tv_nsec,
+				.refresh = (uint32_t)output_event->refresh,
+				.seq = (uint64_t)output_event->seq,
+				.flags = output_event->flags,
+			};
+
+			wlr_presentation_send_presented(presentation, surface->surface, &event);
 		}
 	}
 }

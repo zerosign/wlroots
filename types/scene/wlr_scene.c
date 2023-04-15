@@ -1099,8 +1099,17 @@ static void render_texture(struct wlr_output *output,
 	}
 }
 
-static void scene_node_render(struct wlr_scene_node *node,
+struct render_list_entry {
+	struct wlr_scene_node *node;
+	bool sent_feedback;
+	bool visible;
+	bool presented;
+};
+
+static void scene_render_list_entry_render(struct render_list_entry *entry,
 		struct wlr_scene_output *scene_output, pixman_region32_t *damage) {
+	struct wlr_scene_node *node = entry->node;
+
 	int x, y;
 	wlr_scene_node_coords(node, &x, &y);
 	x -= scene_output->x;
@@ -1118,6 +1127,8 @@ static void scene_node_render(struct wlr_scene_node *node,
 		pixman_region32_fini(&render_region);
 		return;
 	}
+
+	entry->presented = true;
 
 	struct wlr_box dst_box = {
 		.x = x,
@@ -1155,8 +1166,6 @@ static void scene_node_render(struct wlr_scene_node *node,
 
 		render_texture(output, &render_region, texture, &scene_buffer->src_box,
 			&dst_box, matrix);
-
-		wl_signal_emit_mutable(&scene_buffer->events.output_present, scene_output);
 		break;
 	}
 
@@ -1260,6 +1269,26 @@ static void scene_output_handle_needs_frame(struct wl_listener *listener, void *
 	wlr_output_schedule_frame(scene_output->output);
 }
 
+static void scene_output_handle_present(struct wl_listener *listener, void *data) {
+	struct wlr_scene_output *scene_output = wl_container_of(listener,
+		scene_output, output_present);
+	struct wlr_output_event_present *output_event = data;
+
+	struct wl_array *render_list = &scene_output->render_list;
+	struct render_list_entry *list_data = render_list->data;
+	int list_len = render_list->size / sizeof(*list_data);
+
+	for (int i = list_len - 1; i >= 0; i--) {
+		struct render_list_entry *entry = &list_data[i];
+		if (!entry->presented || entry->node->type != WLR_SCENE_NODE_BUFFER) {
+			continue;
+		}
+
+		struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(entry->node);
+		wl_signal_emit_mutable(&buffer->events.output_present, output_event);
+	}
+}
+
 struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 		struct wlr_output *output) {
 	struct wlr_scene_output *scene_output = calloc(1, sizeof(*scene_output));
@@ -1302,6 +1331,9 @@ struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 	scene_output->output_needs_frame.notify = scene_output_handle_needs_frame;
 	wl_signal_add(&output->events.needs_frame, &scene_output->output_needs_frame);
 
+	scene_output->output_present.notify = scene_output_handle_present;
+	wl_signal_add(&output->events.present, &scene_output->output_present);
+
 	scene_output_update_geometry(scene_output);
 
 	return scene_output;
@@ -1334,6 +1366,7 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 	wl_list_remove(&scene_output->output_commit.link);
 	wl_list_remove(&scene_output->output_damage.link);
 	wl_list_remove(&scene_output->output_needs_frame.link);
+	wl_list_remove(&scene_output->output_present.link);
 
 	wl_array_release(&scene_output->render_list);
 	free(scene_output);
@@ -1362,12 +1395,6 @@ void wlr_scene_output_set_position(struct wlr_scene_output *scene_output,
 
 	scene_output_update_geometry(scene_output);
 }
-
-struct render_list_entry {
-	struct wlr_scene_node *node;
-	bool sent_feedback;
-	bool visible;
-};
 
 static bool scene_construct_render_list(struct wlr_scene_node *node,
 		struct wl_array *render_list, struct wlr_box *box, bool calculate_visibility,
@@ -1563,7 +1590,7 @@ static bool scene_buffer_try_direct_scanout(struct render_list_entry *entry,
 		return false;
 	}
 
-	wl_signal_emit_mutable(&buffer->events.output_present, scene_output);
+	entry->presented = true;
 
 	state.committed |= WLR_OUTPUT_STATE_DAMAGE;
 	get_frame_damage(scene_output, &state.damage);
@@ -1753,7 +1780,7 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output) {
 			continue;
 		}
 
-		scene_node_render(entry->node, scene_output, &damage);
+		scene_render_list_entry_render(entry, scene_output, &damage);
 
 		if (entry->node->type == WLR_SCENE_NODE_BUFFER) {
 			struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(entry->node);
