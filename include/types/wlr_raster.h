@@ -17,4 +17,11 @@ void wlr_raster_attach(struct wlr_raster *raster, struct wlr_texture *texture);
  */
 void wlr_raster_detach(struct wlr_raster *raster, struct wlr_texture *texture);
 
+/**
+ * Creates a wlr_raster that will attempt to reuse textures from the current
+ * raster only doing partial texture uploads.
+ */
+struct wlr_raster *wlr_raster_update(struct wlr_raster *raster,
+	struct wlr_buffer *buffer, const pixman_region32_t *damage);
+
 #endif
