@@ -22,6 +22,7 @@ struct wlr_raster *wlr_raster_create(struct wlr_buffer *buffer) {
 		return NULL;
 	}
 
+	wl_list_init(&raster->sources);
 	wl_signal_init(&raster->events.destroy);
 
 	assert(buffer);
@@ -38,6 +39,12 @@ struct wlr_raster *wlr_raster_create(struct wlr_buffer *buffer) {
 	return raster;
 }
 
+static void raster_source_destroy(struct wlr_raster_source *source) {
+	wl_list_remove(&source->link);
+	wl_list_remove(&source->renderer_destroy.link);
+	free(source);
+}
+
 static void raster_consider_destroy(struct wlr_raster *raster) {
 	if (raster->n_locks > 0) {
 		return;
@@ -45,8 +52,10 @@ static void raster_consider_destroy(struct wlr_raster *raster) {
 
 	wl_signal_emit_mutable(&raster->events.destroy, NULL);
 
-	if (raster->texture) {
-		wl_list_remove(&raster->renderer_destroy.link);
+	struct wlr_raster_source *source, *source_tmp;
+	wl_list_for_each_safe(source, source_tmp, &raster->sources, link) {
+		wlr_texture_destroy(source->texture);
+		raster_source_destroy(source);
 	}
 
 	wl_list_remove(&raster->buffer_release.link);
@@ -70,33 +79,63 @@ void wlr_raster_unlock(struct wlr_raster *raster) {
 }
 
 static void handle_renderer_destroy(struct wl_listener *listener, void *data) {
-	struct wlr_raster *raster = wl_container_of(listener, raster, renderer_destroy);
-	wlr_raster_detach(raster, raster->texture);
+	struct wlr_raster_source *source = wl_container_of(listener, source, renderer_destroy);
+	raster_source_destroy(source);
 }
 
 void wlr_raster_attach(struct wlr_raster *raster, struct wlr_texture *texture) {
 	assert(texture->width == raster->width && texture->height == raster->height);
-	assert(!raster->texture);
 
-	raster->renderer_destroy.notify = handle_renderer_destroy;
-	wl_signal_add(&texture->renderer->events.destroy, &raster->renderer_destroy);
+	struct wlr_raster_source *source;
+	wl_list_for_each(source, &raster->sources, link) {
+		assert(source->texture != texture);
+	}
 
-	raster->texture = texture;
+	source = calloc(1, sizeof(*source));
+	if (!source) {
+		 return;
+	}
+
+	source->renderer_destroy.notify = handle_renderer_destroy;
+	wl_signal_add(&texture->renderer->events.destroy, &source->renderer_destroy);
+
+	wl_list_insert(&raster->sources, &source->link);
+	source->texture = texture;
 }
 
 void wlr_raster_detach(struct wlr_raster *raster, struct wlr_texture *texture) {
-	assert(texture);
-	assert(raster->texture == texture);
+	if (!texture) {
+		return;
+	}
 
-	wl_list_remove(&raster->renderer_destroy.link);
-	raster->texture = NULL;
+	struct wlr_raster_source *source;
+	wl_list_for_each(source, &raster->sources, link) {
+		if (source->texture == texture) {
+			raster_source_destroy(source);
+			return;
+		}
+	}
+
+	assert(false);
+}
+
+static struct wlr_texture *wlr_raster_get_texture(struct wlr_raster *raster,
+		struct wlr_renderer *renderer) {
+	struct wlr_raster_source *source;
+	wl_list_for_each(source, &raster->sources, link) {
+		if (source->texture->renderer == renderer) {
+			return source->texture;
+		}
+	}
+
+	return NULL;
 }
 
 struct wlr_texture *wlr_raster_create_texture(struct wlr_raster *raster,
 		struct wlr_renderer *renderer) {
-	if (raster->texture) {
-		assert(raster->texture->renderer == renderer);
-		return raster->texture;
+	struct wlr_texture *texture = wlr_raster_get_texture(raster, renderer);
+	if (texture) {
+		return texture;
 	}
 
 	assert(raster->buffer);
@@ -107,7 +146,7 @@ struct wlr_texture *wlr_raster_create_texture(struct wlr_raster *raster,
 		return client_buffer->texture;
 	}
 
-	struct wlr_texture *texture = wlr_texture_from_buffer(renderer, raster->buffer);
+	texture = wlr_texture_from_buffer(renderer, raster->buffer);
 	if (texture) {
 		wlr_raster_attach(raster, texture);
 	}
@@ -144,21 +183,18 @@ static void raster_update_handle_old_raster_destroy(struct wl_listener *listener
 	struct raster_update_state *state = wl_container_of(listener, state, old_raster_destroy);
 
 	// if the new raster already has a texture, there's nothing we can do to help.
-	if (state->new_raster->texture) {
-		assert(state->new_raster->texture->renderer == state->old_raster->texture->renderer);
+	if (!wl_list_empty(&state->new_raster->sources)) {
 		destroy_raster_update_state(state);
 		return;
 	}
 
-	struct wlr_texture *texture = state->old_raster->texture;
-	if (!texture) {
-		destroy_raster_update_state(state);
-		return;
-	}
-
-	if (wlr_texture_update_from_buffer(texture, state->buffer, &state->damage)) {
-		wlr_raster_detach(state->old_raster, texture);
-		wlr_raster_attach(state->new_raster, texture);
+	struct wlr_raster_source *source, *tmp_source;
+	wl_list_for_each_safe(source, tmp_source, &state->old_raster->sources, link) {
+		struct wlr_texture *texture = source->texture;
+		if (wlr_texture_update_from_buffer(texture, state->buffer, &state->damage)) {
+			wlr_raster_detach(state->old_raster, texture);
+			wlr_raster_attach(state->new_raster, texture);
+		}
 	}
 
 	destroy_raster_update_state(state);
@@ -237,7 +273,7 @@ static void surface_raster_handle_buffer_prerelease(struct wl_listener *listener
 	}
 
 	// if there was a failed texture upload, keep on locking the buffer
-	if (!raster->texture) {
+	if (wl_list_empty(&raster->sources)) {
 		wlr_buffer_lock(raster->buffer);
 		surface_raster->locking_buffer = true;
 	}
@@ -354,6 +390,26 @@ struct wlr_raster *wlr_raster_from_surface(struct wlr_surface *surface) {
 		// make sure we haven't already seen this buffer
 		if (surface_raster->raster->buffer == surface->current.buffer) {
 			return wlr_raster_lock(surface_raster->raster);
+		}
+
+		// before we try to update the old raster, remove obsolete textures
+		struct wlr_raster_source *source, *tmp_source;
+		wl_list_for_each_safe(source, tmp_source, &surface_raster->raster->sources, link) {
+			struct wlr_texture *texture = source->texture;
+
+			bool found = false;
+			struct wlr_surface_output *output;
+			wl_list_for_each(output, &surface->current_outputs, link) {
+				if (output->output->renderer == texture->renderer) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				wlr_raster_detach(surface_raster->raster, texture);
+				wlr_texture_destroy(texture);
+			}
 		}
 
 		raster = wlr_raster_update(surface_raster->raster,
