@@ -149,7 +149,7 @@ struct wlr_scene_buffer {
 		struct wl_signal outputs_update; // struct wlr_scene_outputs_update_event
 		struct wl_signal output_enter; // struct wlr_scene_output
 		struct wl_signal output_leave; // struct wlr_scene_output
-		struct wl_signal output_present; // struct wlr_scene_output
+		struct wl_signal output_present; // struct wlr_output_event_present
 		struct wl_signal frame_done; // struct timespec
 	} events;
 
@@ -198,6 +198,7 @@ struct wlr_scene_output {
 	struct wl_listener output_commit;
 	struct wl_listener output_damage;
 	struct wl_listener output_needs_frame;
+	struct wl_listener output_present;
 
 	struct wl_list damage_highlight_regions;
 
