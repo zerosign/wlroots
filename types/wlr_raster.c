@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_raster.h>
+#include <wlr/types/wlr_surface_invalidation_v1.h>
 #include <wlr/util/addon.h>
 #include <wlr/util/log.h>
 #include "render/drm_format_set.h"
@@ -481,6 +482,7 @@ struct surface_raster {
 	struct wlr_addon addon;
 
 	struct wl_listener buffer_prerelease;
+	struct wl_listener raster_invalidated;
 
 	bool locking_buffer;
 };
@@ -491,6 +493,7 @@ static void surface_raster_destroy(struct surface_raster *surface_raster) {
 	}
 
 	wl_list_remove(&surface_raster->buffer_prerelease.link);
+	wl_list_remove(&surface_raster->raster_invalidated.link);
 	wlr_addon_finish(&surface_raster->addon);
 	wlr_raster_unlock(surface_raster->raster);
 	free(surface_raster);
@@ -520,6 +523,14 @@ static void surface_raster_handle_buffer_prerelease(struct wl_listener *listener
 
 	wl_list_remove(&surface_raster->buffer_prerelease.link);
 	wl_list_init(&surface_raster->buffer_prerelease.link);
+}
+
+static void surface_raster_handle_raster_invalidated(struct wl_listener *listener, void *data) {
+	struct surface_raster *surface_raster =
+		wl_container_of(listener, surface_raster, raster_invalidated);
+
+	wlr_surface_invalidation_manager_v1_send_surface_invalidation(
+		surface_raster->surface);
 }
 
 const struct wlr_addon_interface surface_raster_addon_impl = {
@@ -604,6 +615,8 @@ struct wlr_raster *wlr_raster_from_surface(struct wlr_surface *surface) {
 
 		surface_raster->buffer_prerelease.notify = surface_raster_handle_buffer_prerelease;
 		wl_list_init(&surface_raster->buffer_prerelease.link);
+		surface_raster->raster_invalidated.notify = surface_raster_handle_raster_invalidated;
+		wl_list_init(&surface_raster->raster_invalidated.link);
 	}
 
 	if (!surface->current.buffer) {
@@ -619,6 +632,9 @@ struct wlr_raster *wlr_raster_from_surface(struct wlr_surface *surface) {
 
 		wl_list_remove(&surface_raster->buffer_prerelease.link);
 		wl_list_init(&surface_raster->buffer_prerelease.link);
+
+		wl_list_remove(&surface_raster->raster_invalidated.link);
+		wl_list_init(&surface_raster->raster_invalidated.link);
 
 		surface_raster_drop_raster(surface_raster);
 
@@ -664,6 +680,9 @@ struct wlr_raster *wlr_raster_from_surface(struct wlr_surface *surface) {
 
 	surface_raster_drop_raster(surface_raster);
 	surface_raster->raster = wlr_raster_lock(raster);
+
+	wl_list_remove(&surface_raster->raster_invalidated.link);
+	wl_signal_add(&raster->events.invalidated, &surface_raster->raster_invalidated);
 
 	wl_list_remove(&surface_raster->buffer_prerelease.link);
 	wl_signal_add(&surface->current.buffer->events.prerelease, &surface_raster->buffer_prerelease);
