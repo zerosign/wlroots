@@ -26,6 +26,7 @@ protocols = {
 	'fractional-scale-v1': wl_protocol_dir / 'staging/fractional-scale/fractional-scale-v1.xml',
 	'security-context-v1': wl_protocol_dir / 'staging/security-context/security-context-v1.xml',
 	'single-pixel-buffer-v1': wl_protocol_dir / 'staging/single-pixel-buffer/single-pixel-buffer-v1.xml',
+	'surface-invalidation-v1': wl_protocol_dir / 'staging/surface-invalidation/surface-invalidation-v1.xml',
 	'xdg-activation-v1': wl_protocol_dir / 'staging/xdg-activation/xdg-activation-v1.xml',
 	'xwayland-shell-v1': wl_protocol_dir / 'staging/xwayland-shell/xwayland-shell-v1.xml',
 	'tearing-control-v1': wl_protocol_dir / 'staging/tearing-control/tearing-control-v1.xml',
