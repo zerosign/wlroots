@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "types/wlr_xdg_shell.h"
+#include "xdg-shell-protocol.h"
 
 #define WM_BASE_VERSION 5
 

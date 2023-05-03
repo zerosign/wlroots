@@ -4,6 +4,7 @@
 #include <wlr/types/wlr_fullscreen_shell_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/util/log.h>
+#include "fullscreen-shell-unstable-v1-protocol.h"
 
 #define FULLSCREEN_SHELL_VERSION 1
 

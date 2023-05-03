@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <wlr/util/edges.h>
 #include "types/wlr_xdg_shell.h"
+#include "xdg-shell-protocol.h"
 
 static const struct xdg_positioner_interface xdg_positioner_implementation;
 

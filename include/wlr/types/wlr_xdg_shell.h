@@ -13,7 +13,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/box.h>
-#include "xdg-shell-protocol.h"
+#include <wayland-protocols/xdg-shell.h>
 
 struct wlr_xdg_shell {
 	struct wl_global *global;

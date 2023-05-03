@@ -4,6 +4,7 @@
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include "types/wlr_xdg_shell.h"
+#include "xdg-shell-protocol.h"
 
 struct wlr_xdg_surface *wlr_xdg_surface_try_from_wlr_surface(
 		struct wlr_surface *surface) {

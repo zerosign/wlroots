@@ -11,8 +11,7 @@
 
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_seat.h>
-
-#include "tablet-unstable-v2-protocol.h"
+#include <wayland-protocols/tablet-unstable-v2.h>
 
 /* This can probably be even lower,the tools don't have a lot of buttons */
 #define WLR_TABLET_V2_TOOL_BUTTONS_CAP 16
