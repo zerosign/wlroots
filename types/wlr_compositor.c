@@ -228,13 +228,12 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 
 static void surface_update_damage(pixman_region32_t *buffer_damage,
 		struct wlr_surface_state *current, struct wlr_surface_state *pending) {
-	pixman_region32_clear(buffer_damage);
-
 	if (pending->width != current->width ||
 			pending->height != current->height ||
 			!wlr_fbox_equal(&pending->viewport.src, &current->viewport.src)) {
 		// Damage the whole buffer on resize or viewport source box change
-		pixman_region32_union_rect(buffer_damage, buffer_damage, 0, 0,
+		pixman_region32_fini(buffer_damage);
+		pixman_region32_init_rect(buffer_damage, 0, 0,
 			pending->buffer_width, pending->buffer_height);
 	} else {
 		// Copy over surface damage + buffer damage
@@ -562,6 +561,8 @@ static void surface_commit_state(struct wlr_surface *surface,
 	// released immediately on commit when they are uploaded to the GPU.
 	wlr_buffer_unlock(surface->current.buffer);
 	surface->current.buffer = NULL;
+
+	pixman_region32_clear(&surface->buffer_damage);
 }
 
 static void surface_handle_commit(struct wl_client *client,
