@@ -2200,11 +2200,6 @@ error:
 }
 
 struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
-	wlr_log(WLR_INFO, "The vulkan renderer is only experimental and "
-		"not expected to be ready for daily use");
-	wlr_log(WLR_INFO, "Run with VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation "
-		"to enable the validation layer");
-
 	// NOTE: we could add functionality to allow the compositor passing its
 	// name and version to this function. Just use dummies until then,
 	// shouldn't be relevant to the driver anyways
