@@ -219,6 +219,7 @@ struct wlr_surface {
 
 	struct wl_listener renderer_destroy;
 	struct wl_listener role_resource_destroy;
+	struct wl_listener current_buffer_release;
 
 	struct {
 		int32_t scale;
@@ -230,6 +231,7 @@ struct wlr_surface {
 	bool unmap_commit;
 
 	bool opaque;
+	bool consumed;
 
 	int32_t preferred_buffer_scale;
 	bool preferred_buffer_transform_sent;
