@@ -25,4 +25,7 @@ bool pixel_format_info_check_stride(const struct wlr_pixel_format_info *info,
 uint32_t convert_wl_shm_format_to_drm(enum wl_shm_format fmt);
 enum wl_shm_format convert_drm_format_to_wl_shm(uint32_t fmt);
 
+char *get_drm_format_description(uint32_t format);
+char *get_drm_modifier_description(uint64_t modifier);
+
 #endif
