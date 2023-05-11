@@ -4,9 +4,9 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/swapchain.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
 
 #include "render/drm_format_set.h"
+#include "render/pixel_format.h"
 #include "types/wlr_output.h"
 
 static struct wlr_swapchain *create_swapchain(struct wlr_output *output,
@@ -24,10 +24,10 @@ static struct wlr_swapchain *create_swapchain(struct wlr_output *output,
 		return NULL;
 	}
 
-	char *format_name = drmGetFormatName(format->format);
-	wlr_log(WLR_DEBUG, "Choosing primary buffer format %s (0x%08"PRIX32") for output '%s'",
-		format_name ? format_name : "<unknown>", format->format, output->name);
-	free(format_name);
+	char *format_desc = get_drm_format_description(format->format);
+	wlr_log(WLR_DEBUG, "Choosing primary buffer format %s for output '%s'",
+		format_desc, output->name);
+	free(format_desc);
 
 	if (!allow_modifiers && (format->len != 1 || format->modifiers[0] != DRM_FORMAT_MOD_LINEAR)) {
 		if (!wlr_drm_format_has(format, DRM_FORMAT_MOD_INVALID)) {

@@ -11,6 +11,7 @@
 #include <wlr/util/region.h>
 #include <xf86drm.h>
 #include "render/egl.h"
+#include "render/pixel_format.h"
 #include "util/env.h"
 
 static enum wlr_log_importance egl_log_importance_to_wlr(EGLint type) {
@@ -100,10 +101,9 @@ static int get_egl_dmabuf_modifiers(struct wlr_egl *egl, EGLint format,
 	uint64_t **modifiers, EGLBoolean **external_only);
 
 static void log_modifier(uint64_t modifier, bool external_only) {
-	char *mod_name = drmGetFormatModifierName(modifier);
-	wlr_log(WLR_DEBUG, "    %s (0x%016"PRIX64"): ✓ texture  %s render",
-		mod_name ? mod_name : "<unknown>", modifier, external_only ? "✗" : "✓");
-	free(mod_name);
+	char *mod_desc = get_drm_modifier_description(modifier);
+	wlr_log(WLR_DEBUG, "    %s: ✓ texture  %s render", mod_desc, external_only ? "✗" : "✓");
+	free(mod_desc);
 }
 
 static void init_dmabuf_formats(struct wlr_egl *egl) {
@@ -166,10 +166,9 @@ static void init_dmabuf_formats(struct wlr_egl *egl) {
 		}
 
 		if (wlr_log_get_verbosity() >= WLR_DEBUG) {
-			char *fmt_name = drmGetFormatName(fmt);
-			wlr_log(WLR_DEBUG, "  %s (0x%08"PRIX32")",
-				fmt_name ? fmt_name : "<unknown>", fmt);
-			free(fmt_name);
+			char *fmt_desc = get_drm_format_description(fmt);
+			wlr_log(WLR_DEBUG, "  %s", fmt_desc);
+			free(fmt_desc);
 
 			log_modifier(DRM_FORMAT_MOD_INVALID, false);
 			if (modifiers_len == 0) {

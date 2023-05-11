@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <vulkan/vulkan.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
+#include "render/pixel_format.h"
 #include "render/vulkan.h"
 
 static const struct wlr_vk_format formats[] = {
@@ -333,12 +333,10 @@ static bool query_modifier_support(struct wlr_vk_device *dev,
 			snprintf(texture_status, sizeof(texture_status), "✓ texture");
 		}
 
-		char *modifier_name = drmGetFormatModifierName(m.drmFormatModifier);
-		wlr_log(WLR_DEBUG, "    DMA-BUF modifier %s "
-			"(0x%016"PRIX64", %"PRIu32" planes): %s  %s",
-			modifier_name ? modifier_name : "<unknown>", m.drmFormatModifier,
-			m.drmFormatModifierPlaneCount, texture_status, render_status);
-		free(modifier_name);
+		char *modifier_desc = get_drm_modifier_description(m.drmFormatModifier);
+		wlr_log(WLR_DEBUG, "    DMA-BUF modifier %s: %"PRIu32" planes, %s  %s",
+			modifier_desc, m.drmFormatModifierPlaneCount, texture_status, render_status);
+		free(modifier_desc);
 	}
 
 	free(modp.pDrmFormatModifierProperties);
@@ -353,10 +351,9 @@ void vulkan_format_props_query(struct wlr_vk_device *dev,
 		return;
 	}
 
-	char *format_name = drmGetFormatName(format->drm);
-	wlr_log(WLR_DEBUG, "  %s (0x%08"PRIX32")",
-		format_name ? format_name : "<unknown>", format->drm);
-	free(format_name);
+	char *format_desc = get_drm_format_description(format->drm);
+	wlr_log(WLR_DEBUG, "  %s", format_desc);
+	free(format_desc);
 
 	VkDrmFormatModifierPropertiesListEXT modp = {
 		.sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT,

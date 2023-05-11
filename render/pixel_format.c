@@ -1,6 +1,9 @@
 #include <assert.h>
 #include <drm_fourcc.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <wlr/util/log.h>
+#include <xf86drm.h>
 #include "render/pixel_format.h"
 
 static const struct wlr_pixel_format_info pixel_format_info[] = {
@@ -210,4 +213,39 @@ bool pixel_format_info_check_stride(const struct wlr_pixel_format_info *fmt,
 		return false;
 	}
 	return true;
+}
+
+static char *format_str(const char *fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	int len = vsnprintf(NULL, 0, fmt, args);
+	va_end(args);
+	if (len < 0) {
+		return NULL;
+	}
+
+	char *str = malloc(len + 1);
+	if (str == NULL) {
+		return NULL;
+	}
+
+	va_start(args, fmt);
+	vsnprintf(str, len + 1, fmt, args);
+	va_end(args);
+
+	return str;
+}
+
+char *get_drm_format_description(uint32_t format) {
+	char *name = drmGetFormatName(format);
+	char *str = format_str("%s (0x%08"PRIX32")", name ? name : "<unknown>", format);
+	free(name);
+	return str;
+}
+
+char *get_drm_modifier_description(uint64_t modifier) {
+	char *name = drmGetFormatModifierName(modifier);
+	char *str = format_str("%s (0x%016"PRIX64")", name ? name : "<unknown>", modifier);
+	free(name);
+	return str;
 }

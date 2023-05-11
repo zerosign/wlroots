@@ -13,6 +13,7 @@
 #include "config.h"
 #include "render/allocator/gbm.h"
 #include "render/drm_format_set.h"
+#include "render/pixel_format.h"
 
 static const struct wlr_buffer_impl buffer_impl;
 
@@ -139,15 +140,13 @@ static struct wlr_gbm_buffer *create_buffer(struct wlr_gbm_allocator *alloc,
 		buffer->dmabuf.modifier = fallback_modifier;
 	}
 
-	char *format_name = drmGetFormatName(buffer->dmabuf.format);
-	char *modifier_name = drmGetFormatModifierName(buffer->dmabuf.modifier);
-	wlr_log(WLR_DEBUG, "Allocated %dx%d GBM buffer "
-		"with format %s (0x%08"PRIX32"), modifier %s (0x%016"PRIX64")",
+	char *format_desc = get_drm_format_description(buffer->dmabuf.format);
+	char *modifier_desc = get_drm_modifier_description(buffer->dmabuf.modifier);
+	wlr_log(WLR_DEBUG, "Allocated %dx%d GBM buffer with format %s, modifier %s",
 		buffer->base.width, buffer->base.height,
-		format_name ? format_name : "<unknown>", buffer->dmabuf.format,
-		modifier_name ? modifier_name : "<unknown>", buffer->dmabuf.modifier);
-	free(format_name);
-	free(modifier_name);
+		format_desc, modifier_desc);
+	free(format_desc);
+	free(modifier_desc);
 
 	return buffer;
 }
