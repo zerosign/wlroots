@@ -265,6 +265,21 @@ struct wlr_renderer *renderer_autocreate_with_drm_fd(int drm_fd) {
 	bool is_auto = strcmp(renderer_name, "auto") == 0;
 	struct wlr_renderer *renderer = NULL;
 
+#if WLR_HAS_VULKAN_RENDERER
+	if (is_auto || strcmp(renderer_name, "vulkan") == 0) {
+		if (drm_fd < 0) {
+			log_creation_failure(is_auto, "Cannot create Vulkan renderer: no DRM FD available");
+		} else {
+			renderer = wlr_vk_renderer_create_with_drm_fd(drm_fd);
+			if (renderer) {
+				return renderer;
+			} else {
+				log_creation_failure(is_auto, "Failed to create a Vulkan renderer");
+			}
+		}
+	}
+#endif
+
 #if WLR_HAS_GLES2_RENDERER
 	if (is_auto || strcmp(renderer_name, "gles2") == 0) {
 		if (drm_fd < 0) {
@@ -275,21 +290,6 @@ struct wlr_renderer *renderer_autocreate_with_drm_fd(int drm_fd) {
 				return renderer;
 			} else {
 				log_creation_failure(is_auto, "Failed to create a GLES2 renderer");
-			}
-		}
-	}
-#endif
-
-#if WLR_HAS_VULKAN_RENDERER
-	if (strcmp(renderer_name, "vulkan") == 0) {
-		if (drm_fd < 0) {
-			log_creation_failure(is_auto, "Cannot create Vulkan renderer: no DRM FD available");
-		} else {
-			renderer = wlr_vk_renderer_create_with_drm_fd(drm_fd);
-			if (renderer) {
-				return renderer;
-			} else {
-				log_creation_failure(is_auto, "Failed to create a Vulkan renderer");
 			}
 		}
 	}
