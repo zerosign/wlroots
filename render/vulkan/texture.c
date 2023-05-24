@@ -346,7 +346,7 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 
 	const struct wlr_vk_format_props *fmt =
 		vulkan_format_props_from_drm(renderer->dev, drm_fmt);
-	if (fmt == NULL || fmt->format.is_ycbcr) {
+	if (fmt == NULL) {
 		char *format_name = drmGetFormatName(drm_fmt);
 		wlr_log(WLR_ERROR, "Unsupported pixel format %s (0x%08"PRIX32")",
 			format_name, drm_fmt);
@@ -360,7 +360,10 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 	}
 
 	texture->format = &fmt->format;
-	texture->pipeline_layout = &renderer->default_pipeline_layout;
+	texture->pipeline_layout = vulkan_get_pipeline_layout(renderer, texture->format);
+	if (texture->pipeline_layout == NULL) {
+		goto error;
+	}
 
 	VkImageCreateInfo img_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
