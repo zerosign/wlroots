@@ -149,25 +149,41 @@ static bool add_prop(drmModeAtomicReq *req, uint32_t obj,
 }
 
 static bool set_plane_props(struct wlr_drm_plane *plane,
-		struct liftoff_layer *layer, struct wlr_drm_fb *fb, int32_t x, int32_t y, uint64_t zpos) {
+		struct liftoff_layer *layer, struct wlr_drm_fb *fb, int32_t x, int32_t y, uint64_t zpos,
+		struct wlr_box *src_box, struct wlr_box *dst_box) {
 	if (fb == NULL) {
 		wlr_log(WLR_ERROR, "Failed to acquire FB for plane %"PRIu32, plane->id);
 		return false;
 	}
 
-	uint32_t width = fb->wlr_buf->width;
-	uint32_t height = fb->wlr_buf->height;
+	struct wlr_box tmp_src_box;
+	if (src_box == NULL) {
+		tmp_src_box.x = 0;
+		tmp_src_box.y = 0;
+		tmp_src_box.width = fb->wlr_buf->width;
+		tmp_src_box.height = fb->wlr_buf->height;
+		src_box = &tmp_src_box;
+	}
+
+	struct wlr_box tmp_dst_box;
+	if (dst_box == NULL) {
+		tmp_dst_box.x = x; /* TODO: scale x,y in dst box */
+		tmp_dst_box.y = y;
+		tmp_dst_box.width = src_box->width;
+		tmp_dst_box.height = src_box->height;
+		dst_box = &tmp_dst_box;
+	}
 
 	// The SRC_* properties are in 16.16 fixed point
 	return liftoff_layer_set_property(layer, "zpos", zpos) == 0 &&
-		liftoff_layer_set_property(layer, "SRC_X", 0) == 0 &&
-		liftoff_layer_set_property(layer, "SRC_Y", 0) == 0 &&
-		liftoff_layer_set_property(layer, "SRC_W", (uint64_t)width << 16) == 0 &&
-		liftoff_layer_set_property(layer, "SRC_H", (uint64_t)height << 16) == 0 &&
-		liftoff_layer_set_property(layer, "CRTC_X", (uint64_t)x) == 0 &&
-		liftoff_layer_set_property(layer, "CRTC_Y", (uint64_t)y) == 0 &&
-		liftoff_layer_set_property(layer, "CRTC_W", width) == 0 &&
-		liftoff_layer_set_property(layer, "CRTC_H", height) == 0 &&
+		liftoff_layer_set_property(layer, "SRC_X", (uint64_t)src_box->x << 16) == 0 &&
+		liftoff_layer_set_property(layer, "SRC_Y", (uint64_t)src_box->y << 16) == 0 &&
+		liftoff_layer_set_property(layer, "SRC_W", (uint64_t)src_box->width << 16) == 0 &&
+		liftoff_layer_set_property(layer, "SRC_H", (uint64_t)src_box->height << 16) == 0 &&
+		liftoff_layer_set_property(layer, "CRTC_X", dst_box->x) == 0 &&
+		liftoff_layer_set_property(layer, "CRTC_Y", dst_box->y) == 0 &&
+		liftoff_layer_set_property(layer, "CRTC_W", dst_box->width) == 0 &&
+		liftoff_layer_set_property(layer, "CRTC_H", dst_box->height) == 0 &&
 		liftoff_layer_set_property(layer, "FB_ID", fb->id) == 0;
 }
 
@@ -331,9 +347,17 @@ static bool add_connector(drmModeAtomicReq *req,
 		if (crtc->props.vrr_enabled != 0) {
 			ok = ok && add_prop(req, crtc->id, crtc->props.vrr_enabled, state->vrr_enabled);
 		}
+		struct wlr_box *src_box = NULL;
+		if (state->base->committed & WLR_OUTPUT_STATE_SRC_BOX) {
+			src_box = state->base->src_box;
+		}
+		struct wlr_box *dst_box = NULL;
+		if (state->base->committed & WLR_OUTPUT_STATE_DST_BOX) {
+			dst_box = state->base->src_box;
+		}
 		ok = ok &&
-			set_plane_props(crtc->primary, crtc->primary->liftoff_layer, state->primary_fb, 0, 0, 0) &&
-			set_plane_props(crtc->primary, crtc->liftoff_composition_layer, state->primary_fb, 0, 0, 0);
+			set_plane_props(crtc->primary, crtc->primary->liftoff_layer, state->primary_fb, 0, 0, 0, src_box, dst_box) &&
+			set_plane_props(crtc->primary, crtc->liftoff_composition_layer, state->primary_fb, 0, 0, 0, src_box, dst_box);
 		liftoff_layer_set_property(crtc->primary->liftoff_layer,
 			"FB_DAMAGE_CLIPS", state->fb_damage_clips);
 		liftoff_layer_set_property(crtc->liftoff_composition_layer,
@@ -351,7 +375,7 @@ static bool add_connector(drmModeAtomicReq *req,
 			if (drm_connector_is_cursor_visible(conn)) {
 				ok = ok && set_plane_props(crtc->cursor, crtc->cursor->liftoff_layer,
 					state->cursor_fb, conn->cursor_x, conn->cursor_y,
-					wl_list_length(&crtc->layers) + 1);
+					wl_list_length(&crtc->layers) + 1, NULL, NULL);
 			} else {
 				ok = ok && disable_plane(crtc->cursor);
 			}

@@ -327,7 +327,7 @@ static void plane_disable(struct atomic *atom, struct wlr_drm_plane *plane) {
 
 static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 		struct wlr_drm_plane *plane, struct wlr_drm_fb *fb, uint32_t crtc_id,
-		int32_t x, int32_t y) {
+		int32_t x, int32_t y, struct wlr_box *src_box, struct wlr_box *dst_box) {
 	uint32_t id = plane->id;
 	const struct wlr_drm_plane_props *props = &plane->props;
 
@@ -337,20 +337,35 @@ static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 		return;
 	}
 
-	uint32_t width = fb->wlr_buf->width;
-	uint32_t height = fb->wlr_buf->height;
+	struct wlr_box tmp_src_box;
+	if (src_box == NULL) {
+		tmp_src_box.x = 0;
+		tmp_src_box.y = 0;
+		tmp_src_box.width = fb->wlr_buf->width;
+		tmp_src_box.height = fb->wlr_buf->height;
+		src_box = &tmp_src_box;
+	}
+
+	struct wlr_box tmp_dst_box;
+	if (dst_box == NULL) {
+		tmp_dst_box.x = x; /* TODO: scale x,y inside of dst_box? */
+		tmp_dst_box.y = y;
+		tmp_dst_box.width = src_box->width;
+		tmp_dst_box.height = src_box->height;
+		dst_box = &tmp_dst_box;
+	}
 
 	// The src_* properties are in 16.16 fixed point
-	atomic_add(atom, id, props->src_x, 0);
-	atomic_add(atom, id, props->src_y, 0);
-	atomic_add(atom, id, props->src_w, (uint64_t)width << 16);
-	atomic_add(atom, id, props->src_h, (uint64_t)height << 16);
-	atomic_add(atom, id, props->crtc_w, width);
-	atomic_add(atom, id, props->crtc_h, height);
+	atomic_add(atom, id, props->src_x, (uint64_t)src_box->x << 16);
+	atomic_add(atom, id, props->src_y, (uint64_t)src_box->y << 16);
+	atomic_add(atom, id, props->src_w, (uint64_t)src_box->width << 16);
+	atomic_add(atom, id, props->src_h, (uint64_t)src_box->height << 16);
+	atomic_add(atom, id, props->crtc_x, dst_box->x);
+	atomic_add(atom, id, props->crtc_y, dst_box->y);
+	atomic_add(atom, id, props->crtc_w, dst_box->width);
+	atomic_add(atom, id, props->crtc_h, dst_box->height);
 	atomic_add(atom, id, props->fb_id, fb->id);
 	atomic_add(atom, id, props->crtc_id, crtc_id);
-	atomic_add(atom, id, props->crtc_x, (uint64_t)x);
-	atomic_add(atom, id, props->crtc_y, (uint64_t)y);
 }
 
 static bool supports_cursor_hotspots(const struct wlr_drm_plane* plane) {
@@ -385,8 +400,16 @@ static void atomic_connector_add(struct atomic *atom,
 		if (crtc->props.vrr_enabled != 0) {
 			atomic_add(atom, crtc->id, crtc->props.vrr_enabled, state->vrr_enabled);
 		}
+		struct wlr_box *src_box = NULL;
+		if (state->base->committed & WLR_OUTPUT_STATE_SRC_BOX) {
+			src_box = state->base->src_box;
+		}
+		struct wlr_box *dst_box = NULL;
+		if (state->base->committed & WLR_OUTPUT_STATE_DST_BOX) {
+			dst_box = state->base->dst_box;
+		}
 		set_plane_props(atom, drm, crtc->primary, state->primary_fb, crtc->id,
-			0, 0);
+			0, 0, src_box, dst_box);
 		if (crtc->primary->props.fb_damage_clips != 0) {
 			atomic_add(atom, crtc->primary->id,
 				crtc->primary->props.fb_damage_clips, state->fb_damage_clips);
@@ -394,7 +417,7 @@ static void atomic_connector_add(struct atomic *atom,
 		if (crtc->cursor) {
 			if (drm_connector_is_cursor_visible(conn)) {
 				set_plane_props(atom, drm, crtc->cursor, state->cursor_fb,
-					crtc->id, conn->cursor_x, conn->cursor_y);
+					crtc->id, conn->cursor_x, conn->cursor_y, NULL, NULL);
 				if (supports_cursor_hotspots(crtc->cursor)) {
 					atomic_add(atom, crtc->cursor->id,
 						crtc->cursor->props.hotspot_x, conn->cursor_hotspot_x);
