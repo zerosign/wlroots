@@ -150,3 +150,15 @@ err:
 	wlr_output_state_finish(&copy);
 	return false;
 }
+
+void wlr_output_state_set_src_box(struct wlr_output_state *state,
+		struct wlr_box *box) {
+	state->committed |= WLR_OUTPUT_STATE_SRC_BOX;
+	state->src_box = box;
+}
+
+void wlr_output_state_set_dst_box(struct wlr_output_state *state,
+		struct wlr_box *box) {
+	state->committed |= WLR_OUTPUT_STATE_DST_BOX;
+	state->dst_box = box;
+}

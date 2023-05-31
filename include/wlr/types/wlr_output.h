@@ -16,6 +16,7 @@
 #include <wayland-util.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_buffer.h>
+#include <wlr/util/box.h>
 #include <wlr/util/addon.h>
 
 enum wlr_output_mode_aspect_ratio {
@@ -66,6 +67,8 @@ enum wlr_output_state_field {
 	WLR_OUTPUT_STATE_RENDER_FORMAT = 1 << 8,
 	WLR_OUTPUT_STATE_SUBPIXEL = 1 << 9,
 	WLR_OUTPUT_STATE_LAYERS = 1 << 10,
+	WLR_OUTPUT_STATE_SRC_BOX = 1 << 11,
+	WLR_OUTPUT_STATE_DST_BOX = 1 << 12,
 };
 
 enum wlr_output_state_mode_type {
@@ -109,6 +112,12 @@ struct wlr_output_state {
 
 	struct wlr_output_layer_state *layers;
 	size_t layers_len;
+
+	// only valid if WLR_OUTPUT_STATE_SRC_BOX
+	struct wlr_box *src_box; // crop the framebuffer
+
+	// only valid if WLR_OUTPUT_STATE_DST_BOX
+	struct wlr_box *dst_box; // scale the framebuffer
 };
 
 struct wlr_output_impl;
@@ -509,6 +518,7 @@ void wlr_output_state_set_subpixel(struct wlr_output_state *state,
  */
 void wlr_output_state_set_buffer(struct wlr_output_state *state,
 	struct wlr_buffer *buffer);
+
 /**
  * Sets the gamma table for an output. `r`, `g` and `b` are gamma ramps for
  * red, green and blue. `size` is the length of the ramps and must not exceed
@@ -553,6 +563,10 @@ void wlr_output_state_set_layers(struct wlr_output_state *state,
 bool wlr_output_state_copy(struct wlr_output_state *dst,
 	const struct wlr_output_state *src);
 
+void wlr_output_state_set_src_box(struct wlr_output_state *state,
+		struct wlr_box *box);
+void wlr_output_state_set_dst_box(struct wlr_output_state *state,
+		struct wlr_box *box);
 
 /**
  * Re-configure the swapchain as required for the output's primary buffer.
