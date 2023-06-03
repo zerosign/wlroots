@@ -66,6 +66,12 @@ static void presentation_feedback_destroy(
 	free(feedback);
 }
 
+static void active_remote_output_destroy(
+		struct wlr_wl_active_remote_output *output) {
+	wl_list_remove(&output->link);
+	free(output);
+}
+
 static void presentation_feedback_handle_sync_output(void *data,
 		struct wp_presentation_feedback *feedback, struct wl_output *output) {
 	// This space is intentionally left blank
@@ -455,7 +461,19 @@ static bool output_commit(struct wlr_output *wlr_output,
 		return false;
 	}
 
+	bool needs_commit = false;
+	if (state->committed & WLR_OUTPUT_STATE_SCALE) {
+		wl_surface_set_buffer_scale(output->surface, ceil(state->scale));
+		needs_commit = true;
+	}
+
 	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
+		if (output->requested.needs_ack) {
+			output->requested.needs_ack = false;
+			xdg_surface_ack_configure(output->xdg_surface,
+				output->requested.serial);
+		}
+
 		const pixman_region32_t *damage = NULL;
 		if (state->committed & WLR_OUTPUT_STATE_DAMAGE) {
 			damage = &state->damage;
@@ -503,7 +521,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 				output->surface);
 		}
 
-		wl_surface_commit(output->surface);
+		needs_commit = true;
 
 		if (wp_feedback != NULL) {
 			struct wlr_wl_presentation_feedback *feedback =
@@ -528,6 +546,10 @@ static bool output_commit(struct wlr_output *wlr_output,
 		}
 	}
 
+	if (needs_commit) {
+		wl_surface_commit(output->surface);
+	}
+
 	wl_display_flush(output->backend->remote_display);
 
 	if (state->committed & WLR_OUTPUT_STATE_MODE) {
@@ -541,34 +563,18 @@ static bool output_commit(struct wlr_output *wlr_output,
 static bool output_set_cursor(struct wlr_output *wlr_output,
 		struct wlr_buffer *wlr_buffer, int hotspot_x, int hotspot_y) {
 	struct wlr_wl_output *output = get_wl_output_from_output(wlr_output);
-	struct wlr_wl_backend *backend = output->backend;
 
 	output->cursor.hotspot_x = hotspot_x;
 	output->cursor.hotspot_y = hotspot_y;
 
-	if (output->cursor.surface == NULL) {
-		output->cursor.surface =
-			wl_compositor_create_surface(backend->compositor);
-	}
-	struct wl_surface *surface = output->cursor.surface;
+	wlr_buffer_unlock(output->cursor.buffer);
+	output->cursor.buffer = NULL;
 
-	if (wlr_buffer != NULL) {
-		struct wlr_wl_buffer *buffer =
-			get_or_create_wl_buffer(output->backend, wlr_buffer);
-		if (buffer == NULL) {
-			return false;
-		}
-
-		wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
-		wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
-		wl_surface_commit(surface);
-	} else {
-		wl_surface_attach(surface, NULL, 0, 0);
-		wl_surface_commit(surface);
+	if (wlr_buffer) {
+		output->cursor.buffer = wlr_buffer_lock(wlr_buffer);
 	}
 
 	update_wl_output_cursor(output);
-	wl_display_flush(backend->remote_display);
 	return true;
 }
 
@@ -605,6 +611,12 @@ static void output_destroy(struct wlr_output *wlr_output) {
 		presentation_feedback_destroy(feedback);
 	}
 
+	struct wlr_wl_active_remote_output *active, *active_tmp;
+	wl_list_for_each_safe(active, active_tmp,
+			&output->active_remote_outputs, link) {
+		active_remote_output_destroy(active);
+	}
+
 	if (output->zxdg_toplevel_decoration_v1) {
 		zxdg_toplevel_decoration_v1_destroy(output->zxdg_toplevel_decoration_v1);
 	}
@@ -617,15 +629,43 @@ static void output_destroy(struct wlr_output *wlr_output) {
 
 void update_wl_output_cursor(struct wlr_wl_output *output) {
 	struct wlr_wl_pointer *pointer = output->cursor.pointer;
-	if (pointer) {
-		assert(pointer->output == output);
-		assert(output->enter_serial);
-
-		struct wlr_wl_seat *seat = pointer->seat;
-		wl_pointer_set_cursor(seat->wl_pointer, output->enter_serial,
-			output->cursor.surface, output->cursor.hotspot_x,
-			output->cursor.hotspot_y);
+	if (!pointer || !output->cursor.buffer) {
+		return;
 	}
+
+	assert(pointer->output == output);
+	assert(output->enter_serial);
+
+	struct wlr_wl_backend *backend = output->backend;
+
+	if (output->cursor.surface == NULL) {
+		output->cursor.surface =
+			wl_compositor_create_surface(backend->compositor);
+	}
+
+	struct wl_surface *surface = output->cursor.surface;
+	if (!surface) {
+		return;
+	}
+
+	struct wlr_wl_buffer *buffer =
+		get_or_create_wl_buffer(output->backend, output->cursor.buffer);
+	if (!buffer) {
+		return;
+	}
+
+	int scale = ceil(output->wlr_output.scale);
+	wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
+	wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
+	wl_surface_set_buffer_scale(surface, scale);
+	wl_surface_commit(surface);
+
+	wl_display_flush(backend->remote_display);
+
+	struct wlr_wl_seat *seat = pointer->seat;
+	wl_pointer_set_cursor(seat->wl_pointer, output->enter_serial,
+		output->cursor.surface, output->cursor.hotspot_x / scale,
+		output->cursor.hotspot_y / scale);
 }
 
 static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
@@ -647,14 +687,60 @@ bool wlr_output_is_wl(struct wlr_output *wlr_output) {
 	return wlr_output->impl == &output_impl;
 }
 
+void surface_update(struct wlr_wl_output *output) {
+	if (wl_list_empty(&output->active_remote_outputs)) {
+		return;
+	}
+
+	uint32_t scale = 1;
+	enum wl_output_subpixel subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
+
+	struct wlr_wl_active_remote_output *active;
+	wl_list_for_each(active, &output->active_remote_outputs, link) {
+		struct wlr_wl_remote_output *output = active->remote_output;
+		if (scale < output->scale) {
+			scale = output->scale;
+		}
+
+		if (output->subpixel != WL_OUTPUT_SUBPIXEL_UNKNOWN) {
+			subpixel = output->subpixel;
+		}
+	}
+
+	struct wlr_output_state state = {
+		.committed = WLR_OUTPUT_STATE_MODE | WLR_OUTPUT_STATE_SCALE |
+			WLR_OUTPUT_STATE_SUBPIXEL,
+		.mode_type = WLR_OUTPUT_STATE_MODE_CUSTOM,
+		.scale = scale,
+		.subpixel = subpixel,
+		.custom_mode = {
+			.width = output->requested.width * scale,
+			.height = output->requested.height * scale
+		},
+	};
+
+	wlr_output_send_request_state(&output->wlr_output, &state);
+	update_wl_output_cursor(output);
+}
+
 static void xdg_surface_handle_configure(void *data,
 		struct xdg_surface *xdg_surface, uint32_t serial) {
 	struct wlr_wl_output *output = data;
 	assert(output && output->xdg_surface == xdg_surface);
 
-	xdg_surface_ack_configure(xdg_surface, serial);
+	if (wl_list_empty(&output->active_remote_outputs)) {
+		xdg_surface_ack_configure(xdg_surface, serial);
+		wl_surface_commit(output->surface);
+		return;
+	}
 
-	// nothing else?
+	output->requested.needs_ack = true;
+	output->requested.serial = serial;
+	surface_update(output);
+
+	// if the compositor did not commit a new buffer during the surface_update
+	// above, assume that the compositor did not acknowledge the configure.
+	output->requested.needs_ack = false;
 }
 
 static const struct xdg_surface_listener xdg_surface_listener = {
@@ -671,12 +757,8 @@ static void xdg_toplevel_handle_configure(void *data,
 		return;
 	}
 
-	struct wlr_output_state state = {
-		.committed = WLR_OUTPUT_STATE_MODE,
-		.mode_type = WLR_OUTPUT_STATE_MODE_CUSTOM,
-		.custom_mode = { .width = width, .height = height },
-	};
-	wlr_output_send_request_state(&output->wlr_output, &state);
+	output->requested.width = width;
+	output->requested.height = height;
 }
 
 static void xdg_toplevel_handle_close(void *data,
@@ -690,6 +772,50 @@ static void xdg_toplevel_handle_close(void *data,
 static const struct xdg_toplevel_listener xdg_toplevel_listener = {
 	.configure = xdg_toplevel_handle_configure,
 	.close = xdg_toplevel_handle_close,
+};
+
+static void surface_enter(void *data, struct wl_surface *wl_surface,
+		struct wl_output *wl_output) {
+	struct wlr_wl_output *output = data;
+
+	struct wlr_wl_remote_output *remote_output;
+	wl_list_for_each(remote_output, &output->backend->remote_outputs, link) {
+		if (remote_output->output != wl_output) {
+			continue;
+		}
+
+		struct wlr_wl_active_remote_output *active = calloc(1, sizeof(*active));
+		if (!active) {
+			return;
+		}
+
+		active->remote_output = remote_output;
+
+		wl_list_insert(&output->active_remote_outputs, &active->link);
+		surface_update(output);
+		break;
+	}
+}
+
+static void surface_leave(void *data, struct wl_surface *wl_surface,
+		struct wl_output *wl_output) {
+	struct wlr_wl_output *output = data;
+
+	struct wlr_wl_active_remote_output *active;
+	wl_list_for_each(active, &output->active_remote_outputs, link) {
+		if (active->remote_output->output != wl_output) {
+			continue;
+		}
+
+		active_remote_output_destroy(active);
+		surface_update(output);
+		break;
+	}
+}
+
+static const struct wl_surface_listener surface_listener = {
+	.enter = &surface_enter,
+	.leave = &surface_leave,
 };
 
 struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
@@ -724,6 +850,7 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 
 	output->backend = backend;
 	wl_list_init(&output->presentation_feedbacks);
+	wl_list_init(&output->active_remote_outputs);
 
 	output->surface = wl_compositor_create_surface(backend->compositor);
 	if (!output->surface) {
@@ -763,6 +890,7 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 			&xdg_surface_listener, output);
 	xdg_toplevel_add_listener(output->xdg_toplevel,
 			&xdg_toplevel_listener, output);
+	wl_surface_add_listener(output->surface, &surface_listener, output);
 	wl_surface_commit(output->surface);
 
 	wl_display_roundtrip(output->backend->remote_display);

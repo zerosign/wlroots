@@ -236,6 +236,43 @@ static const struct zwp_linux_dmabuf_feedback_v1_listener
 	.tranche_flags = linux_dmabuf_feedback_v1_handle_tranche_flags,
 };
 
+static void update_outputs(struct wlr_wl_backend *backend) {
+	struct wlr_wl_output *output;
+	wl_list_for_each(output, &backend->outputs, link) {
+		surface_update(output);
+	}
+}
+
+static void wlr_output_handle_scale(void *data,
+		struct wl_output *wl_output, int32_t factor) {
+	struct wlr_wl_remote_output *output = data;
+	output->scale = factor;
+}
+
+static void wlr_output_handle_geometry(void *data, struct wl_output *wl_output,
+		int32_t x, int32_t y, int32_t phys_width, int32_t phys_height,
+		int32_t subpixel, const char *make, const char *model, int32_t transform) {
+	struct wlr_wl_remote_output *output = data;
+	output->subpixel = subpixel;
+}
+
+static void wlr_output_handle_mode(void *data, struct wl_output *wl_output,
+		uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
+	// This is intentionally left blank
+}
+
+static void wlr_output_handle_done(void *data, struct wl_output *wl_output) {
+	struct wlr_wl_remote_output *output = data;
+	update_outputs(output->backend);
+}
+
+static const struct wl_output_listener output_listener = {
+	.scale = wlr_output_handle_scale,
+	.geometry = wlr_output_handle_geometry,
+	.mode = wlr_output_handle_mode,
+	.done = wlr_output_handle_done
+};
+
 static bool device_has_name(const drmDevice *device, const char *name) {
 	for (size_t i = 0; i < DRM_NODE_MAX; i++) {
 		if (!(device->available_nodes & (1 << i))) {
@@ -396,6 +433,26 @@ static void registry_global(void *data, struct wl_registry *registry,
 	} else if (strcmp(iface, wl_subcompositor_interface.name) == 0) {
 		wl->subcompositor = wl_registry_bind(registry, name,
 			&wl_subcompositor_interface, 1);
+	} else if (strcmp(iface, wl_output_interface.name) == 0) {
+		struct wlr_wl_remote_output *output = calloc(1, sizeof(*output));
+		if (!output) {
+			return;
+		}
+
+		struct wl_output *wl_output = wl_registry_bind(registry, name, &wl_output_interface, 2);
+		if (!wl_output) {
+			free(output);
+			return;
+		}
+
+		output->output = wl_output;
+		output->scale = 1;
+		output->name = name;
+		output->backend = wl;
+		output->subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
+
+		wl_list_insert(&wl->remote_outputs, &output->link);
+		wl_output_add_listener(wl_output, &output_listener, output);
 	}
 }
 
@@ -407,6 +464,15 @@ static void registry_global_remove(void *data, struct wl_registry *registry,
 	wl_list_for_each(seat, &wl->seats, link) {
 		if (seat->global_name == name) {
 			destroy_wl_seat(seat);
+			break;
+		}
+	}
+
+	struct wlr_wl_remote_output *output;
+	wl_list_for_each(output, &wl->remote_outputs, link) {
+		if (output->name == name) {
+			wl_list_remove(&output->link);
+			free(output);
 			break;
 		}
 	}
@@ -467,6 +533,13 @@ static void backend_destroy(struct wlr_backend *backend) {
 	while (!wl_list_empty(&wl->buffers)) {
 		struct wlr_wl_buffer *buffer = wl_container_of(wl->buffers.next, buffer, link);
 		destroy_wl_buffer(buffer);
+	}
+
+	struct wlr_wl_remote_output *remote_output, *tmp_remote_output;
+	wl_list_for_each_safe(remote_output, tmp_remote_output,
+			&wl->remote_outputs, link) {
+		wl_output_release(remote_output->output);
+		free(remote_output);
 	}
 
 	wlr_backend_finish(backend);
@@ -575,6 +648,7 @@ struct wlr_backend *wlr_wl_backend_create(struct wl_display *display,
 	wl_list_init(&wl->outputs);
 	wl_list_init(&wl->seats);
 	wl_list_init(&wl->buffers);
+	wl_list_init(&wl->remote_outputs);
 	wl->presentation_clock = CLOCK_MONOTONIC;
 
 	wl->remote_display = wl_display_connect(remote);

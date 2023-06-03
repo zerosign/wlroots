@@ -87,11 +87,12 @@ static void pointer_handle_motion(void *data, struct wl_pointer *wl_pointer,
 	}
 
 	struct wlr_output *wlr_output = &pointer->output->wlr_output;
+	int scale = ceil(wlr_output->scale);
 	struct wlr_pointer_motion_absolute_event event = {
 		.pointer = &pointer->wlr_pointer,
 		.time_msec = time,
-		.x = wl_fixed_to_double(sx) / wlr_output->width,
-		.y = wl_fixed_to_double(sy) / wlr_output->height,
+		.x = wl_fixed_to_double(sx) * scale / wlr_output->width,
+		.y = wl_fixed_to_double(sy) * scale / wlr_output->height,
 	};
 	wl_signal_emit_mutable(&pointer->wlr_pointer.events.motion_absolute, &event);
 }
