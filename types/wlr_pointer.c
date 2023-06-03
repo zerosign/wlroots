@@ -36,6 +36,4 @@ void wlr_pointer_init(struct wlr_pointer *pointer,
 
 void wlr_pointer_finish(struct wlr_pointer *pointer) {
 	wlr_input_device_finish(&pointer->base);
-
-	free(pointer->output_name);
 }
