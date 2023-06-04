@@ -29,6 +29,11 @@ struct wlr_input_device;
 struct wlr_box;
 struct wlr_cursor_state;
 
+struct wlr_cursor_outputs_update_event {
+	struct wlr_output *const *outputs;
+	size_t outputs_len;
+};
+
 struct wlr_cursor {
 	struct wlr_cursor_state *state;
 	double x, y;
@@ -72,6 +77,8 @@ struct wlr_cursor {
 		struct wl_signal tablet_tool_proximity;
 		struct wl_signal tablet_tool_tip;
 		struct wl_signal tablet_tool_button;
+
+		struct wl_signal outputs_update; // struct wlr_cursor_outputs_update_event
 	} events;
 
 	void *data;
