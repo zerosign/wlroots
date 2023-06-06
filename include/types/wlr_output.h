@@ -17,6 +17,9 @@ bool output_ensure_buffer(struct wlr_output *output,
 bool output_cursor_set_texture(struct wlr_output_cursor *cursor,
 	struct wlr_texture *texture, bool own_texture, float scale,
 	enum wl_output_transform transform, int32_t hotspot_x, int32_t hotspot_y);
+bool output_get_cursor_layer_state(struct wlr_output *output,
+	struct wlr_buffer *buffer, int x, int y, int hotspot_x, int hotspot_y,
+	struct wlr_output_layer_state *out);
 
 struct wlr_output_layer_state *output_state_get_cursor_layer(
 	const struct wlr_output_state *state);

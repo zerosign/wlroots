@@ -189,6 +189,8 @@ struct wlr_output {
 	struct wlr_swapchain *cursor_swapchain;
 	struct wlr_buffer *cursor_front_buffer;
 	int software_cursor_locks; // number of locks forcing software cursors
+	struct wlr_output_layer *cursor_layer;
+	bool cursor_layer_changed;
 
 	struct wl_list layers; // wlr_output_layer.link
 

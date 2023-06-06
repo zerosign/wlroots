@@ -660,9 +660,26 @@ static bool output_basic_test(struct wlr_output *output,
 }
 
 static bool output_prepare_state(struct wlr_output *output,
-		struct wlr_output_state *state, bool *new_buffer) {
+		struct wlr_output_state *state, bool *new_buffer,
+		struct wlr_output_layer_state *cursor_state) {
 	if (!output_ensure_buffer(output, state, new_buffer)) {
 		return false;
+	}
+
+	if (output->hardware_cursor != NULL && output->impl->set_cursor == NULL &&
+			output->cursor_layer_changed) {
+		assert(output->cursor_layer != NULL);
+
+		struct wlr_output_cursor *cursor = output->hardware_cursor;
+		if (!output_get_cursor_layer_state(output, output->cursor_front_buffer,
+				cursor->x, cursor->y, cursor->hotspot_x, cursor->hotspot_y, cursor_state)) {
+			return false;
+		}
+
+		assert((state->committed & WLR_OUTPUT_STATE_LAYERS) == 0);
+		state->committed |= WLR_OUTPUT_STATE_LAYERS;
+		state->layers = cursor_state;
+		state->layers_len = 1;
 	}
 
 	return true;
@@ -685,7 +702,8 @@ bool wlr_output_test_state(struct wlr_output *output,
 	}
 
 	bool new_back_buffer = false;
-	if (!output_prepare_state(output, &copy, &new_back_buffer)) {
+	struct wlr_output_layer_state cursor_state;
+	if (!output_prepare_state(output, &copy, &new_back_buffer, &cursor_state)) {
 		return false;
 	}
 
@@ -723,7 +741,8 @@ bool wlr_output_commit_state(struct wlr_output *output,
 	}
 
 	bool new_back_buffer = false;
-	if (!output_prepare_state(output, &pending, &new_back_buffer)) {
+	struct wlr_output_layer_state cursor_state;
+	if (!output_prepare_state(output, &pending, &new_back_buffer, &cursor_state)) {
 		return false;
 	}
 
@@ -836,6 +855,8 @@ bool wlr_output_commit_state(struct wlr_output *output,
 			break;
 		}
 	}
+
+	output->cursor_layer_changed = false;
 
 	struct wlr_output_event_commit event = {
 		.output = output,
