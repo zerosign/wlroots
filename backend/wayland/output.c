@@ -247,6 +247,23 @@ static struct wlr_wl_buffer *get_or_create_wl_buffer(struct wlr_wl_backend *wl,
 	return create_wl_buffer(wl, wlr_buffer);
 }
 
+static bool layer_needs_viewport(struct wlr_output_layer_state *layer_state) {
+	if (layer_state->buffer == NULL) {
+		return false;
+	}
+	if (layer_state->dst_box.width != layer_state->buffer->width ||
+			layer_state->dst_box.height != layer_state->buffer->height) {
+		return true;
+	}
+	if (layer_state->src_box.x != 0 ||
+			layer_state->src_box.y != 0 ||
+			layer_state->src_box.width != layer_state->dst_box.width ||
+			layer_state->src_box.height != layer_state->dst_box.height) {
+		return true;
+	}
+	return false;
+}
+
 static bool test_layer(struct wlr_wl_output *output, struct wlr_output_layer_state *layer_state) {
 	if (layer_state->buffer == NULL) {
 		return true;
@@ -265,16 +282,7 @@ static bool test_layer(struct wlr_wl_output *output, struct wlr_output_layer_sta
 	}
 
 	// We need viewporter for scaling and cropping
-	bool needs_viewport = width != layer_state->buffer->width ||
-		height != layer_state->buffer->height;
-	if (!wlr_fbox_empty(&layer_state->src_box)) {
-		needs_viewport = needs_viewport ||
-			layer_state->src_box.x != 0 ||
-			layer_state->src_box.y != 0 ||
-			layer_state->src_box.width != width ||
-			layer_state->src_box.height != height;
-	}
-	if (output->backend->viewporter == NULL && needs_viewport) {
+	if (output->backend->viewporter == NULL && layer_needs_viewport(layer_state)) {
 		return false;
 	}
 
