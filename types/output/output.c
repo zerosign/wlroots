@@ -659,6 +659,15 @@ static bool output_basic_test(struct wlr_output *output,
 	return true;
 }
 
+static bool output_prepare_state(struct wlr_output *output,
+		struct wlr_output_state *state, bool *new_buffer) {
+	if (!output_ensure_buffer(output, state, new_buffer)) {
+		return false;
+	}
+
+	return true;
+}
+
 bool wlr_output_test_state(struct wlr_output *output,
 		const struct wlr_output_state *state) {
 	uint32_t unchanged = output_compare_state(output, state);
@@ -676,7 +685,7 @@ bool wlr_output_test_state(struct wlr_output *output,
 	}
 
 	bool new_back_buffer = false;
-	if (!output_ensure_buffer(output, &copy, &new_back_buffer)) {
+	if (!output_prepare_state(output, &copy, &new_back_buffer)) {
 		return false;
 	}
 
@@ -714,7 +723,7 @@ bool wlr_output_commit_state(struct wlr_output *output,
 	}
 
 	bool new_back_buffer = false;
-	if (!output_ensure_buffer(output, &pending, &new_back_buffer)) {
+	if (!output_prepare_state(output, &pending, &new_back_buffer)) {
 		return false;
 	}
 
