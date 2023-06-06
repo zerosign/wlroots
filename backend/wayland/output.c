@@ -247,6 +247,40 @@ static struct wlr_wl_buffer *get_or_create_wl_buffer(struct wlr_wl_backend *wl,
 	return create_wl_buffer(wl, wlr_buffer);
 }
 
+static bool test_layer(struct wlr_wl_output *output, struct wlr_output_layer_state *layer_state) {
+	if (layer_state->buffer == NULL) {
+		return true;
+	}
+
+	int x = layer_state->dst_box.x;
+	int y = layer_state->dst_box.y;
+	int width = layer_state->dst_box.width;
+	int height = layer_state->dst_box.height;
+
+	// We can't display sub-surfaces out of the primary surface's bounds
+	int output_width = output->wlr_output.width;
+	int output_height = output->wlr_output.height;
+	if (x < 0 || y < 0 || x + width > output_width || y + height > output_height) {
+		return false;
+	}
+
+	// We need viewporter for scaling and cropping
+	bool needs_viewport = width != layer_state->buffer->width ||
+		height != layer_state->buffer->height;
+	if (!wlr_fbox_empty(&layer_state->src_box)) {
+		needs_viewport = needs_viewport ||
+			layer_state->src_box.x != 0 ||
+			layer_state->src_box.y != 0 ||
+			layer_state->src_box.width != width ||
+			layer_state->src_box.height != height;
+	}
+	if (output->backend->viewporter == NULL && needs_viewport) {
+		return false;
+	}
+
+	return test_buffer(output->backend, layer_state->buffer);
+}
+
 static bool output_test(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_wl_output *output =
@@ -288,29 +322,7 @@ static bool output_test(struct wlr_output *wlr_output,
 		bool supported = output->backend->subcompositor != NULL;
 		for (ssize_t i = state->layers_len - 1; i >= 0; i--) {
 			struct wlr_output_layer_state *layer_state = &state->layers[i];
-			if (layer_state->buffer != NULL) {
-				int x = layer_state->dst_box.x;
-				int y = layer_state->dst_box.y;
-				int width = layer_state->dst_box.width;
-				int height = layer_state->dst_box.height;
-				bool needs_viewport = width != layer_state->buffer->width ||
-					height != layer_state->buffer->height;
-				if (!wlr_fbox_empty(&layer_state->src_box)) {
-					needs_viewport = needs_viewport ||
-						layer_state->src_box.x != 0 ||
-						layer_state->src_box.y != 0 ||
-						layer_state->src_box.width != width ||
-						layer_state->src_box.height != height;
-				}
-				if (x < 0 || y < 0 ||
-						x + width > wlr_output->width ||
-						y + height > wlr_output->height ||
-						(output->backend->viewporter == NULL && needs_viewport)) {
-					supported = false;
-				}
-				supported = supported &&
-					test_buffer(output->backend, layer_state->buffer);
-			}
+			supported = supported && test_layer(output, layer_state);
 			layer_state->accepted = supported;
 		}
 	}
