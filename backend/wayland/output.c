@@ -255,10 +255,11 @@ static bool layer_needs_viewport(struct wlr_output_layer_state *layer_state) {
 			layer_state->dst_box.height != layer_state->buffer->height) {
 		return true;
 	}
-	if (layer_state->src_box.x != 0 ||
+	if (!wlr_fbox_empty(&layer_state->src_box) &&
+			(layer_state->src_box.x != 0 ||
 			layer_state->src_box.y != 0 ||
 			layer_state->src_box.width != layer_state->dst_box.width ||
-			layer_state->src_box.height != layer_state->dst_box.height) {
+			layer_state->src_box.height != layer_state->dst_box.height)) {
 		return true;
 	}
 	return false;
