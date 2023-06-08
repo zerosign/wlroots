@@ -437,9 +437,13 @@ void vulkan_format_props_query(struct wlr_vk_device *dev,
 	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(format->drm);
 
 	// non-dmabuf texture properties
+	VkFormatFeatureFlags features = shm_tex_features;
+	if (format->is_ycbcr) {
+		features |= ycbcr_tex_features;
+	}
 	const char *shm_texture_status;
-	if ((fmtp.formatProperties.optimalTilingFeatures & shm_tex_features) == shm_tex_features &&
-			!format->is_ycbcr && format_info != NULL) {
+	if ((fmtp.formatProperties.optimalTilingFeatures & features) == features &&
+			format_info != NULL) {
 		VkPhysicalDeviceImageFormatInfo2 fmti = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
 			.type = VK_IMAGE_TYPE_2D,
