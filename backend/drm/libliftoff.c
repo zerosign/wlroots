@@ -174,7 +174,8 @@ static uint64_t to_fp16(double v) {
 }
 
 static bool set_layer_props(struct wlr_drm_backend *drm,
-		const struct wlr_output_layer_state *state, uint64_t zpos) {
+		const struct wlr_output_layer_state *state,
+		struct wlr_drm_fb *fb, uint64_t zpos) {
 	struct wlr_drm_layer *layer = get_drm_layer(drm, state->layer);
 
 	uint32_t width = 0, height = 0;
@@ -183,7 +184,6 @@ static bool set_layer_props(struct wlr_drm_backend *drm,
 		height = state->buffer->height;
 	}
 
-	struct wlr_drm_fb *fb = layer->pending_fb;
 	int ret = 0;
 	if (state->buffer == NULL) {
 		ret = liftoff_layer_set_property(layer->liftoff, "FB_ID", 0);
@@ -394,7 +394,7 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 		if (state->base->committed & WLR_OUTPUT_STATE_LAYERS) {
 			for (size_t i = 0; i < state->base->layers_len; i++) {
 				const struct wlr_output_layer_state *layer_state = &state->base->layers[i];
-				ok = ok && set_layer_props(drm, layer_state, i + 1);
+				ok = ok && set_layer_props(drm, layer_state, state->layer_fbs[i], i + 1);
 			}
 		}
 
