@@ -204,6 +204,8 @@ struct wlr_scene_output {
 	struct wl_list damage_highlight_regions;
 
 	struct wl_array render_list;
+
+	struct wl_event_source *idle_timer;
 };
 
 /** A layer shell scene helper */
