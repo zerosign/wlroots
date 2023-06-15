@@ -33,6 +33,7 @@ struct wlr_xdg_surface;
 struct wlr_layer_surface_v1;
 struct wlr_drag_icon;
 struct wlr_surface;
+struct wlr_xcursor_manager;
 
 struct wlr_scene_node;
 struct wlr_scene_buffer;
@@ -537,5 +538,11 @@ void wlr_scene_layer_surface_v1_configure(
  */
 struct wlr_scene_tree *wlr_scene_drag_icon_create(
 	struct wlr_scene_tree *parent, struct wlr_drag_icon *drag_icon);
+
+/**
+ * Add a node displaying an xcursor to the scene-graph.
+ */
+struct wlr_scene_tree *wlr_scene_xcursor_create(struct wlr_scene_tree *parent,
+	struct wlr_xcursor_manager *manager, const char *name);
 
 #endif
