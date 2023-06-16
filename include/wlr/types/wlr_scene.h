@@ -39,6 +39,7 @@ struct wlr_scene_buffer;
 
 struct wlr_presentation;
 struct wlr_linux_dmabuf_v1;
+struct wlr_gamma_control_manager_v1;
 struct wlr_output_state;
 
 typedef bool (*wlr_scene_buffer_point_accepts_input_func_t)(
@@ -98,11 +99,15 @@ struct wlr_scene {
 	// May be NULL
 	struct wlr_presentation *presentation;
 	struct wlr_linux_dmabuf_v1 *linux_dmabuf_v1;
+	struct wlr_gamma_control_manager_v1 *gamma_control_manager_v1;
 
 	// private state
 
 	struct wl_listener presentation_destroy;
 	struct wl_listener linux_dmabuf_v1_destroy;
+	struct wl_listener gamma_control_manager_v1_destroy;
+
+	struct wl_listener gamma_control_manager_v1_set_gamma;
 
 	enum wlr_scene_debug_damage_option debug_damage_option;
 	bool direct_scanout;
@@ -196,6 +201,8 @@ struct wlr_scene_output {
 
 	uint8_t index;
 	bool prev_scanout;
+
+	struct wlr_gamma_control_v1 *gamma_lut_changed;
 
 	struct wl_listener output_commit;
 	struct wl_listener output_damage;
@@ -300,6 +307,15 @@ void wlr_scene_set_presentation(struct wlr_scene *scene,
  */
 void wlr_scene_set_linux_dmabuf_v1(struct wlr_scene *scene,
 	struct wlr_linux_dmabuf_v1 *linux_dmabuf_v1);
+
+/**
+ * Handles gamma_control_v1 for all outputs in the scene.
+ *
+ * Asserts that a struct wlr_gamma_control_manager_v1 hasn't already been set
+ * for the scene.
+ */
+void wlr_scene_set_gamma_control_manager_v1(struct wlr_scene *scene,
+	struct wlr_gamma_control_manager_v1 *gamma_control);
 
 
 /**
@@ -455,7 +471,7 @@ bool wlr_scene_output_commit(struct wlr_scene_output *scene_output);
  * Render and populate given output state.
  */
 bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
-    struct wlr_output_state *state);
+	struct wlr_output_state *state);
 
 /**
  * Call wlr_surface_send_frame_done() on all surfaces in the scene rendered by
