@@ -261,7 +261,7 @@ static bool output_test(struct wlr_output *wlr_output,
 	// Adaptive sync is effectively always enabled when using the Wayland
 	// backend. This is not something we have control over, so we set the state
 	// to enabled on creating the output and never allow changing it.
-	assert(wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED);
+	assert(wlr_output->adaptive_sync_enabled);
 	if (state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
 		if (!state->adaptive_sync_enabled) {
 			return false;
@@ -742,7 +742,7 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 
 	wlr_output_update_custom_mode(wlr_output, 1280, 720, 0);
 
-	wlr_output->adaptive_sync_status = WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
+	wlr_output->adaptive_sync_enabled = true;
 
 	size_t output_num = ++last_output_num;
 

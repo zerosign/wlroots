@@ -48,11 +48,6 @@ struct wlr_output_cursor {
 	struct wl_list link;
 };
 
-enum wlr_output_adaptive_sync_status {
-	WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED,
-	WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED,
-};
-
 enum wlr_output_state_field {
 	WLR_OUTPUT_STATE_BUFFER = 1 << 0,
 	WLR_OUTPUT_STATE_DAMAGE = 1 << 1,
@@ -145,7 +140,7 @@ struct wlr_output {
 	float scale;
 	enum wl_output_subpixel subpixel;
 	enum wl_output_transform transform;
-	enum wlr_output_adaptive_sync_status adaptive_sync_status;
+	bool adaptive_sync_enabled;
 	uint32_t render_format;
 
 	bool needs_frame;
@@ -620,7 +615,7 @@ void wlr_output_state_set_transform(struct wlr_output_state *state,
 	enum wl_output_transform transform);
 /**
  * Enables or disable adaptive sync for an output (ie. variable refresh rate).
- * Compositors can inspect `wlr_output.adaptive_sync_status` to query the
+ * Compositors can inspect `wlr_output.adaptive_sync_enabled` to query the
  * effective status. Backends that don't support adaptive sync will reject the
  * output commit.
  *

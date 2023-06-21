@@ -137,8 +137,7 @@ struct wlr_output_configuration_head_v1 *
 	config_head->state.custom_mode.refresh = output->refresh;
 	config_head->state.transform = output->transform;
 	config_head->state.scale = output->scale;
-	config_head->state.adaptive_sync_enabled =
-		output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
+	config_head->state.adaptive_sync_enabled = output->adaptive_sync_enabled;
 	return config_head;
 }
 

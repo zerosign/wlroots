@@ -329,8 +329,7 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 			&state->base->damage, &fb_damage_clips);
 	}
 
-	bool prev_vrr_enabled =
-		output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
+	bool prev_vrr_enabled = output->adaptive_sync_enabled;
 	bool vrr_enabled = prev_vrr_enabled;
 	if ((state->base->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) &&
 			drm_connector_supports_vrr(conn)) {
@@ -456,9 +455,7 @@ out:
 		commit_blob(drm, &crtc->gamma_lut, gamma_lut);
 
 		if (vrr_enabled != prev_vrr_enabled) {
-			output->adaptive_sync_status = vrr_enabled ?
-				WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED :
-				WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
+			output->adaptive_sync_enabled = vrr_enabled;
 			wlr_drm_conn_log(conn, WLR_DEBUG, "VRR %s",
 				vrr_enabled ? "enabled" : "disabled");
 		}
