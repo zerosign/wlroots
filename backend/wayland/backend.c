@@ -57,6 +57,8 @@ static int dispatch_events(int fd, uint32_t mask, void *data) {
 	if ((mask & WL_EVENT_HANGUP) || (mask & WL_EVENT_ERROR)) {
 		if (mask & WL_EVENT_ERROR) {
 			wlr_log(WLR_ERROR, "Failed to read from remote Wayland display");
+		} else {
+			wlr_log(WLR_DEBUG, "Disconnected from remote Wayland display");
 		}
 		wl_display_terminate(wl->local_display);
 		return 0;
