@@ -7,7 +7,7 @@
  * Helper to create new DRM sub-backends on GPU hotplug.
  */
 struct wlr_drm_backend_monitor {
-	struct wlr_backend *multi;
+	struct wlr_multi_backend *multi;
 	struct wlr_backend *primary_drm;
 	struct wlr_session *session;
 
@@ -18,7 +18,7 @@ struct wlr_drm_backend_monitor {
 };
 
 struct wlr_drm_backend_monitor *drm_backend_monitor_create(
-	struct wlr_backend *multi, struct wlr_backend *primary_drm,
+	struct wlr_multi_backend *multi, struct wlr_backend *primary_drm,
 	struct wlr_session *session);
 
 #endif

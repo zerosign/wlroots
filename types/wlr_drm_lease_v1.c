@@ -704,9 +704,10 @@ struct wlr_drm_lease_v1_manager *wlr_drm_lease_v1_manager_create(
 	wl_list_init(&manager->devices);
 	manager->display = display;
 
-	if (wlr_backend_is_multi(backend)) {
+	struct wlr_multi_backend *multi = wlr_multi_backend_try_from(backend);
+	if (multi != NULL) {
 		/* TODO: handle backends added after the manager is created */
-		wlr_multi_for_each_backend(backend, multi_backend_cb, manager);
+		wlr_multi_backend_for_each(multi, multi_backend_cb, manager);
 	} else if (wlr_backend_is_drm(backend)) {
 		drm_lease_device_v1_create(manager, backend);
 	}

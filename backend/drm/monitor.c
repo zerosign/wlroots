@@ -64,7 +64,7 @@ static void handle_multi_destroy(struct wl_listener *listener, void *data) {
 }
 
 struct wlr_drm_backend_monitor *drm_backend_monitor_create(
-		struct wlr_backend *multi,
+		struct wlr_multi_backend *multi,
 		struct wlr_backend *primary_drm,
 		struct wlr_session *session) {
 	struct wlr_drm_backend_monitor *monitor =
@@ -87,8 +87,9 @@ struct wlr_drm_backend_monitor *drm_backend_monitor_create(
 	monitor->primary_drm_destroy.notify = handle_primary_drm_destroy;
 	wl_signal_add(&primary_drm->events.destroy, &monitor->primary_drm_destroy);
 
+	struct wlr_backend *multi_base = wlr_multi_backend_base(multi);
 	monitor->multi_destroy.notify = handle_multi_destroy;
-	wl_signal_add(&multi->events.destroy, &monitor->multi_destroy);
+	wl_signal_add(&multi_base->events.destroy, &monitor->multi_destroy);
 
 	return monitor;
 }
