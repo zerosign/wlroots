@@ -418,9 +418,10 @@ static void raster_update_handle_old_raster_destroy(struct wl_listener *listener
 	struct wlr_raster_source *source, *tmp_source;
 	wl_list_for_each_safe(source, tmp_source, &state->old_raster->sources, link) {
 		struct wlr_texture *texture = source->texture;
+		struct wlr_allocator *allocator = source->allocator;
 		if (wlr_texture_update_from_buffer(texture, state->buffer, &state->damage)) {
 			wlr_raster_detach(state->old_raster, texture);
-			wlr_raster_attach(state->new_raster, texture);
+			wlr_raster_attach_with_allocator(state->new_raster, texture, allocator);
 		}
 	}
 
@@ -496,7 +497,8 @@ static void surface_raster_handle_buffer_prerelease(struct wl_listener *listener
 
 	struct wlr_surface_output *output;
 	wl_list_for_each(output, &surface_raster->surface->current_outputs, link) {
-		wlr_raster_create_texture(raster, output->output->renderer);
+		wlr_raster_create_texture_with_allocator(raster,
+			output->output->renderer, output->output->allocator);
 	}
 
 	// if there was a failed texture upload, keep on locking the buffer
