@@ -82,7 +82,7 @@ static bool output_set_hardware_cursor(struct wlr_output *output,
 		output->cursor_front_buffer = wlr_buffer_lock(buffer);
 	}
 
-	if (!output->impl->set_cursor) {
+	if (!output->impl->set_cursor && output->cursor_layer != NULL) {
 		output->cursor_layer_changed = true;
 		wlr_output_update_needs_frame(output);
 	}
