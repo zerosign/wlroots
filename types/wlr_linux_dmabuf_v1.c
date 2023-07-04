@@ -1292,3 +1292,57 @@ void wlr_surface_dmabuf_waiter_finish(struct wlr_surface_dmabuf_waiter *waiter) 
 	wl_list_remove(&waiter->commits);
 	wl_list_remove(&waiter->client_commit.link);
 }
+
+struct wlr_compositor_dmabuf_waiter {
+	struct wl_listener new_surface;
+	struct wl_listener destroy;
+};
+
+struct wlr_compositor_dmabuf_waiter_surface {
+	struct wlr_surface_dmabuf_waiter base;
+	struct wl_listener destroy;
+};
+
+static void compositor_dmabuf_waiter_surface_handle_destroy(struct wl_listener *listener, void *data) {
+	struct wlr_compositor_dmabuf_waiter_surface *waiter_surface =
+		wl_container_of(listener, waiter_surface, destroy);
+	wlr_surface_dmabuf_waiter_finish(&waiter_surface->base);
+	wl_list_remove(&waiter_surface->destroy.link);
+	free(waiter_surface);
+}
+
+static void compositor_dmabuf_waiter_handle_new_surface(struct wl_listener *listener, void *data) {
+	struct wlr_surface *surface = data;
+
+	struct wlr_compositor_dmabuf_waiter_surface *waiter_surface = calloc(1, sizeof(*waiter_surface));
+	if (waiter_surface == NULL) {
+		wlr_log(WLR_ERROR, "Allocation failed");
+		return;
+	}
+
+	wlr_surface_dmabuf_waiter_init(&waiter_surface->base, surface);
+
+	waiter_surface->destroy.notify = compositor_dmabuf_waiter_surface_handle_destroy;
+	wl_signal_add(&surface->events.destroy, &waiter_surface->destroy);
+}
+
+static void compositor_dmabuf_waiter_handle_destroy(struct wl_listener *listener, void *data) {
+	struct wlr_compositor_dmabuf_waiter *waiter =
+		wl_container_of(listener, waiter, destroy);
+	wl_list_remove(&waiter->new_surface.link);
+	wl_list_remove(&waiter->destroy.link);
+	free(waiter);
+}
+
+void wlr_compositor_dmabuf_waiter_create(struct wlr_compositor *compositor) {
+	struct wlr_compositor_dmabuf_waiter *waiter = calloc(1, sizeof(*waiter));
+	if (waiter == NULL) {
+		wlr_log(WLR_ERROR, "Allocation failed");
+		return;
+	}
+
+	waiter->new_surface.notify = compositor_dmabuf_waiter_handle_new_surface;
+	wl_signal_add(&compositor->events.new_surface, &waiter->new_surface);
+	waiter->destroy.notify = compositor_dmabuf_waiter_handle_destroy;
+	wl_signal_add(&compositor->events.destroy, &waiter->destroy);
+}

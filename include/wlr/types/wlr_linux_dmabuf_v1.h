@@ -16,6 +16,7 @@
 #include <wlr/render/dmabuf.h>
 #include <wlr/render/drm_format_set.h>
 
+struct wlr_compositor;
 struct wlr_surface;
 
 struct wlr_dmabuf_v1_buffer {
@@ -158,5 +159,10 @@ void wlr_surface_dmabuf_waiter_init(struct wlr_surface_dmabuf_waiter *waiter,
  * immediately.
  */
 void wlr_surface_dmabuf_waiter_finish(struct wlr_surface_dmabuf_waiter *waiter);
+/**
+ * Initialize a compositor-wide DMA-BUF waiter, which will listen for new
+ * surfaces and attach DMA-BUF surface waiters to them.
+ */
+void wlr_compositor_dmabuf_waiter_create(struct wlr_compositor *compositor);
 
 #endif
