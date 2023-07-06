@@ -9,26 +9,29 @@
 #ifndef WLR_UTIL_ADDON_H
 #define WLR_UTIL_ADDON_H
 
-#include <wayland-server-core.h>
+#include <stdint.h>
 
 struct wlr_addon_set {
 	// private state
-	struct wl_list addons;
+	struct wlr_addon *root;
 };
 
 struct wlr_addon;
 
 struct wlr_addon_interface {
 	const char *name;
-	// Has to call wlr_addon_finish()
 	void (*destroy)(struct wlr_addon *addon);
 };
 
 struct wlr_addon {
-	const struct wlr_addon_interface *impl;
 	// private state
+	struct wlr_addon_set *set;
 	const void *owner;
-	struct wl_list link;
+	const struct wlr_addon_interface *impl;
+	struct wlr_addon *parent; // NULL if it's set->root
+	struct wlr_addon *left;
+	struct wlr_addon *right;
+	int8_t balance;
 };
 
 void wlr_addon_set_init(struct wlr_addon_set *set);
