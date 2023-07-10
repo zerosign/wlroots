@@ -259,7 +259,8 @@ static struct wlr_render_pass *gles2_begin_buffer_pass(struct wlr_renderer *wlr_
 		return NULL;
 	}
 
-	struct wlr_gles2_render_pass *pass = begin_gles2_buffer_pass(buffer, &prev_ctx, timer);
+	struct wlr_gles2_render_pass *pass = begin_gles2_buffer_pass(buffer,
+		&prev_ctx, timer, options->signal_timeline, options->signal_point);
 	if (!pass) {
 		return NULL;
 	}
@@ -682,6 +683,9 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	wlr_egl_unset_current(renderer->egl);
 
 	get_gles2_shm_formats(renderer, &renderer->shm_texture_formats);
+
+	renderer->wlr_renderer.features.timeline =
+		egl->procs.eglDupNativeFenceFDANDROID && egl->procs.eglWaitSyncKHR;
 
 	return &renderer->wlr_renderer;
 
