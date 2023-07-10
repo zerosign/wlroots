@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <wayland-server-core.h>
 
 /**
  * A synchronization timeline.
@@ -33,6 +34,17 @@ struct wlr_drm_syncobj_timeline {
 	size_t n_refs;
 };
 
+struct wlr_drm_syncobj_timeline_waiter {
+	struct {
+		struct wl_signal ready;
+	} events;
+
+	// private state
+
+	int ev_fd;
+	struct wl_event_source *event_source;
+};
+
 /**
  * Create a new synchronization timeline.
  */
@@ -50,6 +62,30 @@ struct wlr_drm_syncobj_timeline *wlr_drm_syncobj_timeline_ref(struct wlr_drm_syn
  * Unreference a synchronization timeline.
  */
 void wlr_drm_syncobj_timeline_unref(struct wlr_drm_syncobj_timeline *timeline);
+/**
+ * Check if a timeline point has been signalled or has materialized.
+ *
+ * Flags can be:
+ *
+ * - DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT to wait for the point to be
+ *   signalled
+ * - DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE to only wait for a fence to
+ *   materialize
+ */
+bool wlr_drm_syncobj_timeline_check(struct wlr_drm_syncobj_timeline *timeline,
+	uint64_t point, uint32_t flags, bool *result);
+/**
+ * Asynchronously wait for a timeline point.
+ *
+ * See wlr_drm_syncobj_timeline_check() for a definition of flags.
+ */
+bool wlr_drm_syncobj_timeline_waiter_init(struct wlr_drm_syncobj_timeline_waiter *waiter,
+	struct wlr_drm_syncobj_timeline *timeline, uint64_t point, uint32_t flags,
+	struct wl_event_loop *loop);
+/**
+ * Cancel a timeline waiter.
+ */
+void wlr_drm_syncobj_timeline_waiter_finish(struct wlr_drm_syncobj_timeline_waiter *waiter);
 /**
  * Export a timeline point as a sync_file FD.
  *

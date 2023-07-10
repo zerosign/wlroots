@@ -1,8 +1,16 @@
 #include <assert.h>
 #include <xf86drm.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <wayland-server-core.h>
 #include <wlr/render/drm_syncobj.h>
 #include <wlr/util/log.h>
+
+#include "config.h"
+
+#if HAVE_EVENTFD
+#include <sys/eventfd.h>
+#endif
 
 struct wlr_drm_syncobj_timeline *wlr_drm_syncobj_timeline_create(int drm_fd) {
 	struct wlr_drm_syncobj_timeline *timeline = calloc(1, sizeof(*timeline));
@@ -113,4 +121,92 @@ bool wlr_drm_syncobj_timeline_import_sync_file(struct wlr_drm_syncobj_timeline *
 out:
 	drmSyncobjDestroy(timeline->drm_fd, syncobj_handle);
 	return ok;
+}
+
+bool wlr_drm_syncobj_timeline_check(struct wlr_drm_syncobj_timeline *timeline,
+		uint64_t point, uint32_t flags, bool *result) {
+	int etime;
+#if defined(__FreeBSD__)
+	etime = ETIMEDOUT;
+#else
+	etime = ETIME;
+#endif
+
+	uint32_t signaled_point;
+	int ret = drmSyncobjTimelineWait(timeline->drm_fd, &timeline->handle, &point, 1, 0, flags, &signaled_point);
+	if (ret != 0 && ret != -etime) {
+		wlr_log_errno(WLR_ERROR, "drmSyncobjWait() failed");
+		return false;
+	}
+
+	*result = ret == 0;
+	return true;
+}
+
+static int handle_eventfd_ready(int ev_fd, uint32_t mask, void *data) {
+	struct wlr_drm_syncobj_timeline_waiter *waiter = data;
+
+	if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
+		wlr_log(WLR_ERROR, "Failed to wait for render timeline: eventfd error");
+	}
+
+	if (mask & WL_EVENT_READABLE) {
+		uint64_t ev_fd_value;
+		if (read(ev_fd, &ev_fd_value, sizeof(ev_fd_value)) <= 0) {
+			wlr_log(WLR_ERROR, "Failed to wait for render timeline: read() failed");
+		}
+	}
+
+	wl_signal_emit_mutable(&waiter->events.ready, NULL);
+	return 0;
+}
+
+bool wlr_drm_syncobj_timeline_waiter_init(struct wlr_drm_syncobj_timeline_waiter *waiter,
+		struct wlr_drm_syncobj_timeline *timeline, uint64_t point, uint32_t flags,
+		struct wl_event_loop *loop) {
+	int ev_fd;
+#if HAVE_EVENTFD
+	ev_fd = eventfd(0, EFD_CLOEXEC);
+	if (ev_fd < 0) {
+		wlr_log_errno(WLR_ERROR, "eventfd() failed");
+	}
+#else
+	ev_fd = -1;
+	wlr_log(WLR_ERROR, "eventfd() is unavailable");
+#endif
+	if (ev_fd < 0) {
+		return NULL;
+	}
+
+	struct drm_syncobj_eventfd syncobj_eventfd = {
+		.handle = timeline->handle,
+		.flags = flags,
+		.point = point,
+		.fd = ev_fd,
+	};
+	if (drmIoctl(timeline->drm_fd, DRM_IOCTL_SYNCOBJ_EVENTFD, &syncobj_eventfd) != 0) {
+		wlr_log_errno(WLR_ERROR, "DRM_IOCTL_SYNCOBJ_EVENTFD failed");
+		close(ev_fd);
+		return NULL;
+	}
+
+	struct wl_event_source *source = wl_event_loop_add_fd(loop, ev_fd, WL_EVENT_READABLE, handle_eventfd_ready, waiter);
+	if (source == NULL) {
+		wlr_log(WLR_ERROR, "Failed to add FD to event loop");
+		close(ev_fd);
+		return NULL;
+	}
+
+	*waiter = (struct wlr_drm_syncobj_timeline_waiter){
+		.ev_fd = ev_fd,
+		.event_source = source,
+	};
+	wl_signal_init(&waiter->events.ready);
+	return true;
+}
+
+void wlr_drm_syncobj_timeline_waiter_finish(struct wlr_drm_syncobj_timeline_waiter *waiter) {
+	wl_list_remove(&waiter->events.ready.listener_list);
+	wl_event_source_remove(waiter->event_source);
+	close(waiter->ev_fd);
 }
