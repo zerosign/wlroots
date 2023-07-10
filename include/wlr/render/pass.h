@@ -33,6 +33,18 @@ struct wlr_buffer_pass_options {
 	/* Color transform to apply to the output of the render pass,
 	 * leave NULL to indicate sRGB/no custom transform */
 	struct wlr_color_transform *color_transform;
+
+	/* Signal a timeline synchronization point when the render pass completes.
+	 *
+	 * When a compositor provides a signal timeline, the renderer may skip
+	 * implicit signal synchronization. Compositors are not allowed to mix
+	 * implicit and explicit signal synchronization usage.
+	 *
+	 * Support for this feature is advertised by features.timeline in
+	 * struct wlr_renderer.
+	 */
+	struct wlr_drm_syncobj_timeline *signal_timeline;
+	uint64_t signal_point;
 };
 
 /**
@@ -88,6 +100,18 @@ struct wlr_render_texture_options {
 	enum wlr_scale_filter_mode filter_mode;
 	/* Blend mode */
 	enum wlr_render_blend_mode blend_mode;
+
+	/* Wait for a timeline synchronization point before texturing.
+	 *
+	 * When a compositor provides a wait timeline, the renderer may skip
+	 * implicit wait synchronization. Compositors are not allowed to mix
+	 * implicit and explicit wait synchronization usage.
+	 *
+	 * Support for this feature is advertised by features.timeline in
+	 * struct wlr_renderer.
+	 */
+	struct wlr_drm_syncobj_timeline *wait_timeline;
+	uint64_t wait_point;
 };
 
 /**
