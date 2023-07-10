@@ -13,7 +13,6 @@
 #include <wlr/config.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/util/log.h>
-#include "backend/backend.h"
 #include "backend/multi.h"
 #include "render/allocator/allocator.h"
 #include "util/env.h"
@@ -116,7 +115,12 @@ static struct wlr_session *session_create_and_wait(struct wl_display *disp) {
 #endif
 }
 
+const struct wlr_backend_props *wlr_backend_get_props(struct wlr_backend *backend) {
+	return backend->impl->get_props(backend);
+}
+
 clockid_t wlr_backend_get_presentation_clock(struct wlr_backend *backend) {
+	return wlr_backend_get_props(backend)->presentation_clock;
 	if (backend->impl->get_presentation_clock) {
 		return backend->impl->get_presentation_clock(backend);
 	}
@@ -128,14 +132,6 @@ int wlr_backend_get_drm_fd(struct wlr_backend *backend) {
 		return -1;
 	}
 	return backend->impl->get_drm_fd(backend);
-}
-
-uint32_t backend_get_buffer_caps(struct wlr_backend *backend) {
-	if (!backend->impl->get_buffer_caps) {
-		return 0;
-	}
-
-	return backend->impl->get_buffer_caps(backend);
 }
 
 static size_t parse_outputs_env(const char *name) {

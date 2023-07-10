@@ -31,6 +31,16 @@ struct wlr_backend {
 };
 
 /**
+ * Backend properties.
+ */
+struct wlr_backend_props {
+	/* Supported buffer capabilities, bitfield of enum wlr_buffer_cap */
+	uint32_t buffer_caps;
+	/* Clock used for presentation feedback */
+	clockid_t presentation_clock;
+};
+
+/**
  * Automatically initializes the most suitable backend given the environment.
  * Will always return a multi-backend. The backend is created but not started.
  * Returns NULL on failure.
@@ -51,6 +61,10 @@ bool wlr_backend_start(struct wlr_backend *backend);
  * automatically when the struct wl_display is destroyed.
  */
 void wlr_backend_destroy(struct wlr_backend *backend);
+/**
+ * Get backend properties.
+ */
+const struct wlr_backend_props *wlr_backend_get_props(struct wlr_backend *backend);
 /**
  * Returns the clock used by the backend for presentation feedback.
  */

@@ -9,7 +9,6 @@
 #include <wlr/util/log.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-#include "backend/backend.h"
 #include "render/allocator/allocator.h"
 #include "render/allocator/drm_dumb.h"
 #include "render/allocator/shm.h"
