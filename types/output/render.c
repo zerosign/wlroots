@@ -199,13 +199,12 @@ bool output_pick_format(struct wlr_output *output,
 }
 
 struct wlr_render_pass *wlr_output_begin_render_pass(struct wlr_output *output,
-		struct wlr_output_state *state, int *buffer_age,
-		struct wlr_buffer_pass_options *render_options) {
+		struct wlr_output_state *state, struct wlr_buffer_pass_options *render_options) {
 	if (!wlr_output_configure_primary_swapchain(output, state, &output->swapchain)) {
 		return NULL;
 	}
 
-	struct wlr_buffer *buffer = wlr_swapchain_acquire(output->swapchain, buffer_age);
+	struct wlr_buffer *buffer = wlr_swapchain_acquire(output->swapchain);
 	if (buffer == NULL) {
 		return NULL;
 	}
