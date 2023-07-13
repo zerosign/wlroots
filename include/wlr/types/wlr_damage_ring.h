@@ -13,14 +13,14 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <pixman.h>
-
-/* For triple buffering, a history of two frames is required. */
-#define WLR_DAMAGE_RING_PREVIOUS_LEN 2
+#include <wayland-server-core.h>
 
 struct wlr_box;
 
 struct wlr_damage_ring_entry {
 	pixman_region32_t damage;
+
+	struct wl_list link; // struct wlr_damage_ring.previous
 };
 
 struct wlr_damage_ring {
@@ -31,8 +31,7 @@ struct wlr_damage_ring {
 
 	// private state
 
-	struct wlr_damage_ring_entry previous[WLR_DAMAGE_RING_PREVIOUS_LEN];
-	size_t previous_idx;
+	struct wl_list previous; // struct wlr_damage_ring_entry.link
 };
 
 void wlr_damage_ring_init(struct wlr_damage_ring *ring);
