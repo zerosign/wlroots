@@ -15,14 +15,14 @@ void wlr_damage_ring_init(struct wlr_damage_ring *ring) {
 
 	pixman_region32_init(&ring->current);
 	for (size_t i = 0; i < WLR_DAMAGE_RING_PREVIOUS_LEN; ++i) {
-		pixman_region32_init(&ring->previous[i]);
+		pixman_region32_init(&ring->previous[i].damage);
 	}
 }
 
 void wlr_damage_ring_finish(struct wlr_damage_ring *ring) {
 	pixman_region32_fini(&ring->current);
 	for (size_t i = 0; i < WLR_DAMAGE_RING_PREVIOUS_LEN; ++i) {
-		pixman_region32_fini(&ring->previous[i]);
+		pixman_region32_fini(&ring->previous[i].damage);
 	}
 }
 
@@ -84,7 +84,7 @@ void wlr_damage_ring_rotate(struct wlr_damage_ring *ring) {
 		WLR_DAMAGE_RING_PREVIOUS_LEN - 1;
 	ring->previous_idx %= WLR_DAMAGE_RING_PREVIOUS_LEN;
 
-	pixman_region32_copy(&ring->previous[ring->previous_idx], &ring->current);
+	pixman_region32_copy(&ring->previous[ring->previous_idx].damage, &ring->current);
 	pixman_region32_clear(&ring->current);
 }
 
@@ -100,7 +100,7 @@ void wlr_damage_ring_get_buffer_damage(struct wlr_damage_ring *ring,
 		// Accumulate damage from old buffers
 		for (int i = 0; i < buffer_age - 1; ++i) {
 			int j = (ring->previous_idx + i) % WLR_DAMAGE_RING_PREVIOUS_LEN;
-			pixman_region32_union(damage, damage, &ring->previous[j]);
+			pixman_region32_union(damage, damage, &ring->previous[j].damage);
 		}
 
 		// Check the number of rectangles

@@ -19,6 +19,10 @@
 
 struct wlr_box;
 
+struct wlr_damage_ring_entry {
+	pixman_region32_t damage;
+};
+
 struct wlr_damage_ring {
 	int32_t width, height;
 
@@ -27,7 +31,7 @@ struct wlr_damage_ring {
 
 	// private state
 
-	pixman_region32_t previous[WLR_DAMAGE_RING_PREVIOUS_LEN];
+	struct wlr_damage_ring_entry previous[WLR_DAMAGE_RING_PREVIOUS_LEN];
 	size_t previous_idx;
 };
 
