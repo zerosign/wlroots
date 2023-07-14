@@ -16,10 +16,15 @@
 #include <wayland-server-core.h>
 
 struct wlr_box;
+struct wlr_buffer;
 
 struct wlr_damage_ring_entry {
 	pixman_region32_t damage;
+	struct wlr_buffer *buffer;
 
+	struct wl_listener buffer_destroy;
+
+	struct wlr_damage_ring *ring;
 	struct wl_list link; // struct wlr_damage_ring.previous
 };
 
@@ -83,5 +88,15 @@ void wlr_damage_ring_rotate(struct wlr_damage_ring *ring);
  */
 void wlr_damage_ring_get_buffer_damage(struct wlr_damage_ring *ring,
 	int buffer_age, pixman_region32_t *damage);
+
+/**
+ * Get the since accumulated damage for this buffer. These buffers should
+ * typically come from a wlr_swapchain. In the context of rendering, the
+ * damage is the region that needs to be redrawn.
+ *
+ * The damage ring is automatically rotated during invocation.
+ */
+void wlr_damage_ring_damage_for_buffer(struct wlr_damage_ring *ring,
+	struct wlr_buffer *buffer, pixman_region32_t *damage);
 
 #endif
