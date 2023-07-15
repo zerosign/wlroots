@@ -27,6 +27,7 @@
 #include "render/pixel_format.h"
 #include "render/drm_format_set.h"
 #include "render/wlr_renderer.h"
+#include "types/wlr_output.h"
 #include "util/env.h"
 #include "config.h"
 
@@ -536,17 +537,131 @@ static bool drm_connector_state_update_primary_fb(struct wlr_drm_connector *conn
 	return true;
 }
 
+static bool test_cursor_layer_state(struct wlr_drm_connector *conn,
+		struct wlr_output_layer_state *layer_state) {
+	struct wlr_drm_backend *drm = conn->backend;
+
+	if (layer_state->buffer == NULL) {
+		return true;
+	}
+
+	struct wlr_buffer *buffer = layer_state->buffer;
+	if ((uint64_t)buffer->width != drm->cursor_width ||
+			(uint64_t)buffer->height != drm->cursor_height) {
+		wlr_drm_conn_log(conn, WLR_DEBUG, "Cursor buffer size mismatch");
+		return false;
+	}
+
+	if (buffer->width != layer_state->dst_box.width ||
+			buffer->height != layer_state->dst_box.height) {
+		wlr_drm_conn_log(conn, WLR_DEBUG, "Cursor doesn't support scaling");
+		return false;
+	}
+
+	return true;
+}
+
+static void drm_connector_set_pending_cursor_fb(struct wlr_drm_connector *conn,
+		const struct wlr_output_state *state) {
+	struct wlr_drm_backend *drm = conn->backend;
+
+	struct wlr_drm_crtc *crtc = conn->crtc;
+	if (crtc == NULL) {
+		return;
+	}
+	struct wlr_drm_plane *plane = crtc->cursor;
+	if (plane == NULL) {
+		return;
+	}
+
+	conn->cursor_enabled = false;
+	conn->cursor_width = 0;
+	conn->cursor_height = 0;
+
+	struct wlr_output_layer_state *layer_state = output_state_get_cursor_layer(state);
+	if (layer_state == NULL || layer_state->buffer == NULL) {
+		return;
+	}
+
+	struct wlr_buffer *buffer = layer_state->buffer;
+
+	if (!test_cursor_layer_state(conn, layer_state)) {
+		return;
+	}
+
+	struct wlr_buffer *local_buf;
+	if (drm->parent) {
+		struct wlr_drm_format format = {0};
+		if (!drm_plane_pick_render_format(plane, &format, &drm->mgpu_renderer)) {
+			wlr_log(WLR_ERROR, "Failed to pick cursor plane format");
+			return;
+		}
+
+		bool ok = init_drm_surface(&plane->mgpu_surf, &drm->mgpu_renderer,
+			buffer->width, buffer->height, &format);
+		wlr_drm_format_finish(&format);
+		if (!ok) {
+			return;
+		}
+
+		local_buf = drm_surface_blit(&plane->mgpu_surf, buffer);
+		if (local_buf == NULL) {
+			return;
+		}
+	} else {
+		local_buf = wlr_buffer_lock(buffer);
+	}
+
+	bool ok = drm_fb_import(&conn->cursor_pending_fb, drm, local_buf, &plane->formats);
+	wlr_buffer_unlock(local_buf);
+	if (!ok) {
+		return;
+	}
+
+	// Update cursor hotspot
+	int hotspot_x = layer_state->cursor_hotspot.x;
+	int hotspot_y = layer_state->cursor_hotspot.y;
+	if (conn->cursor_hotspot_x != hotspot_x || conn->cursor_hotspot_y != hotspot_y) {
+		conn->cursor_x -= hotspot_x - conn->cursor_hotspot_x;
+		conn->cursor_y -= hotspot_y - conn->cursor_hotspot_y;
+		conn->cursor_hotspot_x = hotspot_x;
+		conn->cursor_hotspot_y = hotspot_y;
+	}
+
+	conn->cursor_enabled = true;
+	conn->cursor_width = buffer->width;
+	conn->cursor_height = buffer->height;
+
+	struct wlr_box box = {
+		.x = layer_state->dst_box.x,
+		.y = layer_state->dst_box.y,
+	};
+
+	int width, height;
+	wlr_output_transformed_resolution(&conn->output, &width, &height);
+
+	enum wl_output_transform transform =
+		wlr_output_transform_invert(conn->output.transform);
+	wlr_box_transform(&box, &box, transform, width, height);
+
+	conn->cursor_x = box.x - hotspot_x;
+	conn->cursor_y = box.y - hotspot_y;
+
+	layer_state->accepted = true;
+}
+
 static bool drm_connector_set_pending_layer_fbs(struct wlr_drm_connector *conn,
 		const struct wlr_output_state *state) {
 	struct wlr_drm_backend *drm = conn->backend;
 
 	struct wlr_drm_crtc *crtc = conn->crtc;
-	if (!crtc || drm->parent) {
+	if (crtc == NULL) {
 		return false;
 	}
 
-	if (!crtc->liftoff) {
-		return true; // libliftoff is disabled
+	if (drm->parent != NULL || !crtc->liftoff) {
+		drm_connector_set_pending_cursor_fb(conn, state);
+		return true;
 	}
 
 	assert(state->committed & WLR_OUTPUT_STATE_LAYERS);
@@ -630,6 +745,14 @@ static bool drm_connector_test(struct wlr_output *output,
 		// If we're running as a secondary GPU, we can't perform an atomic
 		// commit without blitting a buffer.
 		ok = true;
+
+		if (state->committed & WLR_OUTPUT_STATE_LAYERS) {
+			struct wlr_output_layer_state *cursor_layer_state = output_state_get_cursor_layer(state);
+			if (cursor_layer_state != NULL && test_cursor_layer_state(conn, cursor_layer_state)) {
+				cursor_layer_state->accepted = true;
+			}
+		}
+
 		goto out;
 	}
 
@@ -899,107 +1022,6 @@ const drmModeModeInfo *wlr_drm_mode_get_info(struct wlr_output_mode *wlr_mode) {
 	return &mode->drm_mode;
 }
 
-static bool drm_connector_set_cursor(struct wlr_output *output,
-		struct wlr_buffer *buffer, int hotspot_x, int hotspot_y) {
-	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
-	struct wlr_drm_backend *drm = conn->backend;
-	struct wlr_drm_crtc *crtc = conn->crtc;
-
-	if (!crtc) {
-		return false;
-	}
-
-	struct wlr_drm_plane *plane = crtc->cursor;
-	if (plane == NULL) {
-		return false;
-	}
-
-	if (conn->cursor_hotspot_x != hotspot_x ||
-			conn->cursor_hotspot_y != hotspot_y) {
-		// Update cursor hotspot
-		conn->cursor_x -= hotspot_x - conn->cursor_hotspot_x;
-		conn->cursor_y -= hotspot_y - conn->cursor_hotspot_y;
-		conn->cursor_hotspot_x = hotspot_x;
-		conn->cursor_hotspot_y = hotspot_y;
-	}
-
-	conn->cursor_enabled = false;
-	if (buffer != NULL) {
-		if ((uint64_t)buffer->width != drm->cursor_width ||
-				(uint64_t)buffer->height != drm->cursor_height) {
-			wlr_drm_conn_log(conn, WLR_DEBUG, "Cursor buffer size mismatch");
-			return false;
-		}
-
-		struct wlr_buffer *local_buf;
-		if (drm->parent) {
-			struct wlr_drm_format format = {0};
-			if (!drm_plane_pick_render_format(plane, &format, &drm->mgpu_renderer)) {
-				wlr_log(WLR_ERROR, "Failed to pick cursor plane format");
-				return false;
-			}
-
-			bool ok = init_drm_surface(&plane->mgpu_surf, &drm->mgpu_renderer,
-				buffer->width, buffer->height, &format);
-			wlr_drm_format_finish(&format);
-			if (!ok) {
-				return false;
-			}
-
-			local_buf = drm_surface_blit(&plane->mgpu_surf, buffer);
-			if (local_buf == NULL) {
-				return false;
-			}
-		} else {
-			local_buf = wlr_buffer_lock(buffer);
-		}
-
-		bool ok = drm_fb_import(&conn->cursor_pending_fb, drm, local_buf,
-			&plane->formats);
-		wlr_buffer_unlock(local_buf);
-		if (!ok) {
-			return false;
-		}
-
-		conn->cursor_enabled = true;
-		conn->cursor_width = buffer->width;
-		conn->cursor_height = buffer->height;
-	}
-
-	wlr_output_update_needs_frame(output);
-	return true;
-}
-
-static bool drm_connector_move_cursor(struct wlr_output *output,
-		int x, int y) {
-	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
-	if (!conn->crtc) {
-		return false;
-	}
-	struct wlr_drm_plane *plane = conn->crtc->cursor;
-	if (!plane) {
-		return false;
-	}
-
-	struct wlr_box box = { .x = x, .y = y };
-
-	int width, height;
-	wlr_output_transformed_resolution(output, &width, &height);
-
-	enum wl_output_transform transform =
-		wlr_output_transform_invert(output->transform);
-	wlr_box_transform(&box, &box, transform, width, height);
-
-	box.x -= conn->cursor_hotspot_x;
-	box.y -= conn->cursor_hotspot_y;
-
-	conn->cursor_x = box.x;
-	conn->cursor_y = box.y;
-
-	wlr_output_update_needs_frame(output);
-	return true;
-}
-
 bool drm_connector_is_cursor_visible(struct wlr_drm_connector *conn) {
 	return conn->cursor_enabled &&
 		conn->cursor_x < conn->output.width &&
@@ -1075,8 +1097,6 @@ static const struct wlr_drm_format_set *drm_connector_get_primary_formats(
 }
 
 static const struct wlr_output_impl output_impl = {
-	.set_cursor = drm_connector_set_cursor,
-	.move_cursor = drm_connector_move_cursor,
 	.destroy = drm_connector_destroy_output,
 	.test = drm_connector_test,
 	.commit = drm_connector_commit,

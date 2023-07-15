@@ -18,9 +18,11 @@
 #include <wlr/interfaces/wlr_touch.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
+#include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>
 
 #include "backend/x11.h"
+#include "types/wlr_output.h"
 #include "util/time.h"
 
 static const uint32_t SUPPORTED_OUTPUT_STATE =
@@ -113,6 +115,8 @@ static void output_destroy(struct wlr_output *wlr_output) {
 
 static bool output_test(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
+	struct wlr_x11_output *output = get_x11_output_from_output(wlr_output);
+
 	uint32_t unsupported = state->committed & ~SUPPORTED_OUTPUT_STATE;
 	if (unsupported != 0) {
 		wlr_log(WLR_DEBUG, "Unsupported output state fields: 0x%"PRIx32,
@@ -137,6 +141,11 @@ static bool output_test(struct wlr_output *wlr_output,
 		if (state->custom_mode.refresh != 0) {
 			return false;
 		}
+	}
+
+	struct wlr_output_layer_state *cursor_state = output_state_get_cursor_layer(state);
+	if (cursor_state != NULL) {
+		cursor_state->accepted = output->x11->argb32;
 	}
 
 	return true;
@@ -343,43 +352,6 @@ error:
 	return false;
 }
 
-static bool output_commit(struct wlr_output *wlr_output,
-		const struct wlr_output_state *state) {
-	struct wlr_x11_output *output = get_x11_output_from_output(wlr_output);
-	struct wlr_x11_backend *x11 = output->x11;
-
-	if (!output_test(wlr_output, state)) {
-		return false;
-	}
-
-	if (state->committed & WLR_OUTPUT_STATE_ENABLED) {
-		if (state->enabled) {
-			xcb_map_window(x11->xcb, output->win);
-		} else {
-			xcb_unmap_window(x11->xcb, output->win);
-		}
-	}
-
-	if (state->committed & WLR_OUTPUT_STATE_MODE) {
-		if (!output_set_custom_mode(wlr_output,
-				state->custom_mode.width,
-				state->custom_mode.height,
-				state->custom_mode.refresh)) {
-			return false;
-		}
-	}
-
-	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
-		if (!output_commit_buffer(output, state)) {
-			return false;
-		}
-	}
-
-	xcb_flush(x11->xcb);
-
-	return true;
-}
-
 static void update_x11_output_cursor(struct wlr_x11_output *output,
 		int32_t hotspot_x, int32_t hotspot_y) {
 	struct wlr_x11_backend *x11 = output->x11;
@@ -395,7 +367,6 @@ static void update_x11_output_cursor(struct wlr_x11_output *output,
 	uint32_t values[] = {cursor};
 	xcb_change_window_attributes(x11->xcb, output->win,
 		XCB_CW_CURSOR, values);
-	xcb_flush(x11->xcb);
 
 	if (cursor != x11->transparent_cursor) {
 		xcb_free_cursor(x11->xcb, cursor);
@@ -462,16 +433,43 @@ static bool output_cursor_to_picture(struct wlr_x11_output *output,
 	return true;
 }
 
-static bool output_set_cursor(struct wlr_output *wlr_output,
-		struct wlr_buffer *buffer, int32_t hotspot_x, int32_t hotspot_y) {
+static bool output_commit(struct wlr_output *wlr_output,
+		const struct wlr_output_state *state) {
 	struct wlr_x11_output *output = get_x11_output_from_output(wlr_output);
 	struct wlr_x11_backend *x11 = output->x11;
 
-	if (x11->argb32 == XCB_NONE) {
+	if (!output_test(wlr_output, state)) {
 		return false;
 	}
 
-	if (buffer != NULL) {
+	if (state->committed & WLR_OUTPUT_STATE_ENABLED) {
+		if (state->enabled) {
+			xcb_map_window(x11->xcb, output->win);
+		} else {
+			xcb_unmap_window(x11->xcb, output->win);
+		}
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_MODE) {
+		if (!output_set_custom_mode(wlr_output,
+				state->custom_mode.width,
+				state->custom_mode.height,
+				state->custom_mode.refresh)) {
+			return false;
+		}
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
+		if (!output_commit_buffer(output, state)) {
+			return false;
+		}
+	}
+
+	struct wlr_output_layer_state *cursor_state = output_state_get_cursor_layer(state);
+	if (cursor_state != NULL) {
+		struct wlr_buffer *buffer = cursor_state->buffer;
+		int hotspot_x = cursor_state->cursor_hotspot.x;
+		int hotspot_y = cursor_state->cursor_hotspot.y;
 		if (hotspot_x < 0) {
 			hotspot_x = 0;
 		}
@@ -484,17 +482,16 @@ static bool output_set_cursor(struct wlr_output *wlr_output,
 		if (hotspot_y > buffer->height) {
 			hotspot_y = buffer->height;
 		}
+
+		bool ok = output_cursor_to_picture(output, buffer);
+		update_x11_output_cursor(output, hotspot_x, hotspot_y);
+		if (!ok) {
+			return false;
+		}
 	}
 
-	bool success = output_cursor_to_picture(output, buffer);
+	xcb_flush(x11->xcb);
 
-	update_x11_output_cursor(output, hotspot_x, hotspot_y);
-
-	return success;
-}
-
-static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
-	// TODO: only return true if x == current x and y == current y
 	return true;
 }
 
@@ -515,8 +512,6 @@ static const struct wlr_output_impl output_impl = {
 	.destroy = output_destroy,
 	.test = output_test,
 	.commit = output_commit,
-	.set_cursor = output_set_cursor,
-	.move_cursor = output_move_cursor,
 	.get_primary_formats = output_get_primary_formats,
 };
 

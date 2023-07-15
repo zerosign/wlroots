@@ -19,6 +19,7 @@
 #include "backend/wayland.h"
 #include "render/pixel_format.h"
 #include "render/wlr_renderer.h"
+#include "types/wlr_output.h"
 
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "presentation-time-client-protocol.h"
@@ -248,6 +249,56 @@ static struct wlr_wl_buffer *get_or_create_wl_buffer(struct wlr_wl_backend *wl,
 	return create_wl_buffer(wl, wlr_buffer);
 }
 
+static bool layer_needs_viewport(struct wlr_output_layer_state *layer_state) {
+	if (layer_state->buffer == NULL) {
+		return false;
+	}
+	if (layer_state->dst_box.width != layer_state->buffer->width ||
+			layer_state->dst_box.height != layer_state->buffer->height) {
+		return true;
+	}
+	if (!wlr_fbox_empty(&layer_state->src_box) &&
+			(layer_state->src_box.x != 0 ||
+			layer_state->src_box.y != 0 ||
+			layer_state->src_box.width != layer_state->dst_box.width ||
+			layer_state->src_box.height != layer_state->dst_box.height)) {
+		return true;
+	}
+	return false;
+}
+
+static bool test_layer(struct wlr_wl_output *output, struct wlr_output_layer_state *layer_state) {
+	if (layer_state->buffer == NULL) {
+		return true;
+	}
+
+	int x = layer_state->dst_box.x;
+	int y = layer_state->dst_box.y;
+	int width = layer_state->dst_box.width;
+	int height = layer_state->dst_box.height;
+
+	// We can't display sub-surfaces out of the primary surface's bounds
+	int output_width = output->wlr_output.width;
+	int output_height = output->wlr_output.height;
+	if (x < 0 || y < 0 || x + width > output_width || y + height > output_height) {
+		return false;
+	}
+
+	// We need viewporter for scaling and cropping
+	if (output->backend->viewporter == NULL && layer_needs_viewport(layer_state)) {
+		return false;
+	}
+
+	return test_buffer(output->backend, layer_state->buffer);
+}
+
+static bool test_cursor(struct wlr_wl_output *output, struct wlr_output_layer_state *layer_state) {
+	if (layer_state->buffer == NULL) {
+		return true;
+	}
+	return !layer_needs_viewport(layer_state) && test_buffer(output->backend, layer_state->buffer);
+}
+
 static bool output_test(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_wl_output *output =
@@ -284,34 +335,19 @@ static bool output_test(struct wlr_output *wlr_output,
 	}
 
 	if (state->committed & WLR_OUTPUT_STATE_LAYERS) {
+		size_t layers_len = state->layers_len;
+		struct wlr_output_layer_state *cursor_state = output_state_get_cursor_layer(state);
+		if (cursor_state != NULL) {
+			cursor_state->accepted = test_cursor(output, cursor_state);
+			layers_len--;
+		}
+
 		// If we can't use a sub-surface for a layer, then we can't use a
 		// sub-surface for any layer underneath
 		bool supported = output->backend->subcompositor != NULL;
-		for (ssize_t i = state->layers_len - 1; i >= 0; i--) {
+		for (ssize_t i = layers_len - 1; i >= 0; i--) {
 			struct wlr_output_layer_state *layer_state = &state->layers[i];
-			if (layer_state->buffer != NULL) {
-				int x = layer_state->dst_box.x;
-				int y = layer_state->dst_box.y;
-				int width = layer_state->dst_box.width;
-				int height = layer_state->dst_box.height;
-				bool needs_viewport = width != layer_state->buffer->width ||
-					height != layer_state->buffer->height;
-				if (!wlr_fbox_empty(&layer_state->src_box)) {
-					needs_viewport = needs_viewport ||
-						layer_state->src_box.x != 0 ||
-						layer_state->src_box.y != 0 ||
-						layer_state->src_box.width != width ||
-						layer_state->src_box.height != height;
-				}
-				if (x < 0 || y < 0 ||
-						x + width > wlr_output->width ||
-						y + height > wlr_output->height ||
-						(output->backend->viewporter == NULL && needs_viewport)) {
-					supported = false;
-				}
-				supported = supported &&
-					test_buffer(output->backend, layer_state->buffer);
-			}
+			supported = supported && test_layer(output, layer_state);
 			layer_state->accepted = supported;
 		}
 	}
@@ -339,6 +375,7 @@ static const struct wlr_addon_interface output_layer_addon_impl = {
 static struct wlr_wl_output_layer *get_or_create_output_layer(
 		struct wlr_wl_output *output, struct wlr_output_layer *wlr_layer) {
 	assert(output->backend->subcompositor != NULL);
+	assert(!wlr_layer->cursor);
 
 	struct wlr_wl_output_layer *layer;
 	struct wlr_addon *addon = wlr_addon_find(&wlr_layer->addons, output,
@@ -477,6 +514,10 @@ static bool commit_layers(struct wlr_wl_output *output,
 
 	struct wlr_wl_output_layer *prev_layer = NULL;
 	for (size_t i = 0; i < layers_len; i++) {
+		if (layers[i].layer->cursor) {
+			continue;
+		}
+
 		struct wlr_wl_output_layer *layer =
 			get_or_create_output_layer(output, layers[i].layer);
 		if (layer == NULL) {
@@ -498,6 +539,36 @@ static bool commit_layers(struct wlr_wl_output *output,
 		}
 	}
 
+	return true;
+}
+
+static bool commit_cursor(struct wlr_wl_output *output,
+		const struct wlr_output_layer_state *cursor_state) {
+	struct wlr_wl_backend *backend = output->backend;
+
+	output->cursor.hotspot_x = cursor_state->cursor_hotspot.x;
+	output->cursor.hotspot_y = cursor_state->cursor_hotspot.y;
+
+	if (output->cursor.surface == NULL) {
+		output->cursor.surface = wl_compositor_create_surface(backend->compositor);
+	}
+	struct wl_surface *surface = output->cursor.surface;
+
+	if (cursor_state->buffer != NULL) {
+		struct wlr_wl_buffer *buffer = get_or_create_wl_buffer(backend, cursor_state->buffer);
+		if (buffer == NULL) {
+			return false;
+		}
+
+		wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
+		wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
+	} else {
+		wl_surface_attach(surface, NULL, 0, 0);
+	}
+
+	wl_surface_commit(surface);
+
+	update_wl_output_cursor(output);
 	return true;
 }
 
@@ -530,6 +601,11 @@ static bool output_commit(struct wlr_output *wlr_output,
 
 		wl_surface_attach(output->surface, buffer->wl_buffer, 0, 0);
 		damage_surface(output->surface, damage);
+	}
+
+	struct wlr_output_layer_state *cursor_state = output_state_get_cursor_layer(state);
+	if (cursor_state != NULL && !commit_cursor(output, cursor_state)) {
+		return false;
 	}
 
 	if ((state->committed & WLR_OUTPUT_STATE_LAYERS) &&
@@ -577,40 +653,6 @@ static bool output_commit(struct wlr_output *wlr_output,
 
 	wl_display_flush(output->backend->remote_display);
 
-	return true;
-}
-
-static bool output_set_cursor(struct wlr_output *wlr_output,
-		struct wlr_buffer *wlr_buffer, int hotspot_x, int hotspot_y) {
-	struct wlr_wl_output *output = get_wl_output_from_output(wlr_output);
-	struct wlr_wl_backend *backend = output->backend;
-
-	output->cursor.hotspot_x = hotspot_x;
-	output->cursor.hotspot_y = hotspot_y;
-
-	if (output->cursor.surface == NULL) {
-		output->cursor.surface =
-			wl_compositor_create_surface(backend->compositor);
-	}
-	struct wl_surface *surface = output->cursor.surface;
-
-	if (wlr_buffer != NULL) {
-		struct wlr_wl_buffer *buffer =
-			get_or_create_wl_buffer(output->backend, wlr_buffer);
-		if (buffer == NULL) {
-			return false;
-		}
-
-		wl_surface_attach(surface, buffer->wl_buffer, 0, 0);
-		wl_surface_damage_buffer(surface, 0, 0, INT32_MAX, INT32_MAX);
-		wl_surface_commit(surface);
-	} else {
-		wl_surface_attach(surface, NULL, 0, 0);
-		wl_surface_commit(surface);
-	}
-
-	update_wl_output_cursor(output);
-	wl_display_flush(backend->remote_display);
 	return true;
 }
 
@@ -670,17 +712,10 @@ void update_wl_output_cursor(struct wlr_wl_output *output) {
 	}
 }
 
-static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
-	// TODO: only return true if x == current x and y == current y
-	return true;
-}
-
 static const struct wlr_output_impl output_impl = {
 	.destroy = output_destroy,
 	.test = output_test,
 	.commit = output_commit,
-	.set_cursor = output_set_cursor,
-	.move_cursor = output_move_cursor,
 	.get_cursor_formats = output_get_formats,
 	.get_primary_formats = output_get_formats,
 };

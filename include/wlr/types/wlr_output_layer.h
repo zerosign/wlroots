@@ -43,6 +43,7 @@
 struct wlr_output_layer {
 	struct wl_list link; // wlr_output.layers
 	struct wlr_addon_set addons;
+	bool cursor;
 
 	struct {
 		struct wl_signal feedback; // struct wlr_output_layer_feedback_event
@@ -71,6 +72,9 @@ struct wlr_output_layer_state {
 	// Damaged region since last commit in buffer-local coordinates. Leave NULL
 	// to damage the whole buffer.
 	const pixman_region32_t *damage;
+	struct {
+		int x, y;
+	} cursor_hotspot;
 
 	// Populated by the backend after wlr_output_test() and wlr_output_commit(),
 	// indicates whether the backend has acknowledged and will take care of

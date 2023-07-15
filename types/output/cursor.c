@@ -6,19 +6,72 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_matrix.h>
+#include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include "render/allocator/allocator.h"
 #include "types/wlr_buffer.h"
 #include "types/wlr_output.h"
 
-static bool output_set_hardware_cursor(struct wlr_output *output,
+bool output_get_cursor_layer_state(struct wlr_output *output,
+		struct wlr_buffer *buffer, int x, int y, int hotspot_x, int hotspot_y,
+		struct wlr_output_layer_state *out) {
+	if (output->cursor_layer == NULL) {
+		output->cursor_layer = wlr_output_layer_create(output);
+		if (output->cursor_layer == NULL) {
+			return false;
+		}
+		output->cursor_layer->cursor = true;
+	}
+
+	*out = (struct wlr_output_layer_state){
+		.layer = output->cursor_layer,
+		.buffer = buffer,
+		.dst_box = {
+			.x = x,
+			.y = y,
+			.width = buffer->width,
+			.height = buffer->height,
+		},
+		.cursor_hotspot = {
+			.x = hotspot_x,
+			.y = hotspot_y,
+		},
+	};
+	return true;
+}
+
+static bool output_test_hardware_cursor_layer(struct wlr_output *output,
 		struct wlr_buffer *buffer, int hotspot_x, int hotspot_y) {
-	if (!output->impl->set_cursor) {
+	if (buffer == NULL) {
+		return true;
+	}
+	if (!output->impl->test) {
 		return false;
 	}
 
-	if (!output->impl->set_cursor(output, buffer, hotspot_x, hotspot_y)) {
+	struct wlr_output_layer_state layer_state = {0};
+	if (!output_get_cursor_layer_state(output, buffer, 0, 0, hotspot_x, hotspot_y, &layer_state)) {
+		return false;
+	}
+
+	struct wlr_output_state output_state = {
+		.committed = WLR_OUTPUT_STATE_LAYERS,
+		.layers = &layer_state,
+		.layers_len = 1,
+	};
+	return output->impl->test(output, &output_state) && layer_state.accepted;
+}
+
+static bool output_set_hardware_cursor(struct wlr_output *output,
+		struct wlr_buffer *buffer, int hotspot_x, int hotspot_y) {
+	bool ok;
+	if (!output->impl->set_cursor) {
+		ok = output_test_hardware_cursor_layer(output, buffer, hotspot_x, hotspot_y);
+	} else {
+		ok = output->impl->set_cursor(output, buffer, hotspot_x, hotspot_y);
+	}
+	if (!ok) {
 		return false;
 	}
 
@@ -27,6 +80,11 @@ static bool output_set_hardware_cursor(struct wlr_output *output,
 
 	if (buffer != NULL) {
 		output->cursor_front_buffer = wlr_buffer_lock(buffer);
+	}
+
+	if (!output->impl->set_cursor && output->cursor_layer != NULL) {
+		output->cursor_layer_changed = true;
+		wlr_output_update_needs_frame(output);
 	}
 
 	return true;
@@ -348,8 +406,7 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 	struct wlr_output *output = cursor->output;
 
-	if (!output->impl->set_cursor ||
-			output->software_cursor_locks > 0) {
+	if (output->software_cursor_locks > 0) {
 		return false;
 	}
 
@@ -362,8 +419,9 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 
 	// If the cursor was hidden or was a software cursor, the hardware
 	// cursor position is outdated
-	output->impl->move_cursor(cursor->output,
-		(int)cursor->x, (int)cursor->y);
+	if (output->impl->move_cursor) {
+		output->impl->move_cursor(cursor->output, (int)cursor->x, (int)cursor->y);
+	}
 
 	struct wlr_buffer *buffer = NULL;
 	if (texture != NULL) {
@@ -485,7 +543,11 @@ bool wlr_output_cursor_move(struct wlr_output_cursor *cursor,
 		return true;
 	}
 
-	assert(cursor->output->impl->move_cursor);
+	if (!cursor->output->impl->move_cursor) {
+		cursor->output->cursor_layer_changed = true;
+		wlr_output_update_needs_frame(cursor->output);
+		return true;
+	}
 	return cursor->output->impl->move_cursor(cursor->output, (int)x, (int)y);
 }
 
