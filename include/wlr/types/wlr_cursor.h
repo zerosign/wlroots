@@ -28,10 +28,10 @@ struct wlr_xcursor_manager;
  */
 
 struct wlr_box;
-struct wlr_cursor_state;
+struct wlr_cursor_priv;
 
 struct wlr_cursor {
-	struct wlr_cursor_state *state;
+	struct wlr_cursor_priv *priv;
 	double x, y;
 
 	/**
