@@ -201,6 +201,18 @@ void wlr_seat_start_pointer_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 void wlr_seat_start_touch_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 	uint32_t serial, struct wlr_touch_point *point);
 
+void wlr_seat_drag_enter(struct wlr_seat *seat, struct wlr_surface *surface,
+	double sx, double sy);
+
+void wlr_seat_drag_clear_focus(struct wlr_seat *seat);
+
+void wlr_seat_drag_send_motion(struct wlr_seat *seat, uint32_t time_msec,
+	double sx, double sy);
+
+void wlr_seat_drag_drop_and_destroy(struct wlr_seat *seat, uint32_t time_msec);
+
+void wlr_seat_drag_destroy(struct wlr_seat *seat);
+
 /**
  * Initializes the data source with the provided implementation.
  */
