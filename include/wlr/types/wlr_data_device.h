@@ -94,18 +94,7 @@ struct wlr_drag_icon {
 	void *data;
 };
 
-enum wlr_drag_grab_type {
-	WLR_DRAG_GRAB_KEYBOARD,
-	WLR_DRAG_GRAB_KEYBOARD_POINTER,
-	WLR_DRAG_GRAB_KEYBOARD_TOUCH,
-};
-
 struct wlr_drag {
-	enum wlr_drag_grab_type grab_type;
-	struct wlr_seat_keyboard_grab keyboard_grab;
-	struct wlr_seat_pointer_grab pointer_grab;
-	struct wlr_seat_touch_grab touch_grab;
-
 	struct wlr_seat *seat;
 	struct wlr_seat_client *seat_client;
 	struct wlr_seat_client *focus_client;
@@ -181,25 +170,10 @@ void wlr_seat_request_start_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 	struct wlr_surface *origin, uint32_t serial);
 
 /**
- * Starts a drag on the seat. This starts an implicit keyboard grab, but doesn't
- * start a pointer or a touch grab.
+ * Starts a drag on the seat.
  */
 void wlr_seat_start_drag(struct wlr_seat *seat, struct wlr_drag *drag,
 	uint32_t serial);
-
-/**
- * Starts a pointer drag on the seat. This starts implicit keyboard and pointer
- * grabs.
- */
-void wlr_seat_start_pointer_drag(struct wlr_seat *seat, struct wlr_drag *drag,
-	uint32_t serial);
-
-/**
- * Starts a touch drag on the seat. This starts implicit keyboard and touch
- * grabs.
- */
-void wlr_seat_start_touch_drag(struct wlr_seat *seat, struct wlr_drag *drag,
-	uint32_t serial, struct wlr_touch_point *point);
 
 void wlr_seat_drag_enter(struct wlr_seat *seat, struct wlr_surface *surface,
 	double sx, double sy);
