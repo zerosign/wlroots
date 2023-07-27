@@ -6,6 +6,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_frame_scheduler.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_scene.h>
@@ -328,7 +329,7 @@ static void scene_damage_outputs(struct wlr_scene *scene, pixman_region32_t *dam
 			-scene_output->x, -scene_output->y);
 		scale_output_damage(&output_damage, scene_output->output->scale);
 		if (wlr_damage_ring_add(&scene_output->damage_ring, &output_damage)) {
-			wlr_output_schedule_frame(scene_output->output);
+			wlr_frame_scheduler_schedule_frame(scene_output->frame_scheduler);
 		}
 		pixman_region32_fini(&output_damage);
 	}
@@ -797,7 +798,7 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 			(int)round((lx - scene_output->x) * output_scale),
 			(int)round((ly - scene_output->y) * output_scale));
 		if (wlr_damage_ring_add(&scene_output->damage_ring, &output_damage)) {
-			wlr_output_schedule_frame(scene_output->output);
+			wlr_frame_scheduler_schedule_frame(scene_output->frame_scheduler);
 		}
 		pixman_region32_fini(&output_damage);
 	}
@@ -1296,7 +1297,7 @@ static void scene_node_output_update(struct wlr_scene_node *node,
 static void scene_output_update_geometry(struct wlr_scene_output *scene_output,
 		bool force_update) {
 	wlr_damage_ring_add_whole(&scene_output->damage_ring);
-	wlr_output_schedule_frame(scene_output->output);
+	wlr_frame_scheduler_schedule_frame(scene_output->frame_scheduler);
 
 	scene_node_output_update(&scene_output->scene->tree.node,
 			&scene_output->scene->outputs, NULL, force_update ? scene_output : NULL);
@@ -1346,20 +1347,20 @@ static void scene_output_handle_damage(struct wl_listener *listener, void *data)
 		scene_output, output_damage);
 	struct wlr_output_event_damage *event = data;
 	if (wlr_damage_ring_add(&scene_output->damage_ring, event->damage)) {
-		wlr_output_schedule_frame(scene_output->output);
+		wlr_frame_scheduler_schedule_frame(scene_output->frame_scheduler);
 	}
-}
-
-static void scene_output_handle_needs_frame(struct wl_listener *listener, void *data) {
-	struct wlr_scene_output *scene_output = wl_container_of(listener,
-		scene_output, output_needs_frame);
-	wlr_output_schedule_frame(scene_output->output);
 }
 
 struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 		struct wlr_output *output) {
 	struct wlr_scene_output *scene_output = calloc(1, sizeof(*scene_output));
 	if (scene_output == NULL) {
+		return NULL;
+	}
+
+	scene_output->frame_scheduler = wlr_frame_scheduler_autocreate(output);
+	if (scene_output->frame_scheduler == NULL) {
+		free(scene_output);
 		return NULL;
 	}
 
@@ -1396,9 +1397,6 @@ struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 	scene_output->output_damage.notify = scene_output_handle_damage;
 	wl_signal_add(&output->events.damage, &scene_output->output_damage);
 
-	scene_output->output_needs_frame.notify = scene_output_handle_needs_frame;
-	wl_signal_add(&output->events.needs_frame, &scene_output->output_needs_frame);
-
 	scene_output_update_geometry(scene_output, false);
 
 	return scene_output;
@@ -1426,12 +1424,12 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 	}
 
 	wlr_addon_finish(&scene_output->addon);
+	wlr_frame_scheduler_destroy(scene_output->frame_scheduler);
 	wlr_damage_ring_finish(&scene_output->damage_ring);
 	pixman_region32_fini(&scene_output->pending_commit_damage);
 	wl_list_remove(&scene_output->link);
 	wl_list_remove(&scene_output->output_commit.link);
 	wl_list_remove(&scene_output->output_damage.link);
-	wl_list_remove(&scene_output->output_needs_frame.link);
 
 	wl_array_release(&scene_output->render_list);
 	free(scene_output);
@@ -1671,11 +1669,6 @@ static bool scene_entry_try_direct_scanout(struct render_list_entry *entry,
 
 bool wlr_scene_output_commit(struct wlr_scene_output *scene_output,
 		const struct wlr_scene_output_state_options *options) {
-	if (!scene_output->output->needs_frame && !pixman_region32_not_empty(
-			&scene_output->pending_commit_damage)) {
-		return true;
-	}
-
 	bool ok = false;
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
@@ -1967,7 +1960,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	if (debug_damage == WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT &&
 			!wl_list_empty(&scene_output->damage_highlight_regions)) {
-		wlr_output_schedule_frame(scene_output->output);
+		wlr_frame_scheduler_schedule_frame(scene_output->frame_scheduler);
 	}
 
 	return true;
