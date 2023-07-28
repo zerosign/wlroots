@@ -21,17 +21,6 @@ static struct wlr_headless_output *headless_output_from_output(
 	return output;
 }
 
-static bool output_set_custom_mode(struct wlr_headless_output *output,
-		int32_t width, int32_t height, int32_t refresh) {
-	if (refresh <= 0) {
-		refresh = HEADLESS_DEFAULT_REFRESH;
-	}
-
-	output->frame_delay = 1000000 / refresh;
-
-	return true;
-}
-
 static bool output_test(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	uint32_t unsupported = state->committed & ~SUPPORTED_OUTPUT_STATE;
@@ -56,20 +45,8 @@ static bool output_test(struct wlr_output *wlr_output,
 
 static bool output_commit(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
-	struct wlr_headless_output *output =
-		headless_output_from_output(wlr_output);
-
 	if (!output_test(wlr_output, state)) {
 		return false;
-	}
-
-	if (state->committed & WLR_OUTPUT_STATE_MODE) {
-		if (!output_set_custom_mode(output,
-				state->custom_mode.width,
-				state->custom_mode.height,
-				state->custom_mode.refresh)) {
-			return false;
-		}
 	}
 
 	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
@@ -78,8 +55,6 @@ static bool output_commit(struct wlr_output *wlr_output,
 			.presented = true,
 		};
 		wlr_output_send_present(wlr_output, &present_event);
-
-		wl_event_source_timer_update(output->frame_timer, output->frame_delay);
 	}
 
 	return true;
@@ -89,7 +64,6 @@ static void output_destroy(struct wlr_output *wlr_output) {
 	struct wlr_headless_output *output =
 		headless_output_from_output(wlr_output);
 	wl_list_remove(&output->link);
-	wl_event_source_remove(output->frame_timer);
 	free(output);
 }
 
@@ -100,12 +74,6 @@ static const struct wlr_output_impl output_impl = {
 
 bool wlr_output_is_headless(struct wlr_output *wlr_output) {
 	return wlr_output->impl == &output_impl;
-}
-
-static int signal_frame(void *data) {
-	struct wlr_headless_output *output = data;
-	wlr_output_send_frame(&output->wlr_output);
-	return 0;
 }
 
 struct wlr_output *wlr_headless_add_output(struct wlr_backend *wlr_backend,
@@ -138,9 +106,6 @@ struct wlr_output *wlr_headless_add_output(struct wlr_backend *wlr_backend,
 	char description[128];
 	snprintf(description, sizeof(description), "Headless output %zu", output_num);
 	wlr_output_set_description(wlr_output, description);
-
-	struct wl_event_loop *ev = wl_display_get_event_loop(backend->display);
-	output->frame_timer = wl_event_loop_add_timer(ev, signal_frame, output);
 
 	wl_list_insert(&backend->outputs, &output->link);
 
