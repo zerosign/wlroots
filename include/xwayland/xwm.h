@@ -91,6 +91,17 @@ enum atom_name {
 	ATOM_LAST // keep last
 };
 
+struct wlr_xwm_reply_handler;
+
+typedef void (*xwm_reply_handler_func_t)(struct wlr_xwm *xwm,
+	struct wlr_xwm_reply_handler *reply_handler, xcb_generic_reply_t *reply);
+
+struct wlr_xwm_reply_handler {
+	unsigned int request;
+	xwm_reply_handler_func_t callback;
+	struct wl_list link;
+};
+
 struct wlr_xwm {
 	struct wlr_xwayland *xwayland;
 	struct wl_event_source *event_source;
@@ -105,6 +116,8 @@ struct wlr_xwm {
 	xcb_colormap_t colormap;
 	xcb_render_pictformat_t render_format_id;
 	xcb_cursor_t cursor;
+
+	struct wl_list reply_handlers; // wlr_xwm_reply_handler.link
 
 	struct wlr_xwm_selection clipboard_selection;
 	struct wlr_xwm_selection primary_selection;
@@ -159,5 +172,8 @@ void xwm_set_seat(struct wlr_xwm *xwm, struct wlr_seat *seat);
 char *xwm_get_atom_name(struct wlr_xwm *xwm, xcb_atom_t atom);
 bool xwm_atoms_contains(struct wlr_xwm *xwm, xcb_atom_t *atoms,
 	size_t num_atoms, enum atom_name needle);
+
+void xwm_init_reply_handler(struct wlr_xwm *xwm, struct wlr_xwm_reply_handler *handler,
+	unsigned int request, xwm_reply_handler_func_t callback);
 
 #endif
