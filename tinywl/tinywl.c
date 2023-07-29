@@ -13,6 +13,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_frame_scheduler.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
@@ -72,6 +73,7 @@ struct tinywl_output {
 	struct wl_list link;
 	struct tinywl_server *server;
 	struct wlr_output *wlr_output;
+	struct wlr_frame_scheduler *frame_scheduler;
 	struct wl_listener frame;
 	struct wl_listener request_state;
 	struct wl_listener destroy;
@@ -621,9 +623,12 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	output->wlr_output = wlr_output;
 	output->server = server;
 
+	/* Creates a frame scheduler, which is responsible for telling us when to render. */
+	output->frame_scheduler = wlr_frame_scheduler_autocreate(wlr_output);
+
 	/* Sets up a listener for the frame event. */
 	output->frame.notify = output_frame;
-	wl_signal_add(&wlr_output->events.frame, &output->frame);
+	wl_signal_add(&output->frame_scheduler->frame, &output->frame);
 
 	/* Sets up a listener for the state request event. */
 	output->request_state.notify = output_request_state;
@@ -645,6 +650,10 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	 * output (such as DPI, scale factor, manufacturer, etc).
 	 */
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
+
+	/* Make the scene aware of the frame scheduler so that it can trigger frames. */
+	struct wlr_scene_output *scene_output = wlr_scene_get_scene_output(server->scene, wlr_output);
+  scene_output->frame_scheduler = output->frame_scheduler;
 }
 
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {

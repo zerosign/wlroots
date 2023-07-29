@@ -11,6 +11,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_drm.h>
+#include <wlr/types/wlr_frame_scheduler.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layer.h>
@@ -57,6 +58,7 @@ struct output {
 	struct wl_list link;
 	struct server *server;
 	struct wlr_output *wlr_output;
+	struct wlr_frame_scheduler *frame_scheduler;
 	struct wl_list surfaces;
 
 	struct wl_listener frame;
@@ -170,9 +172,11 @@ static void server_handle_new_output(struct wl_listener *listener, void *data) {
 	output->wlr_output = wlr_output;
 	output->server = server;
 	wl_list_init(&output->surfaces);
-	output->frame.notify = output_handle_frame;
-	wl_signal_add(&wlr_output->events.frame, &output->frame);
 	wl_list_insert(&server->outputs, &output->link);
+
+	output->frame_scheduler = wlr_frame_scheduler_autocreate(wlr_output);
+	output->frame.notify = output_handle_frame;
+	wl_signal_add(&output->frame_scheduler->frame, &output->frame);
 
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);

@@ -11,6 +11,7 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_frame_scheduler.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -76,10 +77,11 @@ static void server_handle_new_output(struct wl_listener *listener, void *data) {
 		calloc(1, sizeof(struct output));
 	output->wlr = wlr_output;
 	output->server = server;
-	output->frame.notify = output_handle_frame;
-	wl_signal_add(&wlr_output->events.frame, &output->frame);
 
 	output->scene_output = wlr_scene_output_create(server->scene, wlr_output);
+	output->scene_output->frame_scheduler = wlr_frame_scheduler_autocreate(wlr_output);
+	output->frame.notify = output_handle_frame;
+	wl_signal_add(&output->scene_output->frame_scheduler->frame, &output->frame);
 
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
