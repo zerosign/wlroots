@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <backend/headless.h>
 #include <stdlib.h>
 #include <wayland-client-protocol.h>
 #include <wayland-server-core.h>
@@ -208,10 +209,82 @@ static struct wlr_frame_scheduler *wl_idle_scheduler_create(struct wlr_output *o
 	return &scheduler->base.base;
 }
 
+#define HEADLESS_DEFAULT_REFRESH (60 * 1000) // 60 Hz
+
+struct headless_idle_scheduler {
+	struct idle_frame_scheduler base;
+	struct wl_event_source *frame_timer;
+	struct wl_listener commit;
+
+	int32_t frame_delay;
+};
+
+static void headless_idle_scheduler_destroy(struct wlr_frame_scheduler *wlr_scheduler) {
+	struct headless_idle_scheduler *scheduler = wl_container_of(wlr_scheduler, scheduler, base.base);
+	idle_frame_scheduler_finish(&scheduler->base);
+	wl_event_source_remove(scheduler->frame_timer);
+	free(scheduler);
+}
+
+static void headless_idle_scheduler_handle_commit(struct wl_listener *listener, void *data) {
+	struct headless_idle_scheduler *scheduler = wl_container_of(listener, scheduler, commit);
+	struct wlr_output_event_commit *commit = data;
+	struct wlr_output *output = commit->output;
+	if (commit->committed & WLR_OUTPUT_STATE_MODE) {
+		int32_t refresh = output->refresh ? output->refresh : HEADLESS_DEFAULT_REFRESH;
+		scheduler->frame_delay = 1000 * 1000 / refresh;
+	}
+
+	if (commit->committed & WLR_OUTPUT_STATE_BUFFER) {
+		assert(scheduler->frame_delay != 0);
+		wl_event_source_timer_update(scheduler->frame_timer, scheduler->frame_delay);
+		idle_frame_scheduler_set_frame_pending(&scheduler->base);
+	}
+}
+
+static int headless_idle_scheduler_handle_timer(void *data) {
+	struct headless_idle_scheduler *scheduler = data;
+	scheduler->base.frame_pending = false;
+	idle_frame_scheduler_emit_frame(&scheduler->base);
+	return 0;
+}
+
+struct wlr_frame_scheduler_impl headless_idle_scheduler_impl = {
+	.schedule_frame = idle_frame_scheduler_schedule_frame,
+	.destroy = headless_idle_scheduler_destroy,
+};
+
+struct wlr_frame_scheduler *wlr_headless_idle_scheduler_create(struct wlr_output *output) {
+	if (!wlr_output_is_headless(output)) {
+		return NULL;
+	}
+
+	struct headless_idle_scheduler *scheduler = calloc(1, sizeof(struct headless_idle_scheduler));
+	if (!scheduler) {
+		return NULL;
+	}
+	frame_scheduler_init(&scheduler->base.base, &headless_idle_scheduler_impl, output);
+
+	scheduler->frame_delay = 1000 * 1000 / HEADLESS_DEFAULT_REFRESH;
+
+	struct wl_event_loop *ev = wl_display_get_event_loop(output->display);
+	scheduler->frame_timer = wl_event_loop_add_timer(ev, headless_idle_scheduler_handle_timer,
+		scheduler);
+
+	scheduler->commit.notify = headless_idle_scheduler_handle_commit;
+	wl_signal_add(&output->events.commit, &scheduler->commit);
+
+	return &scheduler->base.base;
+}
+
 struct wlr_frame_scheduler *wlr_frame_scheduler_autocreate(struct wlr_output *output) {
 	if (wlr_output_is_wl(output) && !wlr_wl_backend_has_presentation_time(output->backend)) {
 		wlr_log(WLR_INFO, "wp_presentation not available, falling back to frame callbacks");
 		return wl_idle_scheduler_create(output);
+	}
+
+	if (wlr_output_is_headless(output)) {
+		return wlr_headless_idle_scheduler_create(output);
 	}
 
 	return wlr_present_idle_scheduler_create(output);

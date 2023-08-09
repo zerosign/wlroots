@@ -31,6 +31,12 @@ struct wlr_frame_scheduler *wlr_present_idle_scheduler_create(struct wlr_output 
  * the render loop, it emits the frame signal when the compositor's event loop is idle.
  */
 struct wlr_frame_scheduler *wlr_wl_idle_scheduler_create(struct wlr_output *output);
+/*
+ * The headless-idle scheduler maintains a render loop based on the headless backend's refresh
+ * timer. To wake the render loop, it emits the frame signal when the compositor's event loop is
+ * idle.
+ */
+struct wlr_frame_scheduler *wlr_headless_idle_scheduler_create(struct wlr_output *output);
 
 /*
  * Creates an appropriate frame scheduler for the given output's backend capabilities.
