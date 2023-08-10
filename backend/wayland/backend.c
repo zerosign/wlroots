@@ -563,6 +563,11 @@ bool wlr_backend_is_wl(struct wlr_backend *b) {
 	return b->impl == &backend_impl;
 }
 
+bool wlr_wl_backend_has_presentation_time(struct wlr_backend *wlr_backend) {
+	struct wlr_wl_backend *backend = get_wl_backend_from_backend(wlr_backend);
+	return backend->presentation != NULL;
+}
+
 static void handle_display_destroy(struct wl_listener *listener, void *data) {
 	struct wlr_wl_backend *wl =
 		wl_container_of(listener, wl, local_display_destroy);
