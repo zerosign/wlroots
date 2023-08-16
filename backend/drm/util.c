@@ -278,3 +278,28 @@ void generate_cvt_mode(drmModeModeInfo *mode, int hdisplay, int vdisplay,
 	};
 	snprintf(mode->name, sizeof(mode->name), "%dx%d", hdisplay, vdisplay);
 }
+
+char *get_drm_bus_str(const drmDevice *dev) {
+	char buf[128];
+	switch (dev->bustype) {
+	case DRM_BUS_PCI:;
+		const drmPciBusInfo *pci = dev->businfo.pci;
+		snprintf(buf, sizeof(buf), "pci-%04" PRIx16 ":%02" PRIx8 ":%02" PRIx8 ".%" PRIu8,
+			pci->domain, pci->bus, pci->dev, pci->func);
+		return strdup(buf);
+	case DRM_BUS_USB:;
+		const drmUsbBusInfo *usb = dev->businfo.usb;
+		snprintf(buf, sizeof(buf), "usb-%" PRIu8 ":%" PRIu8, usb->bus, usb->dev);
+		return strdup(buf);
+	case DRM_BUS_PLATFORM:;
+		const drmPlatformBusInfo *platform = dev->businfo.platform;
+		size_t str_size = strlen("platform-") + strlen(platform->fullname) + 1;
+		char *str = malloc(str_size);
+		if (str == NULL) {
+			return NULL;
+		}
+		snprintf(str, str_size, "platform-%s", platform->fullname);
+		return str;
+	}
+	return NULL;
+}
