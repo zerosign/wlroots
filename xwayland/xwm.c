@@ -1624,16 +1624,10 @@ static void xwm_handle_unhandled_event(struct wlr_xwm *xwm, xcb_generic_event_t 
 #endif
 }
 
-static int x11_event_handler(int fd, uint32_t mask, void *data) {
+static int read_x11_events(struct wlr_xwm *xwm) {
 	int count = 0;
+
 	xcb_generic_event_t *event;
-	struct wlr_xwm *xwm = data;
-
-	if ((mask & WL_EVENT_HANGUP) || (mask & WL_EVENT_ERROR)) {
-		xwm_destroy(xwm);
-		return 0;
-	}
-
 	while ((event = xcb_poll_for_event(xwm->xcb_conn))) {
 		count++;
 
@@ -1691,6 +1685,18 @@ static int x11_event_handler(int fd, uint32_t mask, void *data) {
 		free(event);
 	}
 
+	return count;
+}
+
+static int x11_event_handler(int fd, uint32_t mask, void *data) {
+	struct wlr_xwm *xwm = data;
+
+	if ((mask & WL_EVENT_HANGUP) || (mask & WL_EVENT_ERROR)) {
+		xwm_destroy(xwm);
+		return 0;
+	}
+
+	int count = read_x11_events(xwm);
 	if (count) {
 		xcb_flush(xwm->xcb_conn);
 	}
