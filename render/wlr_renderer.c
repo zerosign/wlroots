@@ -384,7 +384,7 @@ static struct wlr_renderer *renderer_autocreate(struct wlr_backend *backend, int
 			log_creation_failure(is_auto, "Cannot create GLES2 renderer: no DRM FD available");
 		} else {
 #if WLR_HAS_GLES2_RENDERER
-			renderer = wlr_gles2_renderer_create_with_drm_fd(drm_fd);
+			renderer = wlr_gles2_renderer_create_with_drm_fd(drm_fd, loop);
 #else
 			wlr_log(WLR_ERROR, "Cannot create GLES renderer: disabled at compile-time");
 #endif

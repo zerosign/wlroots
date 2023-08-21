@@ -4,6 +4,7 @@
 #include <pixman.h>
 #include <time.h>
 #include <wlr/types/wlr_matrix.h>
+#include "render/egl.h"
 #include "render/gles2.h"
 #include "types/wlr_matrix.h"
 
@@ -172,6 +173,10 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	src_fbox.y /= options->texture->height;
 	src_fbox.width /= options->texture->width;
 	src_fbox.height /= options->texture->height;
+
+	if (texture->upload_sync != EGL_NO_SYNC_KHR) {
+		wlr_egl_wait_sync(renderer->egl, texture->upload_sync);
+	}
 
 	push_gles2_debug(renderer);
 	setup_blending(!texture->has_alpha && alpha == 1.0 ?
