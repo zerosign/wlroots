@@ -134,7 +134,7 @@ struct wlr_backend *wlr_multi_backend_create(struct wl_display *display) {
 	}
 
 	wl_list_init(&backend->backends);
-	wlr_backend_init(&backend->backend, &backend_impl);
+	wlr_backend_init(&backend->backend, &backend_impl, wl_display_get_event_loop(display));
 
 	wl_signal_init(&backend->events.backend_add);
 	wl_signal_init(&backend->events.backend_remove);

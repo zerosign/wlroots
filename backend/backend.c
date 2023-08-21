@@ -39,9 +39,10 @@
 #define WAIT_SESSION_TIMEOUT 10000 // ms
 
 void wlr_backend_init(struct wlr_backend *backend,
-		const struct wlr_backend_impl *impl) {
+		const struct wlr_backend_impl *impl, struct wl_event_loop *loop) {
 	*backend = (struct wlr_backend){
 		.impl = impl,
+		.event_loop = loop,
 	};
 	wl_signal_init(&backend->events.destroy);
 	wl_signal_init(&backend->events.new_input);
