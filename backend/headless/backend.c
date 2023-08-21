@@ -72,7 +72,7 @@ struct wlr_backend *wlr_headless_backend_create(struct wl_display *display) {
 		return NULL;
 	}
 
-	wlr_backend_init(&backend->backend, &backend_impl);
+	wlr_backend_init(&backend->backend, &backend_impl, wl_display_get_event_loop(display));
 
 	backend->display = display;
 	wl_list_init(&backend->outputs);
