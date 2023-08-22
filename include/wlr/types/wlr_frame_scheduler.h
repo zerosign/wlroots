@@ -38,6 +38,12 @@ struct wlr_frame_scheduler *wlr_wl_idle_scheduler_create(struct wlr_output *outp
  */
 struct wlr_frame_scheduler *wlr_headless_idle_scheduler_create(struct wlr_output *output);
 
+struct wlr_output_event_present;
+
+void wlr_timed_present_idle_scheduler_on_present(struct wlr_frame_scheduler *wlr_scheduler,
+	struct wlr_output_event_present *present, uint64_t predicted_render_duration_ns);
+struct wlr_frame_scheduler *wlr_timed_present_idle_scheduler_create(struct wlr_output *output);
+
 /*
  * Creates an appropriate frame scheduler for the given output's backend capabilities.
  */

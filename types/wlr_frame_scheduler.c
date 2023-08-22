@@ -277,6 +277,55 @@ struct wlr_frame_scheduler *wlr_headless_idle_scheduler_create(struct wlr_output
 	return &scheduler->base.base;
 }
 
+struct timed_present_idle_scheduler {
+	struct idle_frame_scheduler base;
+	struct wl_listener commit;
+	struct wl_event_source *timer;
+};
+
+static void timed_present_idle_scheduler_destroy(struct wlr_frame_scheduler *wlr_scheduler) {
+	struct timed_present_idle_scheduler *scheduler = wl_container_of(wlr_scheduler, scheduler, base.base);
+	idle_frame_scheduler_finish(&scheduler->base);
+	wl_list_remove(&scheduler->commit.link);
+	free(scheduler);
+}
+
+static void timed_present_idle_scheduler_handle_commit(struct wl_listener *listener, void *data) {
+	struct timed_present_idle_scheduler *scheduler = wl_container_of(listener, scheduler, commit);
+	struct wlr_output_event_commit *event = data;
+
+	if (event->output->enabled) {
+		idle_frame_scheduler_set_frame_pending(&scheduler->base);
+	}
+}
+
+struct wlr_frame_scheduler_impl timed_present_idle_scheduler_impl = {
+	.schedule_frame = idle_frame_scheduler_schedule_frame,
+	.destroy = timed_present_idle_scheduler_destroy,
+};
+
+void wlr_timed_present_idle_scheduler_on_present(struct wlr_frame_scheduler *wlr_scheduler,
+		struct wlr_output_event_present *present, uint64_t predicted_render_duration_ns) {
+	assert(wlr_scheduler->impl == &timed_present_idle_scheduler_impl);
+	struct timed_present_idle_scheduler *scheduler = wl_container_of(wlr_scheduler, scheduler,
+		base.base);
+
+	// assumes the current time is present->when, which is probably not far off
+	uint64_t delay_ns = present->refresh - predicted_render_duration_ns;
+	wl_event_source_timer_update(scheduler->timer, delay_ns / (1000 * 1000));
+}
+
+struct wlr_frame_scheduler *wlr_timed_present_idle_scheduler_create(struct wlr_output *output) {
+	struct timed_present_idle_scheduler *scheduler = calloc(1, sizeof(struct timed_present_idle_scheduler));
+	if (!scheduler) {
+		return NULL;
+	}
+	frame_scheduler_init(&scheduler->base.base, &timed_present_idle_scheduler_impl, output);
+	scheduler->commit.notify = timed_present_idle_scheduler_handle_commit;
+	wl_signal_add(&output->events.commit, &scheduler->commit);
+	return &scheduler->base.base;
+}
+
 struct wlr_frame_scheduler *wlr_frame_scheduler_autocreate(struct wlr_output *output) {
 	if (wlr_output_is_wl(output) && !wlr_wl_backend_has_presentation_time(output->backend)) {
 		wlr_log(WLR_INFO, "wp_presentation not available, falling back to frame callbacks");
