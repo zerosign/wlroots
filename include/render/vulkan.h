@@ -53,6 +53,7 @@ struct wlr_vk_device {
 		PFN_vkGetSemaphoreFdKHR vkGetSemaphoreFdKHR;
 		PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR;
 		PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
+		PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
 	} api;
 
 	uint32_t format_prop_count;
