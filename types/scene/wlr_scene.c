@@ -1107,6 +1107,7 @@ struct render_list_entry {
 	struct wlr_scene_node *node;
 	bool sent_dmabuf_feedback;
 	int x, y;
+	bool visible;
 };
 
 static void scene_entry_render(struct render_list_entry *entry, const struct render_data *data) {
@@ -1426,50 +1427,71 @@ struct render_list_constructor_data {
 	bool calculate_visibility;
 };
 
-static bool construct_render_list_iterator(struct wlr_scene_node *node,
-		int lx, int ly, void *_data) {
-	struct render_list_constructor_data *data = _data;
+static bool scene_construct_render_list(struct wlr_scene_node *node,
+		struct wl_array *render_list, struct wlr_box *box, bool calculate_visibility,
+		bool enabled, int lx, int ly) {
 
-	if (scene_node_invisible(node)) {
+	enabled = enabled && node->enabled;
+
+	if (node->type == WLR_SCENE_NODE_TREE) {
+		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
+		struct wlr_scene_node *child;
+		wl_list_for_each_reverse(child, &scene_tree->children, link) {
+			if (!scene_construct_render_list(child, render_list, box, calculate_visibility, enabled,
+					lx + child->x, ly + child->y)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	struct render_list_entry *entry = wl_array_add(render_list, sizeof(*entry));
+	if (!entry) {
 		return false;
+	}
+
+	memset(entry, 0, sizeof(*entry));
+	entry->node = node;
+	entry->x = lx;
+	entry->y = ly;
+
+	if (!enabled) {
+		return true;
+	}
+
+	struct wlr_box node_box = { .x = lx, .y = ly };
+	scene_node_get_size(node, &node_box.width, &node_box.height);
+
+	if (!wlr_box_intersection(&node_box, &node_box, box) || scene_node_invisible(node)) {
+		return true;
 	}
 
 	// while rendering, the background should always be black.
 	// If we see a black rect, we can ignore rendering everything under the rect
 	// and even the rect itself.
-	if (node->type == WLR_SCENE_NODE_RECT && data->calculate_visibility) {
+	if (node->type == WLR_SCENE_NODE_RECT && calculate_visibility) {
 		struct wlr_scene_rect *rect = wlr_scene_rect_from_node(node);
 		float *black = (float[4]){ 0.f, 0.f, 0.f, 1.f };
 
 		if (memcmp(rect->color, black, sizeof(float) * 4) == 0) {
-			return false;
+			return true;
 		}
 	}
 
 	pixman_region32_t intersection;
 	pixman_region32_init(&intersection);
 	pixman_region32_intersect_rect(&intersection, &node->visible,
-			data->box.x, data->box.y,
-			data->box.width, data->box.height);
+		box->x, box->y, box->width, box->height);
 	if (!pixman_region32_not_empty(&intersection)) {
 		pixman_region32_fini(&intersection);
-		return false;
+		return true;
 	}
 
 	pixman_region32_fini(&intersection);
 
-	struct render_list_entry *entry = wl_array_add(data->render_list, sizeof(*entry));
-	if (!entry) {
-		return false;
-	}
-
-	*entry = (struct render_list_entry){
-		.node = node,
-		.x = lx,
-		.y = ly,
-	};
-
-	return false;
+	entry->visible = true;
+	return true;
 }
 
 static void output_state_apply_damage(const struct render_data *data,
@@ -1694,22 +1716,40 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 	render_data.logical.width = render_data.trans_width / render_data.scale;
 	render_data.logical.height = render_data.trans_height / render_data.scale;
 
-	struct render_list_constructor_data list_con = {
-		.box = render_data.logical,
-		.render_list = &scene_output->render_list,
-		.calculate_visibility = scene_output->scene->calculate_visibility,
-	};
+	bool calculate_visibility = scene_output->scene->calculate_visibility;
+	struct wlr_scene_node *tree_node = &scene_output->scene->tree.node;
+	struct wl_array *render_list = &scene_output->render_list;
+	int x, y;
 
-	list_con.render_list->size = 0;
-	scene_nodes_in_box(&scene_output->scene->tree.node, &list_con.box,
-		construct_render_list_iterator, &list_con);
-	array_realloc(list_con.render_list, list_con.render_list->size);
+	render_list->size = 0;
+	wlr_scene_node_coords(tree_node, &x, &y);
 
-	struct render_list_entry *list_data = list_con.render_list->data;
-	int list_len = list_con.render_list->size / sizeof(*list_data);
+	// There is at least one render list entry for the scene tree itself, therefore
+	// construct_render_list should always return true.
+	if (!scene_construct_render_list(tree_node, render_list, &render_data.logical,
+			calculate_visibility, true, x, y)) {
+		return false;
+	}
+	array_realloc(render_list, render_list->size);
 
-	bool scanout = list_len == 1 &&
-		scene_entry_try_direct_scanout(&list_data[0], state, &render_data);
+	// Find number of visible render entries. If only one, try direct scanout.
+	struct render_list_entry *list_data = render_list->data;
+	struct render_list_entry *scanout_entry = NULL;
+	int list_len = render_list->size / sizeof(*list_data);
+	int render_count = 0;
+
+	for (int i = list_len - 1; i >= 0; i--) {
+		struct render_list_entry *entry = &list_data[i];
+		if (!entry->visible) {
+			continue;
+		}
+
+		scanout_entry = entry;
+		render_count++;
+	}
+
+	bool scanout = render_count == 1 &&
+		scene_entry_try_direct_scanout(scanout_entry, state, &render_data);
 
 	if (scene_output->prev_scanout != scanout) {
 		scene_output->prev_scanout = scanout;
@@ -1822,6 +1862,10 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		for (int i = list_len - 1; i >= 0; i--) {
 			struct render_list_entry *entry = &list_data[i];
 
+			if (!entry->visible) {
+				continue;
+			}
+
 			// We must only cull opaque regions that are visible by the node.
 			// The node's visibility will have the knowledge of a black rect
 			// that may have been omitted from the render list via the black
@@ -1857,6 +1901,11 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	for (int i = list_len - 1; i >= 0; i--) {
 		struct render_list_entry *entry = &list_data[i];
+
+		if (!entry->visible) {
+			continue;
+		}
+
 		scene_entry_render(entry, &render_data);
 
 		if (entry->node->type == WLR_SCENE_NODE_BUFFER) {
