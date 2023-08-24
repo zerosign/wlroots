@@ -469,7 +469,7 @@ bool wlr_output_test(struct wlr_output *output);
  *
  * On failure, the pending changes are rolled back.
  */
-bool wlr_output_commit(struct wlr_output *output);
+struct wlr_output_commit *wlr_output_commit(struct wlr_output *output);
 /**
  * Discard the pending output state.
  */
@@ -486,12 +486,13 @@ bool wlr_output_test_state(struct wlr_output *output,
 /**
  * Attempts to apply the state to this output. This function may fail for any
  * reason and return false. If failed, none of the state would have been applied,
- * this function is atomic. If the commit succeeded, true is returned.
+ * this function is atomic. If the commit succeeded, an wlr_output_commit struct
+ * is returned. If the commit failed, NULL is returned.
  *
  * Note: wlr_output_state_finish() would typically be called after the state
  * has been committed.
  */
-bool wlr_output_commit_state(struct wlr_output *output,
+struct wlr_output_commit *wlr_output_commit_state(struct wlr_output *output,
 	const struct wlr_output_state *state);
 /**
  * Manually schedules a `frame` event. If a `frame` event is already pending,

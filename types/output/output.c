@@ -786,7 +786,7 @@ void wlr_output_commit_init(struct wlr_output_commit *commit,
 	commit->output = output;
 }
 
-bool wlr_output_commit_state(struct wlr_output *output,
+struct wlr_output_commit *wlr_output_commit_state(struct wlr_output *output,
 		const struct wlr_output_state *state) {
 	uint32_t unchanged = output_compare_state(output, state);
 
@@ -797,12 +797,12 @@ bool wlr_output_commit_state(struct wlr_output *output,
 
 	if (!output_basic_test(output, &pending)) {
 		wlr_log(WLR_ERROR, "Basic output test failed for %s", output->name);
-		return false;
+		return NULL;
 	}
 
 	bool new_back_buffer = false;
 	if (!output_ensure_buffer(output, &pending, &new_back_buffer)) {
-		return false;
+		return NULL;
 	}
 
 	if ((pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -851,10 +851,10 @@ bool wlr_output_commit_state(struct wlr_output *output,
 
 	output->not_committed = false;
 
-	return true;
+	return commit;
 }
 
-bool wlr_output_commit(struct wlr_output *output) {
+struct wlr_output_commit *wlr_output_commit(struct wlr_output *output) {
 	// Make sure the pending state is cleared before the output is committed
 	struct wlr_output_state state = {0};
 	output_state_move(&state, &output->pending);
@@ -868,9 +868,9 @@ bool wlr_output_commit(struct wlr_output *output) {
 		output_clear_back_buffer(output);
 	}
 
-	bool ok = wlr_output_commit_state(output, &state);
+	struct wlr_output_commit *commit = wlr_output_commit_state(output, &state);
 	wlr_output_state_finish(&state);
-	return ok;
+	return commit;
 }
 
 void wlr_output_rollback(struct wlr_output *output) {
