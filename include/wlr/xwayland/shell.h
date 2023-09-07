@@ -26,11 +26,10 @@ struct wlr_xwayland_shell_v1 {
 
 	// private state
 
-	struct wl_client *client;
+	struct wl_list clients; // wlr_xwayland_shell_client.link
 	struct wl_list surfaces; // wlr_xwayland_surface_v1.link
 
 	struct wl_listener display_destroy;
-	struct wl_listener client_destroy;
 };
 
 /**
@@ -65,8 +64,21 @@ void wlr_xwayland_shell_v1_destroy(struct wlr_xwayland_shell_v1 *shell);
 /**
  * Allow a client to bind to the xwayland_shell_v1 global.
  */
-void wlr_xwayland_shell_v1_set_client(struct wlr_xwayland_shell_v1 *shell,
+void wlr_xwayland_shell_v1_add_client(struct wlr_xwayland_shell_v1 *shell,
 	struct wl_client *client);
+
+/**
+ * Cancel allow a client to bind to the xwayland_shell_v1 global.
+ */
+void wlr_xwayland_shell_v1_remove_client(struct wlr_xwayland_shell_v1 *shell,
+	struct wl_client *client);
+
+/**
+ * Return true if allow this client bind to the xwayland_shell_v1 global,
+ * Return false otherwise.
+ */
+bool wlr_xwayland_shell_has_client(struct wlr_xwayland_shell_v1 *shell,
+	const struct wl_client *client);
 
 /**
  * Get a Wayland surface from an xwayland_shell_v1 serial.
