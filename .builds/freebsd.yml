@@ -5,6 +5,7 @@ packages:
   - devel/meson # implies ninja
   - devel/pkgconf
   - graphics/glslang
+  - graphics/lcms2
   - graphics/libdrm
   - graphics/libliftoff
   - graphics/mesa-libs

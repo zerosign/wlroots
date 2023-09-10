@@ -20,6 +20,9 @@ endif
 if not features.get('vulkan-renderer')
 	exclude_files += 'render/vulkan.h'
 endif
+if not features.get('color-management')
+	exclude_files += 'render/color.h'
+endif
 if not features.get('session')
 	exclude_files += 'backend/session.h'
 endif

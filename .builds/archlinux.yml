@@ -1,6 +1,7 @@
 image: archlinux
 packages:
   - clang
+  - lcms2
   - libinput
   - libdisplay-info
   - libliftoff

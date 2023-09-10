@@ -39,3 +39,10 @@ endif
 subdir('pixman')
 
 subdir('allocator')
+
+lcms2 = dependency('lcms2', required: get_option('color-management'))
+if lcms2.found()
+	wlr_deps += lcms2
+	wlr_files += files('color.c')
+	features += { 'color-management': true }
+endif

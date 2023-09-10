@@ -95,6 +95,7 @@ features = {
 	'vulkan-renderer': false,
 	'gbm-allocator': false,
 	'session': false,
+	'color-management': false,
 }
 internal_features = {
 	'xcb-errors': false,

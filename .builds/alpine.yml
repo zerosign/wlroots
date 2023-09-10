@@ -2,6 +2,7 @@ image: alpine/edge
 packages:
   - eudev-dev
   - glslang
+  - lcms2-dev
   - libdisplay-info-dev
   - libinput-dev
   - libliftoff-dev
