@@ -15,9 +15,6 @@ void wlr_damage_ring_init(struct wlr_damage_ring *ring) {
 	};
 
 	pixman_region32_init(&ring->current);
-	for (size_t i = 0; i < WLR_DAMAGE_RING_PREVIOUS_LEN; ++i) {
-		pixman_region32_init(&ring->previous[i]);
-	}
 
 	for (size_t i = 0; i < WLR_DAMAGE_RING_BUFFERS_LEN; ++i) {
 		struct wlr_damage_ring_buffer *ring_buffer = &ring->buffers[i];
@@ -28,9 +25,6 @@ void wlr_damage_ring_init(struct wlr_damage_ring *ring) {
 
 void wlr_damage_ring_finish(struct wlr_damage_ring *ring) {
 	pixman_region32_fini(&ring->current);
-	for (size_t i = 0; i < WLR_DAMAGE_RING_PREVIOUS_LEN; ++i) {
-		pixman_region32_fini(&ring->previous[i]);
-	}
 	for (size_t i = 0; i < WLR_DAMAGE_RING_BUFFERS_LEN; ++i) {
 		struct wlr_damage_ring_buffer *ring_buffer = &ring->buffers[i];
 		wl_list_remove(&ring_buffer->destroy.link);
@@ -88,43 +82,6 @@ bool wlr_damage_ring_add_box(struct wlr_damage_ring *ring,
 void wlr_damage_ring_add_whole(struct wlr_damage_ring *ring) {
 	pixman_region32_union_rect(&ring->current,
 		&ring->current, 0, 0, ring->width, ring->height);
-}
-
-void wlr_damage_ring_rotate(struct wlr_damage_ring *ring) {
-	// modular decrement
-	ring->previous_idx = ring->previous_idx +
-		WLR_DAMAGE_RING_PREVIOUS_LEN - 1;
-	ring->previous_idx %= WLR_DAMAGE_RING_PREVIOUS_LEN;
-
-	pixman_region32_copy(&ring->previous[ring->previous_idx], &ring->current);
-	pixman_region32_clear(&ring->current);
-}
-
-void wlr_damage_ring_get_buffer_damage(struct wlr_damage_ring *ring,
-		int buffer_age, pixman_region32_t *damage) {
-	if (buffer_age <= 0 || buffer_age - 1 > WLR_DAMAGE_RING_PREVIOUS_LEN) {
-		pixman_region32_clear(damage);
-		pixman_region32_union_rect(damage, damage,
-			0, 0, ring->width, ring->height);
-	} else {
-		pixman_region32_copy(damage, &ring->current);
-
-		// Accumulate damage from old buffers
-		for (int i = 0; i < buffer_age - 1; ++i) {
-			int j = (ring->previous_idx + i) % WLR_DAMAGE_RING_PREVIOUS_LEN;
-			pixman_region32_union(damage, damage, &ring->previous[j]);
-		}
-
-		// Check the number of rectangles
-		int n_rects = pixman_region32_n_rects(damage);
-		if (n_rects > WLR_DAMAGE_RING_MAX_RECTS) {
-			pixman_box32_t *extents = pixman_region32_extents(damage);
-			pixman_region32_union_rect(damage, damage,
-				extents->x1, extents->y1,
-				extents->x2 - extents->x1,
-				extents->y2 - extents->y1);
-		}
-	}
 }
 
 static void damage_ring_buffer_reset_buffer(struct wlr_damage_ring_buffer *ring_buffer) {

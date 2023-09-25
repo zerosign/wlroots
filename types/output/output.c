@@ -324,11 +324,6 @@ static void output_apply_state(struct wlr_output *output,
 		}
 	}
 
-	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
-			output->swapchain != NULL) {
-		wlr_swapchain_set_buffer_submitted(output->swapchain, state->buffer);
-	}
-
 	bool mode_updated = false;
 	if (state->committed & WLR_OUTPUT_STATE_MODE) {
 		int width = 0, height = 0, refresh = 0;

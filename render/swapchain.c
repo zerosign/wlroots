@@ -65,7 +65,7 @@ static void slot_handle_release(struct wl_listener *listener, void *data) {
 }
 
 static struct wlr_buffer *slot_acquire(struct wlr_swapchain *swapchain,
-		struct wlr_swapchain_slot *slot, int *age) {
+		struct wlr_swapchain_slot *slot) {
 	assert(!slot->acquired);
 	assert(slot->buffer != NULL);
 
@@ -74,15 +74,10 @@ static struct wlr_buffer *slot_acquire(struct wlr_swapchain *swapchain,
 	slot->release.notify = slot_handle_release;
 	wl_signal_add(&slot->buffer->events.release, &slot->release);
 
-	if (age != NULL) {
-		*age = slot->age;
-	}
-
 	return wlr_buffer_lock(slot->buffer);
 }
 
-struct wlr_buffer *wlr_swapchain_acquire(struct wlr_swapchain *swapchain,
-		int *age) {
+struct wlr_buffer *wlr_swapchain_acquire(struct wlr_swapchain *swapchain) {
 	struct wlr_swapchain_slot *free_slot = NULL;
 	for (size_t i = 0; i < WLR_SWAPCHAIN_CAP; i++) {
 		struct wlr_swapchain_slot *slot = &swapchain->slots[i];
@@ -90,7 +85,7 @@ struct wlr_buffer *wlr_swapchain_acquire(struct wlr_swapchain *swapchain,
 			continue;
 		}
 		if (slot->buffer != NULL) {
-			return slot_acquire(swapchain, slot, age);
+			return slot_acquire(swapchain, slot);
 		}
 		free_slot = slot;
 	}
@@ -110,7 +105,7 @@ struct wlr_buffer *wlr_swapchain_acquire(struct wlr_swapchain *swapchain,
 		wlr_log(WLR_ERROR, "Failed to allocate buffer");
 		return NULL;
 	}
-	return slot_acquire(swapchain, free_slot, age);
+	return slot_acquire(swapchain, free_slot);
 }
 
 bool wlr_swapchain_has_buffer(struct wlr_swapchain *swapchain,
@@ -122,24 +117,4 @@ bool wlr_swapchain_has_buffer(struct wlr_swapchain *swapchain,
 		}
 	}
 	return false;
-}
-
-void wlr_swapchain_set_buffer_submitted(struct wlr_swapchain *swapchain,
-		struct wlr_buffer *buffer) {
-	assert(buffer != NULL);
-
-	if (!wlr_swapchain_has_buffer(swapchain, buffer)) {
-		return;
-	}
-
-	// See the algorithm described in:
-	// https://www.khronos.org/registry/EGL/extensions/EXT/EGL_EXT_buffer_age.txt
-	for (size_t i = 0; i < WLR_SWAPCHAIN_CAP; i++) {
-		struct wlr_swapchain_slot *slot = &swapchain->slots[i];
-		if (slot->buffer == buffer) {
-			slot->age = 1;
-		} else if (slot->age > 0) {
-			slot->age++;
-		}
-	}
 }

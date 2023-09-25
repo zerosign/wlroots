@@ -218,8 +218,7 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 		}
 	}
 
-	struct wlr_buffer *buffer =
-		wlr_swapchain_acquire(output->cursor_swapchain, NULL);
+	struct wlr_buffer *buffer = wlr_swapchain_acquire(output->cursor_swapchain);
 	if (buffer == NULL) {
 		return NULL;
 	}
