@@ -19,6 +19,7 @@
 struct wlr_xwm;
 struct wlr_data_source;
 struct wlr_drag;
+struct wlr_xwayland_shell_v1;
 
 struct wlr_xwayland {
 	struct wlr_xwayland_server *server;
@@ -197,7 +198,8 @@ struct wlr_xwayland_minimize_event {
  * client tries to connect.
  */
 struct wlr_xwayland *wlr_xwayland_create(struct wl_display *wl_display,
-	struct wlr_compositor *compositor, bool lazy);
+	struct wlr_compositor *compositor, struct wlr_xwayland_shell_v1 *shell,
+	bool lazy);
 
 void wlr_xwayland_destroy(struct wlr_xwayland *wlr_xwayland);
 

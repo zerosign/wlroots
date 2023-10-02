@@ -7,6 +7,55 @@
 
 #define SHELL_VERSION 1
 
+struct wlr_xwayland_shell_client {
+	struct wl_client *client;
+	struct wl_listener client_destroy;
+	struct wl_list link;
+};
+
+static void xwl_shell_client_destroy(struct wlr_xwayland_shell_client *xwl_client) {
+	wl_list_remove(&xwl_client->link);
+	wl_list_remove(&xwl_client->client_destroy.link);
+	free(xwl_client);
+}
+
+static void shell_client_handle_client_destroy(struct wl_listener *listener, void *data) {
+	struct wlr_xwayland_shell_client *shell_client =
+		wl_container_of(listener, shell_client, client_destroy);
+	xwl_shell_client_destroy(shell_client);
+}
+
+static struct wlr_xwayland_shell_client *xwl_shell_client_create(struct wl_client *client) {
+	struct wlr_xwayland_shell_client *xwl_client = calloc(1, sizeof(*xwl_client));
+	if (xwl_client == NULL) {
+		wl_client_post_no_memory(client);
+		return NULL;
+	}
+
+	xwl_client->client = client;
+
+	wl_list_init(&xwl_client->link);
+	wl_list_init(&xwl_client->client_destroy.link);
+
+	xwl_client->client_destroy.notify = shell_client_handle_client_destroy;
+	wl_client_add_destroy_listener(client, &xwl_client->client_destroy);
+
+	return xwl_client;
+}
+
+static struct wlr_xwayland_shell_client *get_shell_client(
+		struct wlr_xwayland_shell_v1 *shell,
+		const struct wl_client *client) {
+	struct wlr_xwayland_shell_client *xwl_client, *tmp;
+	wl_list_for_each_safe(xwl_client, tmp, &shell->clients, link) {
+		if (xwl_client->client == client) {
+			return xwl_client;
+		}
+	}
+
+	return NULL;
+}
+
 static void destroy_resource(struct wl_client *client,
 		struct wl_resource *resource) {
 	wl_resource_destroy(resource);
@@ -140,7 +189,7 @@ static void shell_bind(struct wl_client *client, void *data, uint32_t version,
 		uint32_t id) {
 	struct wlr_xwayland_shell_v1 *shell = data;
 
-	if (client != shell->client) {
+	if (!get_shell_client(shell, client)) {
 		wl_client_post_implementation_error(client,
 			"Permission denied to bind to %s", xwayland_shell_v1_interface.name);
 		return;
@@ -183,7 +232,7 @@ struct wlr_xwayland_shell_v1 *wlr_xwayland_shell_v1_create(
 	shell->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &shell->display_destroy);
 
-	wl_list_init(&shell->client_destroy.link);
+	wl_list_init(&shell->clients);
 
 	return shell;
 }
@@ -198,28 +247,42 @@ void wlr_xwayland_shell_v1_destroy(struct wlr_xwayland_shell_v1 *shell) {
 		xwl_surface_destroy(xwl_surface);
 	}
 
+	{
+		struct wlr_xwayland_shell_client *xwl_client, *tmp;
+		wl_list_for_each_safe(xwl_client, tmp, &shell->clients, link) {
+			xwl_shell_client_destroy(xwl_client);
+		}
+	}
+
 	wl_list_remove(&shell->display_destroy.link);
-	wl_list_remove(&shell->client_destroy.link);
 	wl_global_destroy(shell->global);
 	free(shell);
 }
 
-static void shell_handle_client_destroy(struct wl_listener *listener, void *data) {
-	struct wlr_xwayland_shell_v1 *shell =
-		wl_container_of(listener, shell, client_destroy);
-	wlr_xwayland_shell_v1_set_client(shell, NULL);
+void wlr_xwayland_shell_v1_add_client(struct wlr_xwayland_shell_v1 *shell,
+		struct wl_client *client) {
+	if (get_shell_client(shell, client))
+		return; // already added
+
+	struct wlr_xwayland_shell_client *xwl_client = xwl_shell_client_create(client);
+	if (!xwl_client) {
+		return;
+	}
+
+	wl_list_insert(&shell->clients, &xwl_client->link);
 }
 
-void wlr_xwayland_shell_v1_set_client(struct wlr_xwayland_shell_v1 *shell,
+void wlr_xwayland_shell_v1_remove_client(struct wlr_xwayland_shell_v1 *shell,
 		struct wl_client *client) {
-	wl_list_remove(&shell->client_destroy.link);
-	shell->client = client;
-	if (client != NULL) {
-		shell->client_destroy.notify = shell_handle_client_destroy;
-		wl_client_add_destroy_listener(client, &shell->client_destroy);
-	} else {
-		wl_list_init(&shell->client_destroy.link);
+	struct wlr_xwayland_shell_client *xwl_client = get_shell_client(shell, client);
+	if (xwl_client) {
+		xwl_shell_client_destroy(xwl_client);
 	}
+}
+
+bool wlr_xwayland_shell_has_client(struct wlr_xwayland_shell_v1 *shell,
+		const struct wl_client *client) {
+	return get_shell_client(shell, client);
 }
 
 struct wlr_surface *wlr_xwayland_shell_v1_surface_from_serial(

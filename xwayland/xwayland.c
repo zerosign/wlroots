@@ -37,7 +37,7 @@ static void handle_server_destroy(struct wl_listener *listener, void *data) {
 static void handle_server_start(struct wl_listener *listener, void *data) {
 	struct wlr_xwayland *xwayland =
 		wl_container_of(listener, xwayland, server_start);
-	wlr_xwayland_shell_v1_set_client(xwayland->shell_v1, xwayland->server->client);
+	wlr_xwayland_shell_v1_add_client(xwayland->shell_v1, xwayland->server->client);
 }
 
 static void handle_server_ready(struct wl_listener *listener, void *data) {
@@ -76,12 +76,12 @@ void wlr_xwayland_destroy(struct wlr_xwayland *xwayland) {
 	wlr_xwayland_set_seat(xwayland, NULL);
 	wlr_xwayland_server_destroy(xwayland->server);
 	xwayland->server = NULL;
-	wlr_xwayland_shell_v1_destroy(xwayland->shell_v1);
 	free(xwayland);
 }
 
 struct wlr_xwayland *wlr_xwayland_create(struct wl_display *wl_display,
-		struct wlr_compositor *compositor, bool lazy) {
+		struct wlr_compositor *compositor, struct wlr_xwayland_shell_v1 *shell,
+		bool lazy) {
 	struct wlr_xwayland *xwayland = calloc(1, sizeof(struct wlr_xwayland));
 	if (!xwayland) {
 		return NULL;
@@ -94,11 +94,7 @@ struct wlr_xwayland *wlr_xwayland_create(struct wl_display *wl_display,
 	wl_signal_init(&xwayland->events.ready);
 	wl_signal_init(&xwayland->events.remove_startup_info);
 
-	xwayland->shell_v1 = wlr_xwayland_shell_v1_create(wl_display, 1);
-	if (xwayland->shell_v1 == NULL) {
-		free(xwayland);
-		return NULL;
-	}
+	xwayland->shell_v1 = shell;
 
 	struct wlr_xwayland_server_options options = {
 		.lazy = lazy,
@@ -109,7 +105,6 @@ struct wlr_xwayland *wlr_xwayland_create(struct wl_display *wl_display,
 	};
 	xwayland->server = wlr_xwayland_server_create(wl_display, &options);
 	if (xwayland->server == NULL) {
-		wlr_xwayland_shell_v1_destroy(xwayland->shell_v1);
 		free(xwayland);
 		return NULL;
 	}
