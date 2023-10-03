@@ -411,7 +411,6 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 		.render_format = DRM_FORMAT_XRGB8888,
 		.transform = WL_OUTPUT_TRANSFORM_NORMAL,
 		.scale = 1,
-		.commit_seq = 0,
 	};
 
 	wl_list_init(&output->modes);
@@ -423,7 +422,6 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_signal_init(&output->events.needs_frame);
 	wl_signal_init(&output->events.precommit);
 	wl_signal_init(&output->events.commit);
-	wl_signal_init(&output->events.present);
 	wl_signal_init(&output->events.bind);
 	wl_signal_init(&output->events.description);
 	wl_signal_init(&output->events.request_state);
@@ -439,6 +437,8 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 
 	output->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &output->display_destroy);
+
+	output->not_committed = true;
 
 	if (state) {
 		output_apply_state(output, state);
@@ -829,8 +829,6 @@ bool wlr_output_commit_state(struct wlr_output *output,
 		return false;
 	}
 
-	output->commit_seq++;
-
 	if (output_pending_enabled(output, state)) {
 		output->frame_pending = true;
 		output->needs_frame = false;
@@ -850,6 +848,8 @@ bool wlr_output_commit_state(struct wlr_output *output,
 	if (new_back_buffer) {
 		wlr_buffer_unlock(pending.buffer);
 	}
+
+	output->not_committed = false;
 
 	return true;
 }
@@ -913,26 +913,6 @@ void wlr_output_schedule_frame(struct wlr_output *output) {
 	struct wl_event_loop *ev = wl_display_get_event_loop(output->display);
 	output->idle_frame =
 		wl_event_loop_add_idle(ev, schedule_frame_handle_idle_timer, output);
-}
-
-void wlr_output_send_present(struct wlr_output *output,
-		struct wlr_output_event_present *event) {
-	assert(event);
-	event->output = output;
-
-	struct timespec now;
-	if (event->presented && event->when == NULL) {
-		clockid_t clock = wlr_backend_get_presentation_clock(output->backend);
-		errno = 0;
-		if (clock_gettime(clock, &now) != 0) {
-			wlr_log_errno(WLR_ERROR, "failed to send output present event: "
-				"failed to read clock");
-			return;
-		}
-		event->when = &now;
-	}
-
-	wl_signal_emit_mutable(&output->events.present, event);
 }
 
 struct deferred_present_event {

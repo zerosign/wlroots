@@ -67,7 +67,6 @@ struct wlr_wl_presentation_feedback {
 	struct wlr_wl_output *output;
 	struct wl_list link; // wlr_wl_output.presentation_feedbacks
 	struct wp_presentation_feedback *feedback;
-	uint32_t commit_seq;
 };
 
 struct wlr_wl_output_layer {

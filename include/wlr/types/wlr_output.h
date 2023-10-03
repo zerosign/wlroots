@@ -160,9 +160,6 @@ struct wlr_output {
 
 	struct wlr_output_state pending;
 
-	// Commit sequence number. Incremented on each commit, may overflow.
-	uint32_t commit_seq;
-
 	struct {
 		// Request to render a frame
 		struct wl_signal frame;
@@ -176,9 +173,6 @@ struct wlr_output {
 		struct wl_signal precommit; // struct wlr_output_event_precommit
 		// Emitted right after commit
 		struct wl_signal commit; // struct wlr_output_event_commit
-		// Emitted right after a commit has been presented to the user for
-		// enabled outputs
-		struct wl_signal present; // struct wlr_output_event_present
 		// Emitted after a client bound the wl_output global
 		struct wl_signal bind; // struct wlr_output_event_bind
 		struct wl_signal description;
@@ -209,6 +203,11 @@ struct wlr_output {
 	struct wlr_addon_set addons;
 
 	void *data;
+
+	// private state
+
+	// used for when to create a new back buffer
+	bool not_committed;
 };
 
 struct wlr_output_event_damage {
@@ -246,9 +245,6 @@ enum wlr_output_present_flag {
 
 struct wlr_output_event_present {
 	struct wlr_output *output;
-	// Frame submission for which this presentation event is for (see
-	// wlr_output.commit_seq).
-	uint32_t commit_seq;
 	// Whether the frame was presented at all.
 	bool presented;
 	// Time when the content update turned into light the first time.

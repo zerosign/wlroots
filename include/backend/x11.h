@@ -37,6 +37,7 @@ struct wlr_x11_output {
 	struct wlr_output wlr_output;
 	struct wlr_x11_backend *x11;
 	struct wl_list link; // wlr_x11_backend.outputs
+	uint32_t serial;
 
 	xcb_window_t win;
 	xcb_present_event_t present_event_id;

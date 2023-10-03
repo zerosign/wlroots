@@ -103,7 +103,6 @@ static void presentation_feedback_handle_presented(void *data,
 		.tv_nsec = tv_nsec,
 	};
 	struct wlr_output_event_present event = {
-		.commit_seq = feedback->commit_seq,
 		.presented = true,
 		.output = &feedback->output->wlr_output,
 		.when = &t,
@@ -111,7 +110,6 @@ static void presentation_feedback_handle_presented(void *data,
 		.refresh = refresh_ns,
 		.flags = flags,
 	};
-	wlr_output_send_present(&feedback->output->wlr_output, &event);
 	wl_signal_emit_mutable(&feedback->commit.events.present, &event);
 
 	presentation_feedback_destroy(feedback);
@@ -122,11 +120,9 @@ static void presentation_feedback_handle_discarded(void *data,
 	struct wlr_wl_presentation_feedback *feedback = data;
 
 	struct wlr_output_event_present event = {
-		.commit_seq = feedback->commit_seq,
 		.presented = false,
 		.output = &feedback->output->wlr_output,
 	};
-	wlr_output_send_present(&feedback->output->wlr_output, &event);
 	wl_signal_emit_mutable(&feedback->commit.events.present, &event);
 
 	presentation_feedback_destroy(feedback);
@@ -588,7 +584,6 @@ static struct wlr_output_commit *output_commit(struct wlr_output *wlr_output,
 			}
 			feedback->output = output;
 			feedback->feedback = wp_feedback;
-			feedback->commit_seq = output->wlr_output.commit_seq + 1;
 			wl_list_insert(&output->presentation_feedbacks, &feedback->link);
 
 			wp_presentation_feedback_add_listener(wp_feedback,

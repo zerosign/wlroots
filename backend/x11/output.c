@@ -383,7 +383,7 @@ static struct wlr_output_commit *output_commit(struct wlr_output *wlr_output,
 		}
 	}
 
-	uint32_t serial = output->wlr_output.commit_seq;
+	uint32_t serial = output->serial++;
 
 	wlr_output_commit_init(&commit->commit, wlr_output);
 	wl_list_insert(&output->commits, &commit->link);
@@ -754,13 +754,11 @@ void handle_x11_present_event(struct wlr_x11_backend *x11,
 		bool presented = complete_notify->mode != XCB_PRESENT_COMPLETE_MODE_SKIP;
 		struct wlr_output_event_present present_event = {
 			.output = &output->wlr_output,
-			.commit_seq = complete_notify->serial,
 			.presented = presented,
 			.when = &t,
 			.seq = complete_notify->msc,
 			.flags = flags,
 		};
-		wlr_output_send_present(&output->wlr_output, &present_event);
 		wl_signal_emit_mutable(&commit->commit.events.present, &present_event);
 
 		wl_list_remove(&commit->link);

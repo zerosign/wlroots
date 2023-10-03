@@ -116,13 +116,6 @@ void wlr_output_update_needs_frame(struct wlr_output *output);
  */
 void wlr_output_send_frame(struct wlr_output *output);
 /**
- * Send a present event.
- *
- * See wlr_output.events.present.
- */
-void wlr_output_send_present(struct wlr_output *output,
-	struct wlr_output_event_present *event);
-/**
  * Request the compositor to apply new state.
  */
 void wlr_output_send_request_state(struct wlr_output *output,
