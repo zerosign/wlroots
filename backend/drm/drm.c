@@ -699,12 +699,12 @@ bool drm_connector_supports_vrr(struct wlr_drm_connector *conn) {
 	return true;
 }
 
-bool drm_connector_commit_state(struct wlr_drm_connector *conn,
+struct wlr_output_commit *drm_connector_commit_state(struct wlr_drm_connector *conn,
 		const struct wlr_output_state *base) {
 	struct wlr_drm_backend *drm = conn->backend;
 
 	if (!drm->session->active) {
-		return false;
+		return NULL;
 	}
 
 	bool ok = false;
@@ -780,15 +780,21 @@ bool drm_connector_commit_state(struct wlr_drm_connector *conn,
 
 out:
 	drm_connector_state_finish(&pending);
-	return ok;
+
+	if (!ok) {
+		return NULL;
+	}
+
+	wlr_output_commit_init(&conn->commit, &conn->output);
+	return &conn->commit;
 }
 
-static bool drm_connector_commit(struct wlr_output *output,
+static struct wlr_output_commit *drm_connector_commit(struct wlr_output *output,
 		const struct wlr_output_state *state) {
 	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
 
 	if (!drm_connector_test(output, state)) {
-		return false;
+		return NULL;
 	}
 
 	return drm_connector_commit_state(conn, state);
@@ -1711,6 +1717,7 @@ static void handle_page_flip(int fd, unsigned seq,
 	struct wlr_output_event_present present_event = {
 		/* The DRM backend guarantees that the presentation event will be for
 		 * the last submitted frame. */
+		.output = &conn->output,
 		.commit_seq = conn->output.commit_seq,
 		.presented = drm->session->active,
 		.when = &present_time,
@@ -1719,6 +1726,7 @@ static void handle_page_flip(int fd, unsigned seq,
 		.flags = present_flags,
 	};
 	wlr_output_send_present(&conn->output, &present_event);
+	wl_signal_emit_mutable(&conn->commit.events.present, &present_event);
 
 	if (drm->session->active) {
 		wlr_output_send_frame(&conn->output);

@@ -227,6 +227,7 @@ struct wlr_output_event_commit {
 	uint32_t committed; // bitmask of enum wlr_output_state_field
 	struct timespec *when;
 	struct wlr_buffer *buffer; // NULL if no buffer is committed
+	struct wlr_output_commit *commit;
 };
 
 enum wlr_output_present_flag {
@@ -270,7 +271,19 @@ struct wlr_output_event_request_state {
 	const struct wlr_output_state *state;
 };
 
+struct wlr_output_commit {
+	struct wlr_output *output;
+
+	struct {
+		struct wl_signal present; // struct wlr_output_event_present
+	} events;
+};
+
 struct wlr_surface;
+
+
+void wlr_output_commit_init(struct wlr_output_commit *commit,
+	struct wlr_output *output);
 
 /**
  * Enables or disables the output. A disabled output is turned off and doesn't

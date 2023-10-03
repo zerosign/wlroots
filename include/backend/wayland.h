@@ -62,8 +62,10 @@ struct wlr_wl_buffer {
 };
 
 struct wlr_wl_presentation_feedback {
+	struct wlr_output_commit commit;
+
 	struct wlr_wl_output *output;
-	struct wl_list link;
+	struct wl_list link; // wlr_wl_output.presentation_feedbacks
 	struct wp_presentation_feedback *feedback;
 	uint32_t commit_seq;
 };
@@ -80,8 +82,11 @@ struct wlr_wl_output_layer {
 struct wlr_wl_output {
 	struct wlr_output wlr_output;
 
+	// commit used when output is disabled or presentation events are not supported
+	struct wlr_output_commit commit;
+
 	struct wlr_wl_backend *backend;
-	struct wl_list link;
+	struct wl_list link; // wlr_wl_backend.outputs
 
 	struct wl_surface *surface;
 	bool own_surface;
@@ -89,7 +94,7 @@ struct wlr_wl_output {
 	struct xdg_surface *xdg_surface;
 	struct xdg_toplevel *xdg_toplevel;
 	struct zxdg_toplevel_decoration_v1 *zxdg_toplevel_decoration_v1;
-	struct wl_list presentation_feedbacks;
+	struct wl_list presentation_feedbacks; // wlr_wl_presentation_feedback.link
 
 	bool configured;
 	uint32_t enter_serial;

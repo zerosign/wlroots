@@ -65,7 +65,8 @@ struct wlr_output_impl {
 	 *
 	 * If a buffer has been attached, a frame event is scheduled.
 	 */
-	bool (*commit)(struct wlr_output *output, const struct wlr_output_state *state);
+	struct wlr_output_commit *(*commit)(struct wlr_output *output,
+		const struct wlr_output_state *state);
 	/**
 	 * Get the maximum number of gamma LUT elements for each channel.
 	 *

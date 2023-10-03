@@ -1,6 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>
@@ -53,7 +55,7 @@ static bool output_test(struct wlr_output *wlr_output,
 	return true;
 }
 
-static bool output_commit(struct wlr_output *wlr_output,
+static struct wlr_output_commit *output_commit(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_headless_output *output =
 		headless_output_from_output(wlr_output);
@@ -62,21 +64,20 @@ static bool output_commit(struct wlr_output *wlr_output,
 		return false;
 	}
 
+
 	if (state->committed & WLR_OUTPUT_STATE_MODE) {
 		output_update_refresh(output, state->custom_mode.refresh);
 	}
 
+	wlr_output_commit_init(&output->commit, wlr_output);
+
 	if (output_pending_enabled(wlr_output, state)) {
-		struct wlr_output_event_present present_event = {
-			.commit_seq = wlr_output->commit_seq + 1,
-			.presented = true,
-		};
-		output_defer_present(wlr_output, present_event);
+		output_commit_defer_present(&output->commit);
 
 		wl_event_source_timer_update(output->frame_timer, output->frame_delay);
 	}
 
-	return true;
+	return &output->commit;
 }
 
 static void output_destroy(struct wlr_output *wlr_output) {

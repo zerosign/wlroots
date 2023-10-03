@@ -780,6 +780,12 @@ bool wlr_output_test(struct wlr_output *output) {
 	return wlr_output_test_state(output, &state);
 }
 
+void wlr_output_commit_init(struct wlr_output_commit *commit,
+		struct wlr_output *output) {
+	wl_signal_init(&commit->events.present);
+	commit->output = output;
+}
+
 bool wlr_output_commit_state(struct wlr_output *output,
 		const struct wlr_output_state *state) {
 	uint32_t unchanged = output_compare_state(output, state);
@@ -815,7 +821,8 @@ bool wlr_output_commit_state(struct wlr_output *output,
 	};
 	wl_signal_emit_mutable(&output->events.precommit, &pre_event);
 
-	if (!output->impl->commit(output, &pending)) {
+	struct wlr_output_commit *commit = output->impl->commit(output, &pending);
+	if (!commit) {
 		if (new_back_buffer) {
 			wlr_buffer_unlock(pending.buffer);
 		}
@@ -836,6 +843,7 @@ bool wlr_output_commit_state(struct wlr_output *output,
 		.committed = pending.committed,
 		.when = &now,
 		.buffer = (pending.committed & WLR_OUTPUT_STATE_BUFFER) ? pending.buffer : NULL,
+		.commit = commit,
 	};
 	wl_signal_emit_mutable(&output->events.commit, &event);
 
@@ -928,9 +936,8 @@ void wlr_output_send_present(struct wlr_output *output,
 }
 
 struct deferred_present_event {
-	struct wlr_output *output;
+	struct wlr_output_commit *commit;
 	struct wl_event_source *idle_source;
-	struct wlr_output_event_present event;
 	struct wl_listener output_destroy;
 };
 
@@ -941,7 +948,19 @@ static void deferred_present_event_destroy(struct deferred_present_event *deferr
 
 static void deferred_present_event_handle_idle(void *data) {
 	struct deferred_present_event *deferred = data;
-	wlr_output_send_present(deferred->output, &deferred->event);
+
+	clockid_t clock = wlr_backend_get_presentation_clock(deferred->commit->output->backend);
+	struct timespec now;
+	clock_gettime(clock, &now);
+
+	struct wlr_output_event_present present_event = {
+		.presented = true,
+		.output = deferred->commit->output,
+		.when = &now,
+	};
+
+	wl_signal_emit_mutable(&deferred->commit->events.present, &present_event);
+
 	deferred_present_event_destroy(deferred);
 }
 
@@ -951,19 +970,16 @@ static void deferred_present_event_handle_output_destroy(struct wl_listener *lis
 	deferred_present_event_destroy(deferred);
 }
 
-void output_defer_present(struct wlr_output *output, struct wlr_output_event_present event) {
+void output_commit_defer_present(struct wlr_output_commit *commit) {
 	struct deferred_present_event *deferred = calloc(1, sizeof(*deferred));
 	if (!deferred) {
 		return;
 	}
-	*deferred = (struct deferred_present_event){
-		.output = output,
-		.event = event,
-	};
+	deferred->commit = commit;
 	deferred->output_destroy.notify = deferred_present_event_handle_output_destroy;
-	wl_signal_add(&output->events.destroy, &deferred->output_destroy);
+	wl_signal_add(&commit->output->events.destroy, &deferred->output_destroy);
 
-	struct wl_event_loop *ev = wl_display_get_event_loop(output->display);
+	struct wl_event_loop *ev = wl_display_get_event_loop(commit->output->display);
 	deferred->idle_source = wl_event_loop_add_idle(ev, deferred_present_event_handle_idle, deferred);
 }
 
