@@ -88,7 +88,10 @@ const struct wlr_drm_format_set *wlr_egl_get_dmabuf_render_formats(
  */
 bool wlr_egl_destroy_image(struct wlr_egl *egl, EGLImageKHR image);
 
-int wlr_egl_dup_drm_fd(struct wlr_egl *egl);
+/**
+ * Get the DRM device ID used by EGL.
+ */
+bool wlr_egl_get_drm_dev_id(struct wlr_egl *egl, dev_t *devid);
 
 /**
  * Restore EGL context that was previously saved using wlr_egl_save_current().

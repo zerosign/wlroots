@@ -83,7 +83,7 @@ bool wlr_renderer_init_wl_display(struct wlr_renderer *r,
 	}
 
 	if (wlr_renderer_get_texture_formats(r, WLR_BUFFER_CAP_DMABUF) != NULL &&
-			wlr_renderer_get_drm_fd(r) >= 0 &&
+			r->drm_dev_id != NULL &&
 			wlr_linux_dmabuf_v1_create_with_renderer(wl_display, 4, r) == NULL) {
 		return false;
 	}
@@ -285,13 +285,6 @@ struct wlr_renderer *renderer_autocreate_with_drm_fd(int drm_fd) {
 
 struct wlr_renderer *wlr_renderer_autocreate(struct wlr_backend *backend) {
 	return renderer_autocreate(backend, -1);
-}
-
-int wlr_renderer_get_drm_fd(struct wlr_renderer *r) {
-	if (!r->impl->get_drm_fd) {
-		return -1;
-	}
-	return r->impl->get_drm_fd(r);
 }
 
 struct wlr_render_pass *wlr_renderer_begin_buffer_pass(struct wlr_renderer *renderer,

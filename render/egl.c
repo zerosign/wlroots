@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <gbm.h>
+#include <sys/stat.h>
 #include <wlr/render/egl.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
@@ -949,68 +950,53 @@ static char *get_render_name(const char *name) {
 	return render_name;
 }
 
-static int dup_egl_device_drm_fd(struct wlr_egl *egl) {
+static char *get_drm_node_path(struct wlr_egl *egl) {
 	if (egl->device == EGL_NO_DEVICE_EXT || (!egl->exts.EXT_device_drm &&
 			!egl->exts.EXT_device_drm_render_node)) {
-		return -1;
+		return NULL;
 	}
 
-	char *render_name = NULL;
 #ifdef EGL_EXT_device_drm_render_node
 	if (egl->exts.EXT_device_drm_render_node) {
 		const char *name = egl->procs.eglQueryDeviceStringEXT(egl->device,
 			EGL_DRM_RENDER_NODE_FILE_EXT);
 		if (name == NULL) {
 			wlr_log(WLR_DEBUG, "EGL device has no render node");
-			return -1;
+			return false;
 		}
-		render_name = strdup(name);
+		return strdup(name);
 	}
 #endif
 
-	if (render_name == NULL) {
-		const char *primary_name = egl->procs.eglQueryDeviceStringEXT(egl->device,
-			EGL_DRM_DEVICE_FILE_EXT);
-		if (primary_name == NULL) {
-			wlr_log(WLR_ERROR,
-				"eglQueryDeviceStringEXT(EGL_DRM_DEVICE_FILE_EXT) failed");
-			return -1;
-		}
-
-		render_name = get_render_name(primary_name);
-		if (render_name == NULL) {
-			wlr_log(WLR_ERROR, "Can't find render node name for device %s",
-				primary_name);
-			return -1;
-		}
+	const char *primary_name = egl->procs.eglQueryDeviceStringEXT(egl->device,
+		EGL_DRM_DEVICE_FILE_EXT);
+	if (primary_name == NULL) {
+		wlr_log(WLR_ERROR,
+			"eglQueryDeviceStringEXT(EGL_DRM_DEVICE_FILE_EXT) failed");
+		return false;
 	}
 
-	int render_fd = open(render_name, O_RDWR | O_NONBLOCK | O_CLOEXEC);
-	if (render_fd < 0) {
-		wlr_log_errno(WLR_ERROR, "Failed to open DRM render node %s",
-			render_name);
+	return get_render_name(primary_name);
+}
+
+bool wlr_egl_get_drm_dev_id(struct wlr_egl *egl, dev_t *dev_id) {
+	char *render_name = get_drm_node_path(egl);
+	// Fallback to GBM's FD if we can't use EGLDevice
+	if (render_name == NULL && egl->gbm_device != NULL) {
+		render_name = drmGetDeviceNameFromFd2(gbm_device_get_fd(egl->gbm_device));
+	}
+	if (render_name == NULL) {
+		return false;
+	}
+
+	struct stat render_stat = {0};
+	if (stat(render_name, &render_stat) != 0) {
+		wlr_log_errno(WLR_ERROR, "stat failed");
 		free(render_name);
-		return -1;
+		return false;
 	}
 	free(render_name);
 
-	return render_fd;
-}
-
-int wlr_egl_dup_drm_fd(struct wlr_egl *egl) {
-	int fd = dup_egl_device_drm_fd(egl);
-	if (fd >= 0) {
-		return fd;
-	}
-
-	// Fallback to GBM's FD if we can't use EGLDevice
-	if (egl->gbm_device == NULL) {
-		return -1;
-	}
-
-	fd = fcntl(gbm_device_get_fd(egl->gbm_device), F_DUPFD_CLOEXEC, 0);
-	if (fd < 0) {
-		wlr_log_errno(WLR_ERROR, "Failed to dup GBM FD");
-	}
-	return fd;
+	*dev_id = render_stat.st_rdev;
+	return true;
 }
