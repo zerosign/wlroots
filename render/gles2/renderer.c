@@ -476,8 +476,8 @@ static void load_gl_proc(void *proc_ptr, const char *name) {
 	*(void **)proc_ptr = proc;
 }
 
-struct wlr_renderer *wlr_gles2_renderer_create_with_drm_fd(int drm_fd) {
-	struct wlr_egl *egl = wlr_egl_create_with_drm_fd(drm_fd);
+struct wlr_renderer *wlr_gles2_renderer_create_with_drm_dev_id(dev_t dev_id) {
+	struct wlr_egl *egl = wlr_egl_create_with_drm_dev_id(dev_id);
 	if (egl == NULL) {
 		wlr_log(WLR_ERROR, "Could not initialize EGL");
 		return NULL;

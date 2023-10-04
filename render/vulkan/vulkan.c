@@ -255,7 +255,7 @@ static void log_phdev(const VkPhysicalDeviceProperties *props) {
 	wlr_log(WLR_INFO, "  Driver version: %u.%u.%u", dv_major, dv_minor, dv_patch);
 }
 
-VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) {
+VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, dev_t devid) {
 	VkResult res;
 	uint32_t num_phdevs;
 
@@ -269,12 +269,6 @@ VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) 
 	res = vkEnumeratePhysicalDevices(ini->instance, &num_phdevs, phdevs);
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("Could not retrieve physical devices", res);
-		return VK_NULL_HANDLE;
-	}
-
-	struct stat drm_stat = {0};
-	if (fstat(drm_fd, &drm_stat) != 0) {
-		wlr_log_errno(WLR_ERROR, "fstat failed");
 		return VK_NULL_HANDLE;
 	}
 
@@ -352,8 +346,7 @@ VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd) 
 
 		dev_t primary_devid = makedev(drm_props.primaryMajor, drm_props.primaryMinor);
 		dev_t render_devid = makedev(drm_props.renderMajor, drm_props.renderMinor);
-		if (primary_devid == drm_stat.st_rdev ||
-				render_devid == drm_stat.st_rdev) {
+		if (primary_devid == devid || render_devid == devid) {
 			wlr_log(WLR_INFO, "Found matching Vulkan physical device: %s",
 				phdev_props.deviceName);
 			return phdev;

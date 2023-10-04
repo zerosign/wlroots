@@ -2193,7 +2193,7 @@ error:
 	return NULL;
 }
 
-struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
+struct wlr_renderer *wlr_vk_renderer_create_with_drm_dev_id(dev_t dev_id) {
 	wlr_log(WLR_INFO, "The vulkan renderer is only experimental and "
 		"not expected to be ready for daily use");
 	wlr_log(WLR_INFO, "Run with VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation "
@@ -2205,7 +2205,7 @@ struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
 		return NULL;
 	}
 
-	VkPhysicalDevice phdev = vulkan_find_drm_phdev(ini, drm_fd);
+	VkPhysicalDevice phdev = vulkan_find_drm_phdev(ini, dev_id);
 	if (!phdev) {
 		// We rather fail here than doing some guesswork
 		wlr_log(WLR_ERROR, "Could not match drm and vulkan device");

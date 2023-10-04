@@ -53,11 +53,11 @@ struct wlr_egl_context {
 };
 
 /**
- * Initializes an EGL context for the given DRM FD.
+ * Initializes an EGL context for the given DRM device ID.
  *
  * Will attempt to load all possibly required API functions.
  */
-struct wlr_egl *wlr_egl_create_with_drm_fd(int drm_fd);
+struct wlr_egl *wlr_egl_create_with_drm_dev_id(dev_t dev_id);
 
 /**
  * Frees all related EGL resources, makes the context not-current and

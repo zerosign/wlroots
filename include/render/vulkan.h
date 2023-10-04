@@ -61,9 +61,9 @@ struct wlr_vk_device {
 	struct wlr_drm_format_set shm_texture_formats;
 };
 
-// Tries to find the VkPhysicalDevice for the given drm fd.
+// Tries to find the VkPhysicalDevice for the given DRM device ID.
 // Might find none and return VK_NULL_HANDLE.
-VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, int drm_fd);
+VkPhysicalDevice vulkan_find_drm_phdev(struct wlr_vk_instance *ini, dev_t dev_id);
 bool vulkan_get_phdev_drm_dev_id(VkPhysicalDevice phdev, dev_t *dev_id);
 
 // Creates a device for the given instance and physical device.
