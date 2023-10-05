@@ -877,9 +877,7 @@ void wlr_output_attach_buffer(struct wlr_output *output,
 
 void wlr_output_send_frame(struct wlr_output *output) {
 	output->frame_pending = false;
-	if (output->enabled) {
-		wl_signal_emit_mutable(&output->events.frame, output);
-	}
+	wl_signal_emit_mutable(&output->events.frame, output);
 }
 
 static void schedule_frame_handle_idle_timer(void *data) {
