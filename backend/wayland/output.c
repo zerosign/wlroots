@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <drm_fourcc.h>
 #include <wayland-client.h>
@@ -101,14 +103,14 @@ static void presentation_feedback_handle_presented(void *data,
 		.tv_nsec = tv_nsec,
 	};
 	struct wlr_output_event_present event = {
-		.commit_seq = feedback->commit_seq,
 		.presented = true,
+		.output = &feedback->output->wlr_output,
 		.when = &t,
 		.seq = ((uint64_t)seq_hi << 32) | seq_lo,
 		.refresh = refresh_ns,
 		.flags = flags,
 	};
-	wlr_output_send_present(&feedback->output->wlr_output, &event);
+	wl_signal_emit_mutable(&feedback->commit.events.present, &event);
 
 	presentation_feedback_destroy(feedback);
 }
@@ -118,10 +120,10 @@ static void presentation_feedback_handle_discarded(void *data,
 	struct wlr_wl_presentation_feedback *feedback = data;
 
 	struct wlr_output_event_present event = {
-		.commit_seq = feedback->commit_seq,
 		.presented = false,
+		.output = &feedback->output->wlr_output,
 	};
-	wlr_output_send_present(&feedback->output->wlr_output, &event);
+	wl_signal_emit_mutable(&feedback->commit.events.present, &event);
 
 	presentation_feedback_destroy(feedback);
 }
@@ -520,13 +522,13 @@ static bool commit_layers(struct wlr_wl_output *output,
 	return true;
 }
 
-static bool output_commit(struct wlr_output *wlr_output,
+static struct wlr_output_commit *output_commit(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_wl_output *output =
 		get_wl_output_from_output(wlr_output);
 
 	if (!output_test(wlr_output, state)) {
-		return false;
+		return NULL;
 	}
 
 	if ((state->committed & WLR_OUTPUT_STATE_ENABLED) && !state->enabled) {
@@ -544,7 +546,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 		struct wlr_wl_buffer *buffer =
 			get_or_create_wl_buffer(output->backend, wlr_buffer);
 		if (buffer == NULL) {
-			return false;
+			return NULL;
 		}
 
 		wl_surface_attach(output->surface, buffer->wl_buffer, 0, 0);
@@ -553,8 +555,10 @@ static bool output_commit(struct wlr_output *wlr_output,
 
 	if ((state->committed & WLR_OUTPUT_STATE_LAYERS) &&
 			!commit_layers(output, state->layers, state->layers_len)) {
-		return false;
+		return NULL;
 	}
+
+	struct wlr_output_commit *commit = NULL;
 
 	if (output_pending_enabled(wlr_output, state)) {
 		if (output->frame_callback != NULL) {
@@ -576,27 +580,29 @@ static bool output_commit(struct wlr_output *wlr_output,
 				calloc(1, sizeof(*feedback));
 			if (feedback == NULL) {
 				wp_presentation_feedback_destroy(wp_feedback);
-				return false;
+				return NULL;
 			}
 			feedback->output = output;
 			feedback->feedback = wp_feedback;
-			feedback->commit_seq = output->wlr_output.commit_seq + 1;
 			wl_list_insert(&output->presentation_feedbacks, &feedback->link);
 
 			wp_presentation_feedback_add_listener(wp_feedback,
 				&presentation_feedback_listener, feedback);
+
+			commit = &feedback->commit;
+			wlr_output_commit_init(commit, wlr_output);
 		} else {
-			struct wlr_output_event_present present_event = {
-				.commit_seq = wlr_output->commit_seq + 1,
-				.presented = true,
-			};
-			output_defer_present(wlr_output, present_event);
+			wlr_output_commit_init(commit, wlr_output);
+			output_commit_defer_present(commit);
 		}
+	} else {
+		commit = &output->commit;
+		wlr_output_commit_init(commit, wlr_output);
 	}
 
 	wl_display_flush(output->backend->remote_display);
 
-	return true;
+	return commit;
 }
 
 static bool output_set_cursor(struct wlr_output *wlr_output,

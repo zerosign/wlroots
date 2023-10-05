@@ -16,6 +16,7 @@ struct wlr_headless_backend {
 
 struct wlr_headless_output {
 	struct wlr_output wlr_output;
+	struct wlr_output_commit commit;
 
 	struct wlr_headless_backend *backend;
 	struct wl_list link;

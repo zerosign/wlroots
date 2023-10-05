@@ -105,6 +105,12 @@ static void output_destroy(struct wlr_output *wlr_output) {
 		xcb_render_free_picture(x11->xcb, output->cursor.pic);
 	}
 
+	struct wlr_x11_output_commit *commit, *tmp_commit;
+	wl_list_for_each_safe(commit, tmp_commit, &output->commits, link) {
+		wl_list_remove(&commit->link);
+		free(commit);
+	}
+
 	// A zero event mask deletes the event context
 	xcb_present_select_input(x11->xcb, output->present_event_id, output->win, 0);
 	xcb_destroy_window(x11->xcb, output->win);
@@ -288,7 +294,7 @@ static struct wlr_x11_buffer *get_or_create_x11_buffer(
 }
 
 static bool output_commit_buffer(struct wlr_x11_output *output,
-		const struct wlr_output_state *state) {
+		const struct wlr_output_state *state, uint32_t serial) {
 	struct wlr_x11_backend *x11 = output->x11;
 
 	struct wlr_buffer *buffer = state->buffer;
@@ -328,7 +334,6 @@ static bool output_commit_buffer(struct wlr_x11_output *output,
 
 	pixman_region32_clear(&output->exposed);
 
-	uint32_t serial = output->wlr_output.commit_seq;
 	uint32_t options = 0;
 	uint64_t target_msc = output->last_msc ? output->last_msc + 1 : 0;
 	xcb_present_pixmap(x11->xcb, output->win, x11_buffer->pixmap, serial,
@@ -346,13 +351,18 @@ error:
 	return false;
 }
 
-static bool output_commit(struct wlr_output *wlr_output,
+static struct wlr_output_commit *output_commit(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_x11_output *output = get_x11_output_from_output(wlr_output);
 	struct wlr_x11_backend *x11 = output->x11;
 
 	if (!output_test(wlr_output, state)) {
-		return false;
+		return NULL;
+	}
+
+	struct wlr_x11_output_commit *commit = calloc(1, sizeof(*commit));
+	if (!commit){
+		return NULL;
 	}
 
 	if (state->committed & WLR_OUTPUT_STATE_ENABLED) {
@@ -368,23 +378,29 @@ static bool output_commit(struct wlr_output *wlr_output,
 				state->custom_mode.width,
 				state->custom_mode.height,
 				state->custom_mode.refresh)) {
-			return false;
+			free(commit);
+			return NULL;
 		}
 	}
 
+	uint32_t serial = output->serial++;
+
+	wlr_output_commit_init(&commit->commit, wlr_output);
+	wl_list_insert(&output->commits, &commit->link);
+	commit->serial = serial;
+
 	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
-		if (!output_commit_buffer(output, state)) {
-			return false;
+		if (!output_commit_buffer(output, state, serial)) {
+			return NULL;
 		}
 	} else if (output_pending_enabled(wlr_output, state)) {
-		uint32_t serial = output->wlr_output.commit_seq;
 		uint64_t target_msc = output->last_msc ? output->last_msc + 1 : 0;
 		xcb_present_notify_msc(x11->xcb, output->win, serial, target_msc, 0, 0);
 	}
 
 	xcb_flush(x11->xcb);
 
-	return true;
+	return &commit->commit;
 }
 
 static void update_x11_output_cursor(struct wlr_x11_output *output,
@@ -541,6 +557,7 @@ struct wlr_output *wlr_x11_output_create(struct wlr_backend *backend) {
 	}
 	output->x11 = x11;
 	wl_list_init(&output->buffers);
+	wl_list_init(&output->commits);
 	pixman_region32_init(&output->exposed);
 
 	struct wlr_output *wlr_output = &output->wlr_output;
@@ -724,16 +741,28 @@ void handle_x11_present_event(struct wlr_x11_backend *x11,
 			flags |= WLR_OUTPUT_PRESENT_ZERO_COPY;
 		}
 
+		uint32_t serial = complete_notify->serial;
+		struct wlr_x11_output_commit *commit = NULL;
+		wl_list_for_each(commit, &output->commits, link) {
+			if (commit->serial == serial) {
+				break;
+			}
+		}
+
+		assert(commit && commit->serial == serial);
+
 		bool presented = complete_notify->mode != XCB_PRESENT_COMPLETE_MODE_SKIP;
 		struct wlr_output_event_present present_event = {
 			.output = &output->wlr_output,
-			.commit_seq = complete_notify->serial,
 			.presented = presented,
 			.when = &t,
 			.seq = complete_notify->msc,
 			.flags = flags,
 		};
-		wlr_output_send_present(&output->wlr_output, &present_event);
+		wl_signal_emit_mutable(&commit->commit.events.present, &present_event);
+
+		wl_list_remove(&commit->link);
+		free(commit);
 
 		wlr_output_send_frame(&output->wlr_output);
 		break;

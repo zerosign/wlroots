@@ -269,27 +269,11 @@ static void feedback_unset_output(struct wlr_presentation_feedback *feedback) {
 	wl_list_remove(&feedback->output_destroy.link);
 }
 
-static void feedback_handle_output_commit(struct wl_listener *listener,
-		void *data) {
-	struct wlr_presentation_feedback *feedback =
-		wl_container_of(listener, feedback, output_commit);
-	if (feedback->output_committed) {
-		return;
-	}
-	feedback->output_committed = true;
-	feedback->output_commit_seq = feedback->output->commit_seq;
-}
-
 static void feedback_handle_output_present(struct wl_listener *listener,
 		void *data) {
 	struct wlr_presentation_feedback *feedback =
 		wl_container_of(listener, feedback, output_present);
 	struct wlr_output_event_present *output_event = data;
-
-	if (!feedback->output_committed ||
-			output_event->commit_seq != feedback->output_commit_seq) {
-		return;
-	}
 
 	if (output_event->presented) {
 		struct wlr_presentation_event event = {0};
@@ -300,6 +284,20 @@ static void feedback_handle_output_present(struct wl_listener *listener,
 		wlr_presentation_feedback_send_presented(feedback, &event);
 	}
 	wlr_presentation_feedback_destroy(feedback);
+}
+
+static void feedback_handle_output_commit(struct wl_listener *listener,
+		void *data) {
+	struct wlr_output_event_commit *event = data;
+	struct wlr_presentation_feedback *feedback =
+		wl_container_of(listener, feedback, output_commit);
+
+	// we only care about the first commit
+	wl_list_remove(&feedback->output_commit.link);
+	wl_list_init(&feedback->output_commit.link);
+
+	feedback->output_present.notify = feedback_handle_output_present;
+	wl_signal_add(&event->commit->events.present, &feedback->output_present);
 }
 
 static void feedback_handle_output_destroy(struct wl_listener *listener,
@@ -324,10 +322,10 @@ static void presentation_surface_queued_on_output(
 
 	feedback->output_commit.notify = feedback_handle_output_commit;
 	wl_signal_add(&output->events.commit, &feedback->output_commit);
-	feedback->output_present.notify = feedback_handle_output_present;
-	wl_signal_add(&output->events.present, &feedback->output_present);
 	feedback->output_destroy.notify = feedback_handle_output_destroy;
 	wl_signal_add(&output->events.destroy, &feedback->output_destroy);
+
+	wl_list_init(&feedback->output_present.link);
 }
 
 void wlr_presentation_surface_textured_on_output(

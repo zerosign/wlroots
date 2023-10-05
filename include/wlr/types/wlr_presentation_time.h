@@ -36,8 +36,6 @@ struct wlr_presentation_feedback {
 	// Only when the wlr_presentation_surface_textured_on_output() or
 	// wlr_presentation_surface_scanned_out_on_output() helper has been called.
 	struct wlr_output *output;
-	bool output_committed;
-	uint32_t output_commit_seq;
 	bool zero_copy;
 
 	struct wl_listener output_commit;

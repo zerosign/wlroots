@@ -27,10 +27,17 @@
 
 struct wlr_x11_backend;
 
+struct wlr_x11_output_commit {
+	struct wl_list link; // wlr_x11_output::commits;
+	uint32_t serial;
+	struct wlr_output_commit commit;
+};
+
 struct wlr_x11_output {
 	struct wlr_output wlr_output;
 	struct wlr_x11_backend *x11;
 	struct wl_list link; // wlr_x11_backend.outputs
+	uint32_t serial;
 
 	xcb_window_t win;
 	xcb_present_event_t present_event_id;
@@ -50,6 +57,8 @@ struct wlr_x11_output {
 		struct wlr_swapchain *swapchain;
 		xcb_render_picture_t pic;
 	} cursor;
+
+	struct wl_list commits; // wlr_x11_output_commit::link
 };
 
 struct wlr_x11_touchpoint {

@@ -160,9 +160,6 @@ struct wlr_output {
 
 	struct wlr_output_state pending;
 
-	// Commit sequence number. Incremented on each commit, may overflow.
-	uint32_t commit_seq;
-
 	struct {
 		// Request to render a frame
 		struct wl_signal frame;
@@ -176,9 +173,6 @@ struct wlr_output {
 		struct wl_signal precommit; // struct wlr_output_event_precommit
 		// Emitted right after commit
 		struct wl_signal commit; // struct wlr_output_event_commit
-		// Emitted right after a commit has been presented to the user for
-		// enabled outputs
-		struct wl_signal present; // struct wlr_output_event_present
 		// Emitted after a client bound the wl_output global
 		struct wl_signal bind; // struct wlr_output_event_bind
 		struct wl_signal description;
@@ -209,6 +203,11 @@ struct wlr_output {
 	struct wlr_addon_set addons;
 
 	void *data;
+
+	// private state
+
+	// used for when to create a new back buffer
+	bool not_committed;
 };
 
 struct wlr_output_event_damage {
@@ -227,6 +226,7 @@ struct wlr_output_event_commit {
 	uint32_t committed; // bitmask of enum wlr_output_state_field
 	struct timespec *when;
 	struct wlr_buffer *buffer; // NULL if no buffer is committed
+	struct wlr_output_commit *commit;
 };
 
 enum wlr_output_present_flag {
@@ -245,9 +245,6 @@ enum wlr_output_present_flag {
 
 struct wlr_output_event_present {
 	struct wlr_output *output;
-	// Frame submission for which this presentation event is for (see
-	// wlr_output.commit_seq).
-	uint32_t commit_seq;
 	// Whether the frame was presented at all.
 	bool presented;
 	// Time when the content update turned into light the first time.
@@ -270,7 +267,19 @@ struct wlr_output_event_request_state {
 	const struct wlr_output_state *state;
 };
 
+struct wlr_output_commit {
+	struct wlr_output *output;
+
+	struct {
+		struct wl_signal present; // struct wlr_output_event_present
+	} events;
+};
+
 struct wlr_surface;
+
+
+void wlr_output_commit_init(struct wlr_output_commit *commit,
+	struct wlr_output *output);
 
 /**
  * Enables or disables the output. A disabled output is turned off and doesn't
@@ -460,7 +469,7 @@ bool wlr_output_test(struct wlr_output *output);
  *
  * On failure, the pending changes are rolled back.
  */
-bool wlr_output_commit(struct wlr_output *output);
+struct wlr_output_commit *wlr_output_commit(struct wlr_output *output);
 /**
  * Discard the pending output state.
  */
@@ -477,12 +486,13 @@ bool wlr_output_test_state(struct wlr_output *output,
 /**
  * Attempts to apply the state to this output. This function may fail for any
  * reason and return false. If failed, none of the state would have been applied,
- * this function is atomic. If the commit succeeded, true is returned.
+ * this function is atomic. If the commit succeeded, an wlr_output_commit struct
+ * is returned. If the commit failed, NULL is returned.
  *
  * Note: wlr_output_state_finish() would typically be called after the state
  * has been committed.
  */
-bool wlr_output_commit_state(struct wlr_output *output,
+struct wlr_output_commit *wlr_output_commit_state(struct wlr_output *output,
 	const struct wlr_output_state *state);
 /**
  * Manually schedules a `frame` event. If a `frame` event is already pending,

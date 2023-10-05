@@ -411,7 +411,6 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 		.render_format = DRM_FORMAT_XRGB8888,
 		.transform = WL_OUTPUT_TRANSFORM_NORMAL,
 		.scale = 1,
-		.commit_seq = 0,
 	};
 
 	wl_list_init(&output->modes);
@@ -423,7 +422,6 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 	wl_signal_init(&output->events.needs_frame);
 	wl_signal_init(&output->events.precommit);
 	wl_signal_init(&output->events.commit);
-	wl_signal_init(&output->events.present);
 	wl_signal_init(&output->events.bind);
 	wl_signal_init(&output->events.description);
 	wl_signal_init(&output->events.request_state);
@@ -439,6 +437,8 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
 
 	output->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &output->display_destroy);
+
+	output->not_committed = true;
 
 	if (state) {
 		output_apply_state(output, state);
@@ -780,7 +780,13 @@ bool wlr_output_test(struct wlr_output *output) {
 	return wlr_output_test_state(output, &state);
 }
 
-bool wlr_output_commit_state(struct wlr_output *output,
+void wlr_output_commit_init(struct wlr_output_commit *commit,
+		struct wlr_output *output) {
+	wl_signal_init(&commit->events.present);
+	commit->output = output;
+}
+
+struct wlr_output_commit *wlr_output_commit_state(struct wlr_output *output,
 		const struct wlr_output_state *state) {
 	uint32_t unchanged = output_compare_state(output, state);
 
@@ -791,12 +797,12 @@ bool wlr_output_commit_state(struct wlr_output *output,
 
 	if (!output_basic_test(output, &pending)) {
 		wlr_log(WLR_ERROR, "Basic output test failed for %s", output->name);
-		return false;
+		return NULL;
 	}
 
 	bool new_back_buffer = false;
 	if (!output_ensure_buffer(output, &pending, &new_back_buffer)) {
-		return false;
+		return NULL;
 	}
 
 	if ((pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -815,14 +821,13 @@ bool wlr_output_commit_state(struct wlr_output *output,
 	};
 	wl_signal_emit_mutable(&output->events.precommit, &pre_event);
 
-	if (!output->impl->commit(output, &pending)) {
+	struct wlr_output_commit *commit = output->impl->commit(output, &pending);
+	if (!commit) {
 		if (new_back_buffer) {
 			wlr_buffer_unlock(pending.buffer);
 		}
 		return false;
 	}
-
-	output->commit_seq++;
 
 	if (output_pending_enabled(output, state)) {
 		output->frame_pending = true;
@@ -836,6 +841,7 @@ bool wlr_output_commit_state(struct wlr_output *output,
 		.committed = pending.committed,
 		.when = &now,
 		.buffer = (pending.committed & WLR_OUTPUT_STATE_BUFFER) ? pending.buffer : NULL,
+		.commit = commit,
 	};
 	wl_signal_emit_mutable(&output->events.commit, &event);
 
@@ -843,10 +849,12 @@ bool wlr_output_commit_state(struct wlr_output *output,
 		wlr_buffer_unlock(pending.buffer);
 	}
 
-	return true;
+	output->not_committed = false;
+
+	return commit;
 }
 
-bool wlr_output_commit(struct wlr_output *output) {
+struct wlr_output_commit *wlr_output_commit(struct wlr_output *output) {
 	// Make sure the pending state is cleared before the output is committed
 	struct wlr_output_state state = {0};
 	output_state_move(&state, &output->pending);
@@ -860,9 +868,9 @@ bool wlr_output_commit(struct wlr_output *output) {
 		output_clear_back_buffer(output);
 	}
 
-	bool ok = wlr_output_commit_state(output, &state);
+	struct wlr_output_commit *commit = wlr_output_commit_state(output, &state);
 	wlr_output_state_finish(&state);
-	return ok;
+	return commit;
 }
 
 void wlr_output_rollback(struct wlr_output *output) {
@@ -907,30 +915,9 @@ void wlr_output_schedule_frame(struct wlr_output *output) {
 		wl_event_loop_add_idle(ev, schedule_frame_handle_idle_timer, output);
 }
 
-void wlr_output_send_present(struct wlr_output *output,
-		struct wlr_output_event_present *event) {
-	assert(event);
-	event->output = output;
-
-	struct timespec now;
-	if (event->presented && event->when == NULL) {
-		clockid_t clock = wlr_backend_get_presentation_clock(output->backend);
-		errno = 0;
-		if (clock_gettime(clock, &now) != 0) {
-			wlr_log_errno(WLR_ERROR, "failed to send output present event: "
-				"failed to read clock");
-			return;
-		}
-		event->when = &now;
-	}
-
-	wl_signal_emit_mutable(&output->events.present, event);
-}
-
 struct deferred_present_event {
-	struct wlr_output *output;
+	struct wlr_output_commit *commit;
 	struct wl_event_source *idle_source;
-	struct wlr_output_event_present event;
 	struct wl_listener output_destroy;
 };
 
@@ -941,7 +928,19 @@ static void deferred_present_event_destroy(struct deferred_present_event *deferr
 
 static void deferred_present_event_handle_idle(void *data) {
 	struct deferred_present_event *deferred = data;
-	wlr_output_send_present(deferred->output, &deferred->event);
+
+	clockid_t clock = wlr_backend_get_presentation_clock(deferred->commit->output->backend);
+	struct timespec now;
+	clock_gettime(clock, &now);
+
+	struct wlr_output_event_present present_event = {
+		.presented = true,
+		.output = deferred->commit->output,
+		.when = &now,
+	};
+
+	wl_signal_emit_mutable(&deferred->commit->events.present, &present_event);
+
 	deferred_present_event_destroy(deferred);
 }
 
@@ -951,19 +950,16 @@ static void deferred_present_event_handle_output_destroy(struct wl_listener *lis
 	deferred_present_event_destroy(deferred);
 }
 
-void output_defer_present(struct wlr_output *output, struct wlr_output_event_present event) {
+void output_commit_defer_present(struct wlr_output_commit *commit) {
 	struct deferred_present_event *deferred = calloc(1, sizeof(*deferred));
 	if (!deferred) {
 		return;
 	}
-	*deferred = (struct deferred_present_event){
-		.output = output,
-		.event = event,
-	};
+	deferred->commit = commit;
 	deferred->output_destroy.notify = deferred_present_event_handle_output_destroy;
-	wl_signal_add(&output->events.destroy, &deferred->output_destroy);
+	wl_signal_add(&commit->output->events.destroy, &deferred->output_destroy);
 
-	struct wl_event_loop *ev = wl_display_get_event_loop(output->display);
+	struct wl_event_loop *ev = wl_display_get_event_loop(commit->output->display);
 	deferred->idle_source = wl_event_loop_add_idle(ev, deferred_present_event_handle_idle, deferred);
 }
 
