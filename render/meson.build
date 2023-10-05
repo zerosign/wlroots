@@ -23,9 +23,8 @@ endif
 
 if 'gles2' in renderers or 'auto' in renderers
 	egl = dependency('egl', required: 'gles2' in renderers)
-	gbm = dependency('gbm', required: 'gles2' in renderers)
-	if egl.found() and gbm.found()
-		wlr_deps += [egl, gbm]
+	if egl.found()
+		wlr_deps += egl
 		wlr_files += files('egl.c')
 		internal_features += { 'egl': true }
 	endif

@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <gbm.h>
 #include <wlr/render/egl.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
@@ -219,8 +218,6 @@ static struct wlr_egl *egl_create(void) {
 	load_egl_proc(&egl->procs.eglGetPlatformDisplayEXT,
 		"eglGetPlatformDisplayEXT");
 
-	egl->exts.KHR_platform_gbm = check_egl_ext(client_exts_str,
-			"EGL_KHR_platform_gbm");
 	egl->exts.EXT_platform_device = check_egl_ext(client_exts_str,
 			"EGL_EXT_platform_device");
 	egl->exts.KHR_display_reference = check_egl_ext(client_exts_str,
@@ -496,28 +493,6 @@ static EGLDeviceEXT get_egl_device_from_drm_fd(struct wlr_egl *egl,
 	return egl_device;
 }
 
-static int open_render_node(int drm_fd) {
-	char *render_name = drmGetRenderDeviceNameFromFd(drm_fd);
-	if (render_name == NULL) {
-		// This can happen on split render/display platforms, fallback to
-		// primary node
-		render_name = drmGetPrimaryDeviceNameFromFd(drm_fd);
-		if (render_name == NULL) {
-			wlr_log_errno(WLR_ERROR, "drmGetPrimaryDeviceNameFromFd failed");
-			return -1;
-		}
-		wlr_log(WLR_DEBUG, "DRM device '%s' has no render node, "
-			"falling back to primary node", render_name);
-	}
-
-	int render_fd = open(render_name, O_RDWR | O_CLOEXEC);
-	if (render_fd < 0) {
-		wlr_log_errno(WLR_ERROR, "Failed to open DRM node '%s'", render_name);
-	}
-	free(render_name);
-	return render_fd;
-}
-
 struct wlr_egl *wlr_egl_create_with_drm_fd(int drm_fd) {
 	struct wlr_egl *egl = egl_create();
 	if (egl == NULL) {
@@ -525,48 +500,21 @@ struct wlr_egl *wlr_egl_create_with_drm_fd(int drm_fd) {
 		return NULL;
 	}
 
-	if (egl->exts.EXT_platform_device) {
-		/*
-		 * Search for the EGL device matching the DRM fd using the
-		 * EXT_device_enumeration extension.
-		 */
-		EGLDeviceEXT egl_device = get_egl_device_from_drm_fd(egl, drm_fd);
-		if (egl_device != EGL_NO_DEVICE_EXT) {
-			if (egl_init(egl, EGL_PLATFORM_DEVICE_EXT, egl_device)) {
-				wlr_log(WLR_DEBUG, "Using EGL_PLATFORM_DEVICE_EXT");
-				return egl;
-			}
-			goto error;
-		}
-		/* Falls back on GBM in case the device was not found */
-	} else {
+	if (!egl->exts.EXT_platform_device) {
 		wlr_log(WLR_DEBUG, "EXT_platform_device not supported");
+		goto error;
 	}
 
-	if (egl->exts.KHR_platform_gbm) {
-		int gbm_fd = open_render_node(drm_fd);
-		if (gbm_fd < 0) {
-			wlr_log(WLR_ERROR, "Failed to open DRM render node");
-			goto error;
-		}
-
-		egl->gbm_device = gbm_create_device(gbm_fd);
-		if (!egl->gbm_device) {
-			close(gbm_fd);
-			wlr_log(WLR_ERROR, "Failed to create GBM device");
-			goto error;
-		}
-
-		if (egl_init(egl, EGL_PLATFORM_GBM_KHR, egl->gbm_device)) {
-			wlr_log(WLR_DEBUG, "Using EGL_PLATFORM_GBM_KHR");
-			return egl;
-		}
-
-		gbm_device_destroy(egl->gbm_device);
-		close(gbm_fd);
-	} else {
-		wlr_log(WLR_DEBUG, "KHR_platform_gbm not supported");
+	EGLDeviceEXT egl_device = get_egl_device_from_drm_fd(egl, drm_fd);
+	if (egl_device == EGL_NO_DEVICE_EXT) {
+		goto error;
 	}
+
+	if (!egl_init(egl, EGL_PLATFORM_DEVICE_EXT, egl_device)) {
+		goto error;
+	}
+
+	return egl;
 
 error:
 	wlr_log(WLR_ERROR, "Failed to initialize EGL context");
@@ -622,12 +570,6 @@ void wlr_egl_destroy(struct wlr_egl *egl) {
 	}
 
 	eglReleaseThread();
-
-	if (egl->gbm_device) {
-		int gbm_fd = gbm_device_get_fd(egl->gbm_device);
-		gbm_device_destroy(egl->gbm_device);
-		close(gbm_fd);
-	}
 
 	free(egl);
 }
