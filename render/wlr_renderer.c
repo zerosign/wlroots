@@ -245,27 +245,42 @@ bool wlr_renderer_init_wl_display(struct wlr_renderer *r,
 	return true;
 }
 
-static int open_drm_render_node(void) {
+static drmDevice **list_drm_devices(void) {
 	uint32_t flags = 0;
 	int devices_len = drmGetDevices2(flags, NULL, 0);
 	if (devices_len < 0) {
 		wlr_log(WLR_ERROR, "drmGetDevices2 failed: %s", strerror(-devices_len));
-		return -1;
+		return NULL;
 	}
-	drmDevice **devices = calloc(devices_len, sizeof(*devices));
+	drmDevice **devices = calloc(devices_len + 1, sizeof(*devices));
 	if (devices == NULL) {
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
-		return -1;
+		return NULL;
 	}
 	devices_len = drmGetDevices2(flags, devices, devices_len);
 	if (devices_len < 0) {
 		free(devices);
 		wlr_log(WLR_ERROR, "drmGetDevices2 failed: %s", strerror(-devices_len));
+		return NULL;
+	}
+	return devices;
+}
+
+static void destroy_drm_devices(drmDevice **devices) {
+	for (size_t i = 0; devices[i] != NULL; i++) {
+		drmFreeDevice(&devices[i]);
+	}
+	free(devices);
+}
+
+static int open_drm_render_node(void) {
+	drmDevice **devices = list_drm_devices();
+	if (devices == NULL) {
 		return -1;
 	}
 
 	int fd = -1;
-	for (int i = 0; i < devices_len; i++) {
+	for (size_t i = 0; devices[i] != NULL; i++) {
 		drmDevice *dev = devices[i];
 		if (dev->available_nodes & (1 << DRM_NODE_RENDER)) {
 			const char *name = dev->nodes[DRM_NODE_RENDER];
@@ -283,11 +298,73 @@ static int open_drm_render_node(void) {
 	}
 
 out:
-	for (int i = 0; i < devices_len; i++) {
-		drmFreeDevice(&devices[i]);
-	}
-	free(devices);
+	destroy_drm_devices(devices);
+	return fd;
+}
 
+static int open_backend_drm_render_node(int backend_drm_fd) {
+	// First, try to open the render node of the DRM device used by the backend
+	drmDevice *dev = NULL;
+	if (drmGetDevice2(backend_drm_fd, 0, &dev) != 0) {
+		wlr_log(WLR_ERROR, "drmGetDevice2 failed");
+		return -1;
+	}
+
+	if (dev->available_nodes & (1 << DRM_NODE_RENDER)) {
+		const char *name = dev->nodes[DRM_NODE_RENDER];
+		wlr_log(WLR_DEBUG, "Opening DRM render node '%s'", name);
+		int fd = open(name, O_RDWR | O_CLOEXEC);
+		if (fd < 0) {
+			wlr_log_errno(WLR_ERROR, "Failed to open '%s'", name);
+		}
+		drmFreeDevice(&dev);
+		return fd;
+	}
+
+	if (dev->bustype != DRM_BUS_PLATFORM) {
+		wlr_log(WLR_ERROR, "DRM device '%s' does not have a render node",
+			dev->nodes[DRM_NODE_PRIMARY]);
+		drmFreeDevice(&dev);
+		return -1;
+	}
+
+	drmFreeDevice(&dev);
+
+	// Try to find another platform device with a render node
+	drmDevice **devices = list_drm_devices();
+	if (devices == NULL) {
+		return -1;
+	}
+
+	int fd = -1;
+	for (size_t i = 0; devices[i] != NULL; i++) {
+		drmDevice *dev = devices[i];
+		if (dev->bustype != DRM_BUS_PLATFORM ||
+				!(dev->available_nodes & (1 << DRM_NODE_RENDER))) {
+			continue;
+		}
+
+		if (fd >= 0) {
+			close(fd);
+			fd = -1;
+			wlr_log(WLR_ERROR, "Found multiple platform device DRM render nodes");
+			break;
+		}
+
+		const char *name = dev->nodes[DRM_NODE_RENDER];
+		wlr_log(WLR_DEBUG, "Opening platform device DRM render node '%s'", name);
+		fd = open(name, O_RDWR | O_CLOEXEC);
+		if (fd < 0) {
+			wlr_log_errno(WLR_ERROR, "Failed to open '%s'", name);
+			goto out_devices;
+		}
+	}
+	if (fd < 0) {
+		wlr_log(WLR_ERROR, "Failed to find any platform device DRM render node");
+	}
+
+out_devices:
+	destroy_drm_devices(devices);
 	return fd;
 }
 
@@ -318,11 +395,15 @@ static bool open_preferred_drm_fd(struct wlr_backend *backend, int *drm_fd_ptr,
 		return true;
 	}
 
-	// Prefer the backend's DRM node, if any
+	// Prefer the backend's DRM device, if any
 	int backend_drm_fd = wlr_backend_get_drm_fd(backend);
 	if (backend_drm_fd >= 0) {
-		*drm_fd_ptr = backend_drm_fd;
-		*own_drm_fd = false;
+		int drm_fd = open_backend_drm_render_node(backend_drm_fd);
+		if (drm_fd < 0) {
+			return false;
+		}
+		*drm_fd_ptr = drm_fd;
+		*own_drm_fd = true;
 		return true;
 	}
 
