@@ -376,32 +376,24 @@ int vulkan_open_phdev_drm_fd(VkPhysicalDevice phdev) {
 	};
 	vkGetPhysicalDeviceProperties2(phdev, &props);
 
-	dev_t devid;
-	if (drm_props.hasRender) {
-		devid = makedev(drm_props.renderMajor, drm_props.renderMinor);
-	} else if (drm_props.hasPrimary) {
-		devid = makedev(drm_props.primaryMajor, drm_props.primaryMinor);
-	} else {
-		wlr_log(WLR_ERROR, "Physical device is missing both render and primary nodes");
+	if (!drm_props.hasRender) {
+		wlr_log(WLR_ERROR, "Physical device is missing render node");
 		return -1;
 	}
 
+	dev_t devid = makedev(drm_props.renderMajor, drm_props.renderMinor);
 	drmDevice *device = NULL;
 	if (drmGetDeviceFromDevId(devid, 0, &device) != 0) {
 		wlr_log_errno(WLR_ERROR, "drmGetDeviceFromDevId failed");
 		return -1;
 	}
 
-	const char *name = NULL;
-	if (device->available_nodes & (1 << DRM_NODE_RENDER)) {
-		name = device->nodes[DRM_NODE_RENDER];
-	} else {
-		assert(device->available_nodes & (1 << DRM_NODE_PRIMARY));
-		name = device->nodes[DRM_NODE_PRIMARY];
-		wlr_log(WLR_DEBUG, "DRM device %s has no render node, "
-			"falling back to primary node", name);
+	if (!(device->available_nodes & (1 << DRM_NODE_RENDER))) {
+		wlr_log(WLR_ERROR, "DRM device has no render node");
+		return -1;
 	}
 
+	const char *name = device->nodes[DRM_NODE_RENDER];
 	int drm_fd = open(name, O_RDWR | O_NONBLOCK | O_CLOEXEC);
 	if (drm_fd < 0) {
 		wlr_log_errno(WLR_ERROR, "Failed to open DRM node %s", name);
