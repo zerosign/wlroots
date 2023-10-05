@@ -883,23 +883,19 @@ static bool set_default_feedback(struct wlr_linux_dmabuf_v1 *linux_dmabuf,
 		goto error_compiled;
 	}
 
-	const char *name = NULL;
-	if (device->available_nodes & (1 << DRM_NODE_RENDER)) {
-		name = device->nodes[DRM_NODE_RENDER];
-	} else {
-		// Likely a split display/render setup
-		assert(device->available_nodes & (1 << DRM_NODE_PRIMARY));
-		name = device->nodes[DRM_NODE_PRIMARY];
-		wlr_log(WLR_DEBUG, "DRM device %s has no render node, "
-			"falling back to primary node", name);
-	}
-
-	int main_device_fd = open(name, O_RDWR | O_CLOEXEC);
-	drmFreeDevice(&device);
-	if (main_device_fd < 0) {
-		wlr_log_errno(WLR_ERROR, "Failed to open DRM device %s", name);
+	if (!(device->available_nodes & (1 << DRM_NODE_RENDER))) {
+		wlr_log(WLR_DEBUG, "DRM device has no render node");
 		goto error_compiled;
 	}
+
+	const char *name = device->nodes[DRM_NODE_RENDER];
+	int main_device_fd = open(name, O_RDWR | O_CLOEXEC);
+	if (main_device_fd < 0) {
+		wlr_log_errno(WLR_ERROR, "Failed to open DRM device %s", name);
+		drmFreeDevice(&device);
+		goto error_compiled;
+	}
+	drmFreeDevice(&device);
 
 	size_t tranches_len =
 		feedback->tranches.size / sizeof(struct wlr_linux_dmabuf_feedback_v1_tranche);
