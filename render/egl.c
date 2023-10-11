@@ -349,6 +349,16 @@ static bool egl_init_display(struct wlr_egl *egl, EGLDisplay display) {
 		return false;
 	}
 
+	if (check_egl_ext(display_exts_str, "EGL_KHR_reusable_sync")) {
+		load_egl_proc(&egl->procs.eglCreateSyncKHR, "eglCreateSyncKHR");
+		load_egl_proc(&egl->procs.eglDestroySyncKHR, "eglDestroySyncKHR");
+		load_egl_proc(&egl->procs.eglSignalSyncKHR, "eglSignalSyncKHR");
+	}
+
+	if (check_egl_ext(display_exts_str, "EGL_KHR_wait_sync")) {
+		load_egl_proc(&egl->procs.eglWaitSyncKHR, "eglWaitSyncKHR");
+	}
+
 	egl->exts.IMG_context_priority =
 		check_egl_ext(display_exts_str, "EGL_IMG_context_priority");
 
@@ -1000,4 +1010,49 @@ int wlr_egl_dup_drm_fd(struct wlr_egl *egl) {
 	free(render_name);
 
 	return render_fd;
+}
+
+EGLSyncKHR wlr_egl_create_reusable_sync(struct wlr_egl *egl) {
+	if (!egl->procs.eglCreateSyncKHR) {
+		wlr_log(WLR_ERROR, "eglCreateSyncKHR not supported");
+		return EGL_NO_SYNC_KHR;
+	}
+
+	EGLSyncKHR sync = egl->procs.eglCreateSyncKHR(egl->display, EGL_SYNC_REUSABLE_KHR, NULL);
+	if (sync == EGL_NO_SYNC_KHR) {
+		wlr_log(WLR_ERROR, "eglCreateSyncKHR failed");
+	}
+	return sync;
+}
+
+void wlr_egl_destroy_sync(struct wlr_egl *egl, EGLSyncKHR sync) {
+	if (sync == EGL_NO_SYNC_KHR) {
+		return;
+	}
+	assert(egl->procs.eglDestroySyncKHR);
+	if (egl->procs.eglDestroySyncKHR(egl->display, sync) != EGL_TRUE) {
+		wlr_log(WLR_ERROR, "eglDestroySyncKHR failed");
+	}
+}
+
+bool wlr_egl_signal_sync(struct wlr_egl *egl, EGLSyncKHR sync) {
+	assert(egl->procs.eglSignalSyncKHR);
+	if (egl->procs.eglSignalSyncKHR(egl->display, sync, EGL_SIGNALED_KHR) != EGL_TRUE) {
+		wlr_log(WLR_ERROR, "eglSignalSyncKHR failed");
+		return false;
+	}
+	return true;
+}
+
+bool wlr_egl_wait_sync(struct wlr_egl *egl, EGLSyncKHR sync) {
+	if (!egl->procs.eglWaitSyncKHR) {
+		wlr_log(WLR_ERROR, "eglWaitSyncKHR not supported");
+		return false;
+	}
+
+	if (egl->procs.eglWaitSyncKHR(egl->display, sync, 0) != EGL_TRUE) {
+		wlr_log(WLR_ERROR, "eglWaitSyncKHR failed");
+		return false;
+	}
+	return true;
 }

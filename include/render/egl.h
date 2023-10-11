@@ -38,6 +38,10 @@ struct wlr_egl {
 		PFNEGLQUERYDISPLAYATTRIBEXTPROC eglQueryDisplayAttribEXT;
 		PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
 		PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
+		PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
+		PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
+		PFNEGLSIGNALSYNCKHRPROC eglSignalSyncKHR;
+		PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;
 	} procs;
 
 	bool has_modifiers;
@@ -113,5 +117,13 @@ bool wlr_egl_make_current(struct wlr_egl *egl);
 bool wlr_egl_unset_current(struct wlr_egl *egl);
 
 bool wlr_egl_is_current(struct wlr_egl *egl);
+
+EGLSyncKHR wlr_egl_create_reusable_sync(struct wlr_egl *egl);
+
+void wlr_egl_destroy_sync(struct wlr_egl *egl, EGLSyncKHR sync);
+
+bool wlr_egl_signal_sync(struct wlr_egl *egl, EGLSyncKHR sync);
+
+bool wlr_egl_wait_sync(struct wlr_egl *egl, EGLSyncKHR sync);
 
 #endif
