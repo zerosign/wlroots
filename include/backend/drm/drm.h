@@ -161,6 +161,9 @@ struct wlr_drm_connector {
 	 * they're sent.
 	 */
 	uint32_t pending_page_flip_crtc;
+
+	uint8_t *edid;
+	size_t edid_len;
 };
 
 struct wlr_drm_backend *get_drm_backend_from_backend(

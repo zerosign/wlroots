@@ -1471,7 +1471,9 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 	uint8_t *edid = get_drm_prop_blob(drm->fd,
 		wlr_conn->id, wlr_conn->props.edid, &edid_len);
 	parse_edid(wlr_conn, edid_len, edid);
-	free(edid);
+
+	wlr_conn->edid = edid;
+	wlr_conn->edid_len = edid_len;
 
 	char *subconnector = NULL;
 	if (wlr_conn->props.subconnector) {
@@ -1590,18 +1592,29 @@ static bool scan_single_drm_connector(struct wlr_drm_backend *drm,
 		}
 	}
 
-	if (wlr_conn->status == DRM_MODE_DISCONNECTED &&
-			drm_conn->connection == DRM_MODE_CONNECTED) {
+	bool is_connected = drm_conn->connection == DRM_MODE_CONNECTED;
+	bool was_connected = wlr_conn->status == DRM_MODE_CONNECTED;
+
+	if (!was_connected && is_connected) {
 		wlr_log(WLR_INFO, "'%s' connected", wlr_conn->name);
 		connect_drm_connector(wlr_conn, drm_conn);
 		r = true;
-		goto out;
-	}
-
-	if (wlr_conn->status == DRM_MODE_CONNECTED &&
-			drm_conn->connection != DRM_MODE_CONNECTED) {
+	} else if (was_connected && !is_connected) {
 		wlr_log(WLR_INFO, "'%s' disconnected", wlr_conn->name);
 		disconnect_drm_connector(wlr_conn);
+	} else if (was_connected && is_connected) {
+		size_t edid_len = 0;
+		uint8_t *edid = get_drm_prop_blob(drm->fd,
+			wlr_conn->id, wlr_conn->props.edid, &edid_len);
+
+		if (edid_len != wlr_conn->edid_len || memcmp(edid, wlr_conn->edid, edid_len) != 0) {
+			wlr_log(WLR_INFO, "EDID changed on '%s'", wlr_conn->name);
+			disconnect_drm_connector(wlr_conn);
+			connect_drm_connector(wlr_conn, drm_conn);
+			r = true;
+		}
+
+		free(edid);
 	}
 
 out:
@@ -1782,6 +1795,10 @@ static void disconnect_drm_connector(struct wlr_drm_connector *conn) {
 	// our wlr_drm_connector.
 	wlr_output_destroy(&conn->output);
 
+	free(conn->edid);
+	conn->edid = NULL;
+	conn->edid_len = 0;
+
 	assert(conn->status == DRM_MODE_DISCONNECTED);
 }
 
@@ -1789,6 +1806,7 @@ void destroy_drm_connector(struct wlr_drm_connector *conn) {
 	disconnect_drm_connector(conn);
 
 	wl_list_remove(&conn->link);
+	free(conn->edid);
 	free(conn);
 }
 
