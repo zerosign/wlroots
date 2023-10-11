@@ -229,7 +229,8 @@ static bool has_render_node(struct wlr_backend *backend) {
 	return has_render_node;
 }
 
-static struct wlr_renderer *renderer_autocreate(struct wlr_backend *backend, int drm_fd) {
+static struct wlr_renderer *renderer_autocreate(struct wlr_backend *backend, int drm_fd,
+		struct wl_event_loop *loop) {
 	const char *renderer_options[] = {
 		"auto",
 		"gles2",
@@ -297,14 +298,13 @@ out:
 	return renderer;
 }
 
-struct wlr_renderer *renderer_autocreate_with_drm_fd(int drm_fd) {
+struct wlr_renderer *renderer_autocreate_with_drm_fd(int drm_fd, struct wl_event_loop *loop) {
 	assert(drm_fd >= 0);
-
-	return renderer_autocreate(NULL, drm_fd);
+	return renderer_autocreate(NULL, drm_fd, loop);
 }
 
 struct wlr_renderer *wlr_renderer_autocreate(struct wlr_backend *backend) {
-	return renderer_autocreate(backend, -1);
+	return renderer_autocreate(backend, -1, backend->event_loop);
 }
 
 int wlr_renderer_get_drm_fd(struct wlr_renderer *r) {
