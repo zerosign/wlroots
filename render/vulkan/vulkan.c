@@ -457,17 +457,16 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	// For dmabuf import we require at least the external_memory_fd,
 	// external_memory_dma_buf, queue_family_foreign and
 	// image_drm_format_modifier extensions.
-	const char *extensions[] = {
-		VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
-		VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
-		VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, // or vulkan 1.2
-		VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-		VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
-		VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, // or vulkan 1.2
-		VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, // or vulkan 1.3
-	};
-	size_t extensions_len = sizeof(extensions) / sizeof(extensions[0]);
+	const char *extensions[32] = {0};
+	size_t extensions_len = 0;
+	extensions[extensions_len++] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME; // or vulkan 1.2
+	extensions[extensions_len++] = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME;
+	extensions[extensions_len++] = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME; // or vulkan 1.2
+	extensions[extensions_len++] = VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME; // or vulkan 1.3
 
 	for (size_t i = 0; i < extensions_len; i++) {
 		if (!check_extension(avail_ext_props, avail_extc, extensions[i])) {
@@ -476,6 +475,14 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 			goto error;
 		}
 	}
+
+	bool has_ext_external_memory_host =
+		check_extension(avail_ext_props, avail_extc, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+	if (has_ext_external_memory_host) {
+		extensions[extensions_len++] = VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME;
+	}
+
+	assert(extensions_len < sizeof(extensions) / sizeof(extensions[0]));
 
 	{
 		uint32_t qfam_count;
@@ -590,6 +597,11 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	load_device_proc(dev, "vkGetSemaphoreFdKHR", &dev->api.vkGetSemaphoreFdKHR);
 	load_device_proc(dev, "vkImportSemaphoreFdKHR", &dev->api.vkImportSemaphoreFdKHR);
 	load_device_proc(dev, "vkQueueSubmit2KHR", &dev->api.vkQueueSubmit2KHR);
+
+	if (has_ext_external_memory_host) {
+		load_device_proc(dev, "vkGetMemoryHostPointerPropertiesEXT",
+			&dev->api.vkGetMemoryHostPointerPropertiesEXT);
+	}
 
 	size_t max_fmts;
 	const struct wlr_vk_format *fmts = vulkan_get_format_list(&max_fmts);
