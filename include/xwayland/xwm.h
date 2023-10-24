@@ -160,4 +160,6 @@ char *xwm_get_atom_name(struct wlr_xwm *xwm, xcb_atom_t atom);
 bool xwm_atoms_contains(struct wlr_xwm *xwm, xcb_atom_t *atoms,
 	size_t num_atoms, enum atom_name needle);
 
+void xwm_schedule_flush(struct wlr_xwm *xwm);
+
 #endif
