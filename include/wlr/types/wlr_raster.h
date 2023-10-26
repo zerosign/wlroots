@@ -17,12 +17,15 @@ struct wlr_buffer;
 struct wlr_texture;
 struct wlr_renderer;
 struct wlr_surface;
+struct wlr_allocator;
 
 struct wlr_raster_source {
 	struct wlr_texture *texture;
+	struct wlr_allocator *allocator; // may be NULL
 	struct wl_list link;
 
 	struct wl_listener renderer_destroy;
+	struct wl_listener allocator_destroy;
 };
 
 struct wlr_raster {
@@ -43,8 +46,6 @@ struct wlr_raster {
 	size_t n_locks;
 
 	struct wl_listener buffer_release;
-
-	struct wl_listener renderer_destroy;
 };
 
 /**
@@ -77,6 +78,18 @@ void wlr_raster_unlock(struct wlr_raster *raster);
  */
 struct wlr_texture *wlr_raster_create_texture(struct wlr_raster *raster,
 	struct wlr_renderer *renderer);
+
+/**
+ * Returns the texture allocated for this renderer. If there is none,
+ * a new texture will be allocated and attached to this wlr_raster.
+ *
+ * An optional allocator can be given that will allow the raster to do
+ * inter-renderer blits.
+ *
+ * Will return NULL if allocation was unsuccessful.
+ */
+struct wlr_texture *wlr_raster_create_texture_with_allocator(struct wlr_raster *raster,
+    struct wlr_renderer *renderer, struct wlr_allocator *allocator);
 
 /**
  * Creates a wlr_raster from a surface. This will automatically deduplicate
