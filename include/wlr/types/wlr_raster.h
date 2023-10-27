@@ -16,6 +16,7 @@
 struct wlr_buffer;
 struct wlr_texture;
 struct wlr_renderer;
+struct wlr_surface;
 
 struct wlr_raster {
 	// May be NULL
@@ -68,5 +69,11 @@ void wlr_raster_unlock(struct wlr_raster *raster);
  */
 struct wlr_texture *wlr_raster_create_texture(struct wlr_raster *raster,
 	struct wlr_renderer *renderer);
+
+/**
+ * Creates a wlr_raster from a surface. This will automatically deduplicate
+ * rasters if multiple are consumed from the same surface.
+ */
+struct wlr_raster *wlr_raster_from_surface(struct wlr_surface *surface);
 
 #endif

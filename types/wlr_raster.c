@@ -1,9 +1,11 @@
 #include <assert.h>
 #include <pixman.h>
 #include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_raster.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/render/wlr_renderer.h>
+#include <wlr/util/addon.h>
 #include "types/wlr_buffer.h"
 #include "types/wlr_raster.h"
 
@@ -195,4 +197,141 @@ struct wlr_raster *wlr_raster_update(struct wlr_raster *raster,
 	pixman_region32_copy(&state->damage, damage);
 
 	return new_raster;
+}
+
+struct surface_raster {
+	struct wlr_raster *raster;
+	struct wlr_surface *surface;
+
+	struct wlr_addon addon;
+
+	struct wl_listener buffer_prerelease;
+
+	bool locking_buffer;
+};
+
+static void surface_raster_destroy(struct surface_raster *surface_raster) {
+	if (surface_raster->locking_buffer) {
+		wlr_buffer_unlock(surface_raster->raster->buffer);
+	}
+
+	wl_list_remove(&surface_raster->buffer_prerelease.link);
+	wlr_addon_finish(&surface_raster->addon);
+	wlr_raster_unlock(surface_raster->raster);
+	free(surface_raster);
+}
+
+static void surface_raster_handle_addon_destroy(struct wlr_addon *addon) {
+	struct surface_raster *surface_raster = wl_container_of(addon, surface_raster, addon);
+	surface_raster_destroy(surface_raster);
+}
+
+static void surface_raster_handle_buffer_prerelease(struct wl_listener *listener, void *data) {
+	struct surface_raster *surface_raster =
+		wl_container_of(listener, surface_raster, buffer_prerelease);
+	struct wlr_raster *raster = surface_raster->raster;
+
+	struct wlr_surface_output *output;
+	wl_list_for_each(output, &surface_raster->surface->current_outputs, link) {
+		wlr_raster_create_texture(raster, output->output->renderer);
+	}
+
+	// if there was a failed texture upload, keep on locking the buffer
+	if (!raster->texture) {
+		wlr_buffer_lock(raster->buffer);
+		surface_raster->locking_buffer = true;
+	}
+
+	wl_list_remove(&surface_raster->buffer_prerelease.link);
+	wl_list_init(&surface_raster->buffer_prerelease.link);
+}
+
+const struct wlr_addon_interface surface_raster_addon_impl = {
+	.name = "wlr_raster_surface",
+	.destroy = surface_raster_handle_addon_destroy,
+};
+
+static struct surface_raster *get_surface_raster(struct wlr_surface *surface) {
+	struct wlr_addon *addon = wlr_addon_find(&surface->addons, NULL,
+		&surface_raster_addon_impl);
+	if (!addon) {
+		return NULL;
+	}
+
+	struct surface_raster *surface_raster = wl_container_of(addon, surface_raster, addon);
+	return surface_raster;
+}
+
+static void surface_raster_drop_raster(struct surface_raster *surface_raster) {
+	if (surface_raster->locking_buffer) {
+		wlr_buffer_unlock(surface_raster->raster->buffer);
+		surface_raster->locking_buffer = false;
+	}
+
+	wlr_raster_unlock(surface_raster->raster);
+	surface_raster->raster = NULL;
+}
+
+struct wlr_raster *wlr_raster_from_surface(struct wlr_surface *surface) {
+	struct surface_raster *surface_raster = get_surface_raster(surface);
+	if (!surface_raster) {
+		surface_raster = calloc(1, sizeof(*surface_raster));
+		if (!surface_raster) {
+			return NULL;
+		}
+
+		surface_raster->surface = surface;
+
+		wlr_addon_init(&surface_raster->addon, &surface->addons, NULL,
+			&surface_raster_addon_impl);
+
+		surface_raster->buffer_prerelease.notify = surface_raster_handle_buffer_prerelease;
+		wl_list_init(&surface_raster->buffer_prerelease.link);
+	}
+
+	if (!surface->current.buffer) {
+		// surface is mapped but it hasn't committed a new buffer. We need to keep
+		// using the old one
+		if (wlr_surface_has_buffer(surface)) {
+			if (surface_raster->raster) {
+				return wlr_raster_lock(surface_raster->raster);
+			} else {
+				return NULL;
+			}
+		}
+
+		wl_list_remove(&surface_raster->buffer_prerelease.link);
+		wl_list_init(&surface_raster->buffer_prerelease.link);
+
+		surface_raster_drop_raster(surface_raster);
+
+		return NULL;
+	}
+
+	struct wlr_raster *raster;
+	if (surface_raster->raster) {
+		// make sure we haven't already seen this buffer
+		if (surface_raster->raster->buffer == surface->current.buffer) {
+			return wlr_raster_lock(surface_raster->raster);
+		}
+
+		raster = wlr_raster_update(surface_raster->raster,
+			surface->current.buffer, &surface->buffer_damage);
+	} else {
+		raster = wlr_raster_create(surface->current.buffer);
+	}
+
+	if (!raster) {
+		return NULL;
+	}
+
+	surface_raster_drop_raster(surface_raster);
+	surface_raster->raster = wlr_raster_lock(raster);
+
+	wl_list_remove(&surface_raster->buffer_prerelease.link);
+	wl_signal_add(&surface->current.buffer->events.prerelease, &surface_raster->buffer_prerelease);
+
+	wlr_surface_consume(surface);
+
+	return raster;
 }
