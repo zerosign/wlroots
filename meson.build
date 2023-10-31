@@ -93,6 +93,7 @@ features = {
 	'gles2-renderer': false,
 	'vulkan-renderer': false,
 	'gbm-allocator': false,
+	'dma-heap-allocator': false,
 	'session': false,
 }
 internal_features = {
