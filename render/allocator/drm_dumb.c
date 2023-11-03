@@ -97,6 +97,7 @@ static struct wlr_drm_dumb_buffer *create_buffer(
 		.height = buffer->height,
 		.format = format->format,
 		.modifier = DRM_FORMAT_MOD_LINEAR,
+		.prefer_shadow = alloc->prefer_shadow,
 		.n_planes = 1,
 		.offset[0] = 0,
 		.stride[0] = buffer->stride,
@@ -216,6 +217,12 @@ struct wlr_allocator *wlr_drm_dumb_allocator_create(int drm_fd) {
 		return NULL;
 	}
 
+	uint64_t prefer_shadow;
+	if (drmGetCap(drm_fd, DRM_CAP_DUMB_PREFER_SHADOW, &prefer_shadow) < 0) {
+		wlr_log(WLR_ERROR, "Failed to get DRM capabilities");
+		return NULL;
+	}
+
 	struct wlr_drm_dumb_allocator *alloc = calloc(1, sizeof(*alloc));
 	if (alloc == NULL) {
 		return NULL;
@@ -224,6 +231,7 @@ struct wlr_allocator *wlr_drm_dumb_allocator_create(int drm_fd) {
 		WLR_BUFFER_CAP_DATA_PTR | WLR_BUFFER_CAP_DMABUF);
 
 	alloc->drm_fd = drm_fd;
+	alloc->prefer_shadow = prefer_shadow;
 	wl_list_init(&alloc->buffers);
 
 	wlr_log(WLR_DEBUG, "Created DRM dumb allocator");

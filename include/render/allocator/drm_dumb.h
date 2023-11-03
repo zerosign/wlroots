@@ -25,6 +25,7 @@ struct wlr_drm_dumb_allocator {
 	struct wlr_allocator base;
 	struct wl_list buffers; // wlr_drm_dumb_buffer.link
 	int drm_fd;
+	bool prefer_shadow;
 };
 
 /**
