@@ -57,17 +57,6 @@ bool begin_pixman_data_ptr_access(struct wlr_buffer *wlr_buffer, pixman_image_t 
 	return true;
 }
 
-static struct wlr_pixman_buffer *get_buffer(
-		struct wlr_pixman_renderer *renderer, struct wlr_buffer *wlr_buffer) {
-	struct wlr_pixman_buffer *buffer;
-	wl_list_for_each(buffer, &renderer->buffers, link) {
-		if (buffer->buffer == wlr_buffer) {
-			return buffer;
-		}
-	}
-	return NULL;
-}
-
 static const struct wlr_texture_impl texture_impl;
 
 bool wlr_texture_is_pixman(struct wlr_texture *texture) {
@@ -96,21 +85,32 @@ static const struct wlr_texture_impl texture_impl = {
 
 static void destroy_buffer(struct wlr_pixman_buffer *buffer) {
 	wl_list_remove(&buffer->link);
-	wl_list_remove(&buffer->buffer_destroy.link);
+	wlr_addon_finish(&buffer->addon);
 
 	pixman_image_unref(buffer->image);
 
 	free(buffer);
 }
 
-static void handle_destroy_buffer(struct wl_listener *listener, void *data) {
-	struct wlr_pixman_buffer *buffer =
-		wl_container_of(listener, buffer, buffer_destroy);
+static void handle_buffer_destroy(struct wlr_addon *addon) {
+	struct wlr_pixman_buffer *buffer = wl_container_of(addon, buffer, addon);
 	destroy_buffer(buffer);
 }
 
-static struct wlr_pixman_buffer *create_buffer(
-		struct wlr_pixman_renderer *renderer, struct wlr_buffer *wlr_buffer) {
+static const struct wlr_addon_interface buffer_addon_impl = {
+	.name = "wlr_pixman_buffer",
+	.destroy = handle_buffer_destroy,
+};
+
+static struct wlr_pixman_buffer *get_or_create_buffer(struct wlr_pixman_renderer *renderer,
+		struct wlr_buffer *wlr_buffer) {
+	struct wlr_addon *addon =
+		wlr_addon_find(&wlr_buffer->addons, renderer, &buffer_addon_impl);
+	if (addon) {
+		struct wlr_pixman_buffer *buffer = wl_container_of(addon, buffer, addon);
+		return buffer;
+	}
+
 	struct wlr_pixman_buffer *buffer = calloc(1, sizeof(*buffer));
 	if (buffer == NULL) {
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
@@ -144,8 +144,7 @@ static struct wlr_pixman_buffer *create_buffer(
 		goto error_buffer;
 	}
 
-	buffer->buffer_destroy.notify = handle_destroy_buffer;
-	wl_signal_add(&wlr_buffer->events.destroy, &buffer->buffer_destroy);
+	wlr_addon_init(&buffer->addon, &wlr_buffer->addons, renderer, &buffer_addon_impl);
 
 	wl_list_insert(&renderer->buffers, &buffer->link);
 
@@ -416,10 +415,7 @@ static bool pixman_bind_buffer(struct wlr_renderer *wlr_renderer,
 		return true;
 	}
 
-	struct wlr_pixman_buffer *buffer = get_buffer(renderer, wlr_buffer);
-	if (buffer == NULL) {
-		buffer = create_buffer(renderer, wlr_buffer);
-	}
+	struct wlr_pixman_buffer *buffer = get_or_create_buffer(renderer, wlr_buffer);
 	if (buffer == NULL) {
 		return false;
 	}
@@ -495,10 +491,7 @@ static struct wlr_render_pass *pixman_begin_buffer_pass(struct wlr_renderer *wlr
 		struct wlr_buffer *wlr_buffer, const struct wlr_buffer_pass_options *options) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
 
-	struct wlr_pixman_buffer *buffer = get_buffer(renderer, wlr_buffer);
-	if (buffer == NULL) {
-		buffer = create_buffer(renderer, wlr_buffer);
-	}
+	struct wlr_pixman_buffer *buffer = get_or_create_buffer(renderer, wlr_buffer);
 	if (buffer == NULL) {
 		return NULL;
 	}
