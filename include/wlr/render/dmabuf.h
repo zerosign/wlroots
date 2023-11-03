@@ -35,6 +35,7 @@ struct wlr_dmabuf_attributes {
 	int32_t width, height;
 	uint32_t format; // FourCC code, see DRM_FORMAT_* in <drm_fourcc.h>
 	uint64_t modifier; // see DRM_FORMAT_MOD_* in <drm_fourcc.h>
+	bool prefer_shadow;
 
 	int n_planes;
 	uint32_t offset[WLR_DMABUF_MAX_PLANES];
