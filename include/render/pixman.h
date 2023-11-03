@@ -32,6 +32,7 @@ struct wlr_pixman_buffer {
 	struct wl_list link; // wlr_pixman_renderer.buffers
 
 	pixman_image_t *image;
+	pixman_image_t *shadow;
 
 	struct wlr_addon addon;
 };
