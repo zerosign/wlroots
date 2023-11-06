@@ -421,13 +421,39 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 		}
 	}
 
+	int new_width = new_right - new_left;
+	int new_height = new_bottom - new_top;
 	struct wlr_box geo_box;
 	wlr_xdg_surface_get_geometry(view->xdg_toplevel->base, &geo_box);
+
+	int min_width = view->xdg_toplevel->current.min_width;
+	int max_width = view->xdg_toplevel->current.max_width;
+	int min_height = view->xdg_toplevel->current.min_height;
+	int max_height = view->xdg_toplevel->current.max_height;
+
+	if (max_width == 0) {
+		max_width = INT32_MAX;
+	}
+	if (max_height == 0) {
+		max_height = INT32_MAX;
+	}
+
+	if (new_width < min_width || new_width > max_width) {
+		// reset left and right edges for the new geometry box
+		new_left = view->scene_tree->node.x + geo_box.x;
+		new_right = new_left + geo_box.width;
+	}
+	if (new_height < min_height || new_height > max_height ) {
+		// reset top and bottom edges for the new geometry box
+		new_top = view->scene_tree->node.y + geo_box.y;
+		new_bottom = new_top + geo_box.height;
+	}
+
 	wlr_scene_node_set_position(&view->scene_tree->node,
 		new_left - geo_box.x, new_top - geo_box.y);
 
-	int new_width = new_right - new_left;
-	int new_height = new_bottom - new_top;
+	new_width = new_right - new_left;
+	new_height = new_bottom - new_top;
 	wlr_xdg_toplevel_set_size(view->xdg_toplevel, new_width, new_height);
 }
 
