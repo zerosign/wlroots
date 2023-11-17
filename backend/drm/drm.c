@@ -1471,7 +1471,9 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 	uint8_t *edid = get_drm_prop_blob(drm->fd,
 		wlr_conn->id, wlr_conn->props.edid, &edid_len);
 	parse_edid(wlr_conn, edid_len, edid);
-	free(edid);
+
+	wlr_conn->edid = edid;
+	wlr_conn->edid_len = edid_len;
 
 	char *subconnector = NULL;
 	if (wlr_conn->props.subconnector) {
@@ -1500,49 +1502,47 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 
 static void disconnect_drm_connector(struct wlr_drm_connector *conn);
 
-void scan_drm_connectors(struct wlr_drm_backend *drm,
-		struct wlr_device_hotplug_event *event) {
-	if (event != NULL && event->connector_id != 0) {
-		wlr_log(WLR_INFO, "Scanning DRM connector %"PRIu32" on %s",
-			event->connector_id, drm->name);
-	} else {
-		wlr_log(WLR_INFO, "Scanning DRM connectors on %s", drm->name);
+static struct wlr_drm_connector *find_wlr_drm_connector(const struct wlr_drm_backend *drm, uint32_t id) {
+	struct wlr_drm_connector *c;
+	wl_list_for_each(c, &drm->connectors, link) {
+		if (c->id == id) {
+			return c;
+		}
 	}
+	return NULL;
+}
 
+static void update_drm_connector_list(struct wlr_drm_backend *drm) {
 	drmModeRes *res = drmModeGetResources(drm->fd);
 	if (!res) {
 		wlr_log_errno(WLR_ERROR, "Failed to get DRM resources");
 		return;
 	}
 
-	size_t seen_len = wl_list_length(&drm->connectors);
-	// +1 so length can never be 0, which is undefined behaviour.
-	// Last element isn't used.
-	bool seen[seen_len + 1];
-	memset(seen, false, sizeof(seen));
-	size_t new_outputs_len = 0;
-	struct wlr_drm_connector *new_outputs[res->count_connectors + 1];
-
-	for (int i = 0; i < res->count_connectors; ++i) {
-		uint32_t conn_id = res->connectors[i];
-
-		ssize_t index = -1;
-		struct wlr_drm_connector *c, *wlr_conn = NULL;
-		wl_list_for_each(c, &drm->connectors, link) {
-			index++;
-			if (c->id == conn_id) {
-				wlr_conn = c;
+	// Removed:
+	struct wlr_drm_connector *c, *tmp;
+	wl_list_for_each_safe(c, tmp, &drm->connectors, link) {
+		bool found = false;
+		for (int i = 0; i < res->count_connectors; ++i) {
+			uint32_t conn_id = res->connectors[i];
+			if (conn_id == c->id) {
+				found = true;
 				break;
 			}
 		}
 
-		// If the hotplug event contains a connector ID, ignore any other
-		// connector.
-		if (event != NULL && event->connector_id != 0 &&
-				event->connector_id != conn_id) {
-			if (wlr_conn != NULL) {
-				seen[index] = true;
-			}
+		if (found) {
+			continue;
+		}
+
+		wlr_log(WLR_INFO, "'%s' disappeared", c->name);
+		destroy_drm_connector(c);
+	}
+
+	// Added:
+	for (int i = 0; i < res->count_connectors; ++i) {
+		uint32_t conn_id = res->connectors[i];
+		if (find_wlr_drm_connector(drm, conn_id)) {
 			continue;
 		}
 
@@ -1552,65 +1552,108 @@ void scan_drm_connectors(struct wlr_drm_backend *drm,
 			continue;
 		}
 
+		struct wlr_drm_connector *wlr_conn = create_drm_connector(drm, drm_conn);
 		if (!wlr_conn) {
-			wlr_conn = create_drm_connector(drm, drm_conn);
-			if (wlr_conn == NULL) {
-				continue;
-			}
-			wlr_log(WLR_INFO, "Found connector '%s'", wlr_conn->name);
-		} else {
-			seen[index] = true;
-		}
-
-		// This can only happen *after* hotplug, since we haven't read the
-		// connector properties yet
-		if (wlr_conn->props.link_status != 0) {
-			uint64_t link_status;
-			if (!get_drm_prop(drm->fd, wlr_conn->id,
-					wlr_conn->props.link_status, &link_status)) {
-				wlr_drm_conn_log(wlr_conn, WLR_ERROR,
-					"Failed to get link status prop");
-				continue;
-			}
-
-			if (link_status == DRM_MODE_LINK_STATUS_BAD) {
-				// We need to reload our list of modes and force a modeset
-				wlr_drm_conn_log(wlr_conn, WLR_INFO, "Bad link detected");
-				disconnect_drm_connector(wlr_conn);
-			}
-		}
-
-		if (wlr_conn->status == DRM_MODE_DISCONNECTED &&
-				drm_conn->connection == DRM_MODE_CONNECTED) {
-			wlr_log(WLR_INFO, "'%s' connected", wlr_conn->name);
-			if (!connect_drm_connector(wlr_conn, drm_conn)) {
-				wlr_drm_conn_log(wlr_conn, WLR_ERROR, "Failed to connect DRM connector");
-				continue;
-			}
-			new_outputs[new_outputs_len++] = wlr_conn;
-		} else if (wlr_conn->status == DRM_MODE_CONNECTED &&
-				drm_conn->connection != DRM_MODE_CONNECTED) {
-			wlr_log(WLR_INFO, "'%s' disconnected", wlr_conn->name);
-			disconnect_drm_connector(wlr_conn);
-		}
-
-		drmModeFreeConnector(drm_conn);
-	}
-
-	drmModeFreeResources(res);
-
-	// Iterate in reverse order because we'll remove items from the list and
-	// still want indices to remain correct.
-	struct wlr_drm_connector *conn, *tmp_conn;
-	size_t index = wl_list_length(&drm->connectors);
-	wl_list_for_each_reverse_safe(conn, tmp_conn, &drm->connectors, link) {
-		index--;
-		if (index >= seen_len || seen[index]) {
+			wlr_log_errno(WLR_ERROR, "Failed to create new connector");
 			continue;
 		}
 
-		wlr_log(WLR_INFO, "'%s' disappeared", conn->name);
-		destroy_drm_connector(conn);
+		wlr_log(WLR_INFO, "Found connector '%s'", wlr_conn->name);
+	}
+
+	drmModeFreeResources(res);
+}
+
+static bool scan_single_drm_connector(struct wlr_drm_backend *drm,
+		struct wlr_drm_connector *wlr_conn) {
+	bool r = false;
+
+	drmModeConnector *drm_conn = drmModeGetConnector(drm->fd, wlr_conn->id);
+	if (!drm_conn) {
+		wlr_log_errno(WLR_ERROR, "Failed to get DRM connector");
+		return false;
+	}
+
+	// This can only happen *after* hotplug, since we haven't read the
+	// connector properties yet
+	if (wlr_conn->props.link_status != 0) {
+		uint64_t link_status;
+		if (!get_drm_prop(drm->fd, wlr_conn->id,
+				wlr_conn->props.link_status, &link_status)) {
+			wlr_drm_conn_log(wlr_conn, WLR_ERROR,
+				"Failed to get link status prop");
+			goto out;
+		}
+
+		if (link_status == DRM_MODE_LINK_STATUS_BAD) {
+			// We need to reload our list of modes and force a modeset
+			wlr_drm_conn_log(wlr_conn, WLR_INFO, "Bad link detected");
+			disconnect_drm_connector(wlr_conn);
+		}
+	}
+
+	bool is_connected = drm_conn->connection == DRM_MODE_CONNECTED;
+	bool was_connected = wlr_conn->status == DRM_MODE_CONNECTED;
+
+	if (!was_connected && is_connected) {
+		wlr_log(WLR_INFO, "'%s' connected", wlr_conn->name);
+		connect_drm_connector(wlr_conn, drm_conn);
+		r = true;
+	} else if (was_connected && !is_connected) {
+		wlr_log(WLR_INFO, "'%s' disconnected", wlr_conn->name);
+		disconnect_drm_connector(wlr_conn);
+	} else if (was_connected && is_connected) {
+		size_t edid_len = 0;
+		uint8_t *edid = get_drm_prop_blob(drm->fd,
+			wlr_conn->id, wlr_conn->props.edid, &edid_len);
+
+		if (edid_len != wlr_conn->edid_len || memcmp(edid, wlr_conn->edid, edid_len) != 0) {
+			wlr_log(WLR_INFO, "EDID changed on '%s'", wlr_conn->name);
+			disconnect_drm_connector(wlr_conn);
+			connect_drm_connector(wlr_conn, drm_conn);
+			r = true;
+		}
+
+		free(edid);
+	}
+
+out:
+	drmModeFreeConnector(drm_conn);
+	return r;
+}
+
+void scan_drm_connectors(struct wlr_drm_backend *drm,
+		struct wlr_device_hotplug_event *event) {
+	if (event != NULL && event->connector_id != 0) {
+		wlr_log(WLR_INFO, "Scanning DRM connector %"PRIu32" on %s",
+			event->connector_id, drm->name);
+	} else {
+		wlr_log(WLR_INFO, "Scanning DRM connectors on %s", drm->name);
+	}
+
+	update_drm_connector_list(drm);
+
+	struct wlr_drm_connector *new_outputs[64];
+	size_t new_outputs_len = 0;
+
+	if (event && event->connector_id) {
+		struct wlr_drm_connector *c = find_wlr_drm_connector(drm, event->connector_id);
+		if (c) {
+			if (scan_single_drm_connector(drm, c)) {
+				assert(new_outputs_len < sizeof(new_outputs) / sizeof(new_outputs[0]));
+				new_outputs[new_outputs_len++] = c;
+			}
+		} else {
+			wlr_log(WLR_ERROR, "Missing connector from hotplug event");
+		}
+	} else {
+		struct wlr_drm_connector *c;
+		wl_list_for_each(c, &drm->connectors, link) {
+			if (scan_single_drm_connector(drm, c)) {
+				assert(new_outputs_len < sizeof(new_outputs) / sizeof(new_outputs[0]));
+				new_outputs[new_outputs_len++] = c;
+			}
+		}
 	}
 
 	realloc_crtcs(drm, NULL);
@@ -1752,6 +1795,10 @@ static void disconnect_drm_connector(struct wlr_drm_connector *conn) {
 	// our wlr_drm_connector.
 	wlr_output_destroy(&conn->output);
 
+	free(conn->edid);
+	conn->edid = NULL;
+	conn->edid_len = 0;
+
 	assert(conn->status == DRM_MODE_DISCONNECTED);
 }
 
@@ -1759,6 +1806,7 @@ void destroy_drm_connector(struct wlr_drm_connector *conn) {
 	disconnect_drm_connector(conn);
 
 	wl_list_remove(&conn->link);
+	free(conn->edid);
 	free(conn);
 }
 
