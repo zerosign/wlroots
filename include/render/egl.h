@@ -7,7 +7,6 @@ struct wlr_egl {
 	EGLDisplay display;
 	EGLContext context;
 	EGLDeviceEXT device; // may be EGL_NO_DEVICE_EXT
-	struct gbm_device *gbm_device;
 
 	struct {
 		// Display extensions
@@ -23,7 +22,6 @@ struct wlr_egl {
 
 		// Client extensions
 		bool EXT_device_query;
-		bool KHR_platform_gbm;
 		bool EXT_platform_device;
 		bool KHR_display_reference;
 	} exts;

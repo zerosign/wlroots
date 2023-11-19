@@ -146,6 +146,8 @@ bool wlr_renderer_init_wl_shm(struct wlr_renderer *r,
 /**
  * Obtains the FD of the DRM device used for rendering, or -1 if unavailable.
  *
+ * The FD is guaranteed to be a DRM render node.
+ *
  * The caller doesn't have ownership of the FD, it must not close it.
  */
 int wlr_renderer_get_drm_fd(struct wlr_renderer *r);
