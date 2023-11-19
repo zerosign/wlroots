@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "types/wlr_xdg_shell.h"
+#include "xdg-shell-protocol.h"
 
 void handle_xdg_popup_ack_configure(
 		struct wlr_xdg_popup *popup,

@@ -10,7 +10,7 @@
 #define WLR_TYPES_WLR_FULLSCREEN_SHELL_V1_H
 
 #include <wayland-server-core.h>
-#include "fullscreen-shell-unstable-v1-protocol.h"
+#include <wayland-protocols/fullscreen-shell-unstable-v1.h>
 
 struct wlr_fullscreen_shell_v1 {
 	struct wl_global *global;

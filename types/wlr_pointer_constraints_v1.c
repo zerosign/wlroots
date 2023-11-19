@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_region.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+#include "pointer-constraints-unstable-v1-protocol.h"
 
 static const struct zwp_locked_pointer_v1_interface locked_pointer_impl;
 static const struct zwp_confined_pointer_v1_interface confined_pointer_impl;

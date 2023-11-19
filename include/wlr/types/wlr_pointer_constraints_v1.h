@@ -13,7 +13,7 @@
 #include <wayland-server-core.h>
 #include <pixman.h>
 #include <wlr/types/wlr_seat.h>
-#include "pointer-constraints-unstable-v1-protocol.h"
+#include <wayland-protocols/pointer-constraints-unstable-v1.h>
 
 struct wlr_seat;
 

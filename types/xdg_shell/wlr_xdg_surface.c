@@ -4,6 +4,7 @@
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include "types/wlr_xdg_shell.h"
+#include "xdg-shell-protocol.h"
 
 static void xdg_surface_configure_destroy(
 		struct wlr_xdg_surface_configure *configure) {

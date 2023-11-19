@@ -5,6 +5,7 @@
 #include <wlr/util/log.h>
 #include <wlr/util/edges.h>
 #include "types/wlr_xdg_shell.h"
+#include "xdg-shell-protocol.h"
 
 void handle_xdg_toplevel_ack_configure(
 		struct wlr_xdg_toplevel *toplevel,
