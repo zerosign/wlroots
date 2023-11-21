@@ -39,6 +39,7 @@ wlroots reads these environment variables
 ## Wayland backend
 
 * *WLR_WL_OUTPUTS*: when using the wayland backend specifies the number of outputs
+* *WLR_WL_GRAB_INPUT_SHORTCUT*: when using the wayland backend, specify the shortcut (mods+key) to toggle input grab of the focused wayland output. Examples: control+shift+alt, control_r, alt_l.
 
 ## X11 backend
 
