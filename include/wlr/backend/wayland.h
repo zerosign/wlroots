@@ -5,6 +5,7 @@
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/types/wlr_output.h>
+#include <xkbcommon/xkbcommon.h>
 
 struct wlr_input_device;
 
@@ -22,6 +23,15 @@ struct wlr_backend *wlr_wl_backend_create(struct wl_display *display,
  * Returns the remote struct wl_display used by the Wayland backend.
  */
 struct wl_display *wlr_wl_backend_get_remote_display(struct wlr_backend *backend);
+
+/**
+ * Sets the keyboard shortcut for toggle grabbing input of the focused wayland backend output.
+ *
+ * If modifiers_mask and keysym are zero or null, no shortcut will be used.
+ *
+ */
+void wlr_wl_backend_set_grab_input_shortcut(struct wlr_backend *backend, uint32_t modifiers_mask,
+		xkb_keysym_t keysym);
 
 /**
  * Adds a new output to this backend.
