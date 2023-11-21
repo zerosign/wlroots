@@ -57,17 +57,6 @@ bool begin_pixman_data_ptr_access(struct wlr_buffer *wlr_buffer, pixman_image_t 
 	return true;
 }
 
-static struct wlr_pixman_buffer *get_buffer(
-		struct wlr_pixman_renderer *renderer, struct wlr_buffer *wlr_buffer) {
-	struct wlr_pixman_buffer *buffer;
-	wl_list_for_each(buffer, &renderer->buffers, link) {
-		if (buffer->buffer == wlr_buffer) {
-			return buffer;
-		}
-	}
-	return NULL;
-}
-
 static const struct wlr_texture_impl texture_impl;
 
 bool wlr_texture_is_pixman(struct wlr_texture *texture) {
@@ -94,23 +83,39 @@ static const struct wlr_texture_impl texture_impl = {
 	.destroy = texture_destroy,
 };
 
+
 static void destroy_buffer(struct wlr_pixman_buffer *buffer) {
 	wl_list_remove(&buffer->link);
-	wl_list_remove(&buffer->buffer_destroy.link);
+	wlr_addon_finish(&buffer->addon);
+
+	if (buffer->shadow) {
+		pixman_image_unref(buffer->shadow);
+	}
 
 	pixman_image_unref(buffer->image);
 
 	free(buffer);
 }
 
-static void handle_destroy_buffer(struct wl_listener *listener, void *data) {
-	struct wlr_pixman_buffer *buffer =
-		wl_container_of(listener, buffer, buffer_destroy);
+static void handle_buffer_destroy(struct wlr_addon *addon) {
+	struct wlr_pixman_buffer *buffer = wl_container_of(addon, buffer, addon);
 	destroy_buffer(buffer);
 }
 
-static struct wlr_pixman_buffer *create_buffer(
-		struct wlr_pixman_renderer *renderer, struct wlr_buffer *wlr_buffer) {
+static const struct wlr_addon_interface buffer_addon_impl = {
+	.name = "wlr_pixman_buffer",
+	.destroy = handle_buffer_destroy,
+};
+
+static struct wlr_pixman_buffer *get_or_create_buffer(struct wlr_pixman_renderer *renderer,
+		struct wlr_buffer *wlr_buffer) {
+	struct wlr_addon *addon =
+		wlr_addon_find(&wlr_buffer->addons, renderer, &buffer_addon_impl);
+	if (addon) {
+		struct wlr_pixman_buffer *buffer = wl_container_of(addon, buffer, addon);
+		return buffer;
+	}
+
 	struct wlr_pixman_buffer *buffer = calloc(1, sizeof(*buffer));
 	if (buffer == NULL) {
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
@@ -137,6 +142,15 @@ static struct wlr_pixman_buffer *create_buffer(
 		goto error_buffer;
 	}
 
+	struct wlr_dmabuf_attributes dmabuf = {0};
+	if (wlr_buffer_get_dmabuf(wlr_buffer, &dmabuf) && dmabuf.prefer_shadow) {
+		buffer->shadow = pixman_image_create_bits(format, wlr_buffer->width, wlr_buffer->height,
+			NULL, stride);
+		if (!buffer->shadow) {
+			wlr_log(WLR_ERROR, "Failed to allocate pixman shadow image");
+		}
+	}
+
 	buffer->image = pixman_image_create_bits(format, wlr_buffer->width,
 			wlr_buffer->height, data, stride);
 	if (!buffer->image) {
@@ -144,8 +158,7 @@ static struct wlr_pixman_buffer *create_buffer(
 		goto error_buffer;
 	}
 
-	buffer->buffer_destroy.notify = handle_destroy_buffer;
-	wl_signal_add(&wlr_buffer->events.destroy, &buffer->buffer_destroy);
+	wlr_addon_init(&buffer->addon, &wlr_buffer->addons, renderer, &buffer_addon_impl);
 
 	wl_list_insert(&renderer->buffers, &buffer->link);
 
@@ -174,8 +187,13 @@ static bool pixman_begin(struct wlr_renderer *wlr_renderer, uint32_t width,
 
 static void pixman_end(struct wlr_renderer *wlr_renderer) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
+	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
+	assert(buffer != NULL);
 
-	assert(renderer->current_buffer != NULL);
+	if (buffer->shadow) {
+		pixman_image_composite32(PIXMAN_OP_SRC, buffer->shadow, NULL, buffer->image, 0, 0, 0,
+			0, 0, 0, renderer->width, renderer->height);
+	}
 
 	wlr_buffer_end_data_ptr_access(renderer->current_buffer->buffer);
 }
@@ -193,8 +211,9 @@ static void pixman_clear(struct wlr_renderer *wlr_renderer,
 	};
 
 	pixman_image_t *fill = pixman_image_create_solid_fill(&colour);
+	pixman_image_t *target = buffer->shadow ? buffer->shadow : buffer->image;
 
-	pixman_image_composite32(PIXMAN_OP_SRC, fill, NULL, buffer->image, 0, 0, 0,
+	pixman_image_composite32(PIXMAN_OP_SRC, fill, NULL, target, 0, 0, 0,
 			0, 0, 0, renderer->width, renderer->height);
 
 	pixman_image_unref(fill);
@@ -205,14 +224,16 @@ static void pixman_scissor(struct wlr_renderer *wlr_renderer,
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
 	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
 
+	pixman_image_t *target = buffer->shadow ? buffer->shadow : buffer->image;
+
 	if (box != NULL) {
 		struct pixman_region32 region = {0};
 		pixman_region32_init_rect(&region, box->x, box->y, box->width,
 				box->height);
-		pixman_image_set_clip_region32(buffer->image, &region);
+		pixman_image_set_clip_region32(target, &region);
 		pixman_region32_fini(&region);
 	} else {
-		pixman_image_set_clip_region32(buffer->image, NULL);
+		pixman_image_set_clip_region32(target, NULL);
 	}
 }
 
@@ -263,9 +284,9 @@ static bool pixman_render_subtexture_with_matrix(
 	pixman_image_set_transform(texture->image, &transform);
 
 	// TODO clip properly with src_x and src_y
-	pixman_image_composite32(PIXMAN_OP_OVER, texture->image, mask,
-			buffer->image, 0, 0, 0, 0, 0, 0, renderer->width,
-			renderer->height);
+	pixman_image_t *target = buffer->shadow ? buffer->shadow : buffer->image;
+	pixman_image_composite32(PIXMAN_OP_OVER, texture->image, mask, target,
+			0, 0, 0, 0, 0, 0, buffer->buffer->width, buffer->buffer->height);
 
 	if (texture->buffer != NULL) {
 		wlr_buffer_end_data_ptr_access(texture->buffer);
@@ -321,7 +342,8 @@ static void pixman_render_quad_with_matrix(struct wlr_renderer *wlr_renderer,
 
 	pixman_image_set_transform(image, &transform);
 
-	pixman_image_composite32(PIXMAN_OP_OVER, image, NULL, buffer->image,
+	pixman_image_t *target = buffer->shadow ? buffer->shadow : buffer->image;
+	pixman_image_composite32(PIXMAN_OP_OVER, image, NULL, target,
 			0, 0, 0, 0, 0, 0, renderer->width, renderer->height);
 
 	pixman_image_unref(image);
@@ -416,10 +438,7 @@ static bool pixman_bind_buffer(struct wlr_renderer *wlr_renderer,
 		return true;
 	}
 
-	struct wlr_pixman_buffer *buffer = get_buffer(renderer, wlr_buffer);
-	if (buffer == NULL) {
-		buffer = create_buffer(renderer, wlr_buffer);
-	}
+	struct wlr_pixman_buffer *buffer = get_or_create_buffer(renderer, wlr_buffer);
 	if (buffer == NULL) {
 		return false;
 	}
@@ -453,8 +472,7 @@ static uint32_t pixman_preferred_read_format(
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
 	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
 
-	pixman_format_code_t pixman_format = pixman_image_get_format(
-			buffer->image);
+	pixman_format_code_t pixman_format = pixman_image_get_format(buffer->image);
 
 	return get_drm_format_from_pixman(pixman_format);
 }
@@ -479,7 +497,8 @@ static bool pixman_read_pixels(struct wlr_renderer *wlr_renderer,
 	pixman_image_t *dst = pixman_image_create_bits_no_clear(fmt, width, height,
 			data, stride);
 
-	pixman_image_composite32(PIXMAN_OP_SRC, buffer->image, NULL, dst,
+	pixman_image_t *src = buffer->shadow ? buffer->shadow : buffer->image;
+	pixman_image_composite32(PIXMAN_OP_SRC, src, NULL, dst,
 			src_x, src_y, 0, 0, dst_x, dst_y, width, height);
 
 	pixman_image_unref(dst);
@@ -495,10 +514,7 @@ static struct wlr_render_pass *pixman_begin_buffer_pass(struct wlr_renderer *wlr
 		struct wlr_buffer *wlr_buffer, const struct wlr_buffer_pass_options *options) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
 
-	struct wlr_pixman_buffer *buffer = get_buffer(renderer, wlr_buffer);
-	if (buffer == NULL) {
-		buffer = create_buffer(renderer, wlr_buffer);
-	}
+	struct wlr_pixman_buffer *buffer = get_or_create_buffer(renderer, wlr_buffer);
 	if (buffer == NULL) {
 		return NULL;
 	}
@@ -560,6 +576,7 @@ pixman_image_t *wlr_pixman_texture_get_image(struct wlr_texture *wlr_texture) {
 pixman_image_t *wlr_pixman_renderer_get_current_image(
 		struct wlr_renderer *wlr_renderer) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
-	assert(renderer->current_buffer);
-	return renderer->current_buffer->image;
+	struct wlr_pixman_buffer *buffer = renderer->current_buffer;
+	assert(buffer);
+	return buffer->shadow ? buffer->shadow : buffer->image;
 }

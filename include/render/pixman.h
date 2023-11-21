@@ -29,11 +29,12 @@ struct wlr_pixman_renderer {
 struct wlr_pixman_buffer {
 	struct wlr_buffer *buffer;
 	struct wlr_pixman_renderer *renderer;
+	struct wl_list link; // wlr_pixman_renderer.buffers
 
 	pixman_image_t *image;
+	pixman_image_t *shadow;
 
-	struct wl_listener buffer_destroy;
-	struct wl_list link; // wlr_pixman_renderer.buffers
+	struct wlr_addon addon;
 };
 
 struct wlr_pixman_texture {

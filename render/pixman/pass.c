@@ -18,9 +18,15 @@ static struct wlr_pixman_texture *get_texture(struct wlr_texture *wlr_texture) {
 
 static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 	struct wlr_pixman_render_pass *pass = get_render_pass(wlr_pass);
+	struct wlr_pixman_buffer *buffer = pass->buffer;
 
-	wlr_buffer_end_data_ptr_access(pass->buffer->buffer);
-	wlr_buffer_unlock(pass->buffer->buffer);
+	if (buffer->shadow) {
+		pixman_image_composite32(PIXMAN_OP_SRC, buffer->shadow, NULL, buffer->image, 0, 0, 0,
+			0, 0, 0, buffer->buffer->width, buffer->buffer->height);
+	}
+
+	wlr_buffer_end_data_ptr_access(buffer->buffer);
+	wlr_buffer_unlock(buffer->buffer);
 	free(pass);
 
 	return true;
@@ -141,11 +147,13 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 
 	pixman_op_t op = get_pixman_blending(options->blend_mode);
 
-	pixman_image_set_clip_region32(buffer->image, (pixman_region32_t *)options->clip);
+	pixman_image_t *target = buffer->shadow ? buffer->shadow : buffer->image;
+
+	pixman_image_set_clip_region32(target, (pixman_region32_t *)options->clip);
 	pixman_image_composite32(op, texture->image, mask,
-		buffer->image, src_box.x, src_box.y, 0, 0, dest_x, dest_y,
+		target, src_box.x, src_box.y, 0, 0, dest_x, dest_y,
 		width, height);
-	pixman_image_set_clip_region32(buffer->image, NULL);
+	pixman_image_set_clip_region32(target, NULL);
 
 	pixman_image_set_transform(texture->image, NULL);
 
@@ -176,11 +184,12 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 	};
 
 	pixman_image_t *fill = pixman_image_create_solid_fill(&color);
+	pixman_image_t *target = buffer->shadow ? buffer->shadow : buffer->image;
 
-	pixman_image_set_clip_region32(buffer->image, (pixman_region32_t *)options->clip);
-	pixman_image_composite32(op, fill, NULL, buffer->image,
+	pixman_image_set_clip_region32(target, (pixman_region32_t *)options->clip);
+	pixman_image_composite32(op, fill, NULL, target,
 		0, 0, 0, 0, box.x, box.y, box.width, box.height);
-	pixman_image_set_clip_region32(buffer->image, NULL);
+	pixman_image_set_clip_region32(target, NULL);
 
 	pixman_image_unref(fill);
 }
