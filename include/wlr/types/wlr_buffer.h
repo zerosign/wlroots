@@ -132,33 +132,4 @@ bool wlr_buffer_begin_data_ptr_access(struct wlr_buffer *buffer, uint32_t flags,
 	void **data, uint32_t *format, size_t *stride);
 void wlr_buffer_end_data_ptr_access(struct wlr_buffer *buffer);
 
-/**
- * A client buffer.
- */
-struct wlr_client_buffer {
-	struct wlr_buffer base;
-
-	/**
-	 * The buffer's texture, if any. A buffer will not have a texture if the
-	 * client destroys the buffer before it has been released.
-	 */
-	struct wlr_texture *texture;
-	/**
-	 * The buffer this client buffer was created from. NULL if destroyed.
-	 */
-	struct wlr_buffer *source;
-
-	// private state
-
-	struct wl_listener source_destroy;
-
-	size_t n_ignore_locks;
-};
-
-/**
- * Get a client buffer from a generic buffer. If the buffer isn't a client
- * buffer, returns NULL.
- */
-struct wlr_client_buffer *wlr_client_buffer_get(struct wlr_buffer *buffer);
-
 #endif

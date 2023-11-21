@@ -29,7 +29,6 @@ wlr_files += files(
 	'xdg_shell/wlr_xdg_surface.c',
 	'xdg_shell/wlr_xdg_toplevel.c',
 	'buffer/buffer.c',
-	'buffer/client.c',
 	'buffer/dmabuf.c',
 	'buffer/readonly_data.c',
 	'buffer/resource.c',
