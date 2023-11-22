@@ -29,7 +29,7 @@ struct wlr_gles2_texture *gles2_get_texture(
 	return texture;
 }
 
-static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
+/*static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
 		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
 	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
 
@@ -103,6 +103,37 @@ static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
 	wlr_egl_restore_context(&prev_ctx);
 
 	wlr_buffer_end_data_ptr_access(buffer);
+
+	return true;
+}*/
+
+static bool gles2_texture_update_from_buffer(struct wlr_texture *wlr_texture,
+		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
+	struct wlr_gles2_texture *texture = gles2_get_texture(wlr_texture);
+
+	if (texture->target != GL_TEXTURE_2D || texture->image != EGL_NO_IMAGE_KHR) {
+		return false;
+	}
+
+	// TODO: checks
+
+	EGLSyncKHR sync = wlr_egl_create_reusable_sync(texture->renderer->egl);
+	if (sync == EGL_NO_SYNC_KHR) {
+		return false;
+	}
+
+	struct wlr_gles2_worker_task task = {
+		.buffer = wlr_buffer_lock(buffer),
+		.texture = texture,
+		.sync = sync,
+	};
+	pixman_region32_init(&task.region);
+	pixman_region32_copy(&task.region, damage);
+	if (!gles2_queue_upload(texture->renderer, &task)) {
+		return false;
+	}
+
+	texture->upload_sync = sync;
 
 	return true;
 }

@@ -3,6 +3,7 @@
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -35,6 +36,22 @@ struct wlr_gles2_tex_shader {
 	GLint tex;
 	GLint alpha;
 	GLint pos_attrib;
+};
+
+struct wlr_gles2_worker_task {
+	struct wlr_buffer *buffer;
+	struct wlr_gles2_texture *texture;
+	pixman_region32_t region;
+	EGLSyncKHR sync;
+
+	bool ok;
+};
+
+struct wlr_gles2_worker {
+	pthread_t thread;
+	struct wlr_egl *egl;
+	int worker_fd, control_fd;
+	struct wl_event_source *event_source;
 };
 
 struct wlr_gles2_renderer {
@@ -89,6 +106,8 @@ struct wlr_gles2_renderer {
 
 	struct wlr_gles2_buffer *current_buffer;
 	uint32_t viewport_width, viewport_height;
+
+	struct wlr_gles2_worker upload_worker;
 };
 
 struct wlr_gles2_render_timer {
@@ -132,6 +151,8 @@ struct wlr_gles2_texture {
 	// If imported from a wlr_buffer
 	struct wlr_buffer *buffer;
 	struct wlr_addon buffer_addon;
+
+	EGLSyncKHR upload_sync;
 };
 
 struct wlr_gles2_render_pass {
@@ -167,5 +188,8 @@ void pop_gles2_debug(struct wlr_gles2_renderer *renderer);
 
 struct wlr_gles2_render_pass *begin_gles2_buffer_pass(struct wlr_gles2_buffer *buffer,
 	struct wlr_gles2_render_timer *timer);
+
+bool gles2_queue_upload(struct wlr_gles2_renderer *renderer,
+	struct wlr_gles2_worker_task *task);
 
 #endif

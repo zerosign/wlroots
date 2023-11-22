@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-protocol.h>
@@ -654,14 +655,211 @@ static void load_gl_proc(void *proc_ptr, const char *name) {
 	*(void **)proc_ptr = proc;
 }
 
-struct wlr_renderer *wlr_gles2_renderer_create_with_drm_fd(int drm_fd) {
+static bool process_upload_task(struct wlr_gles2_worker_task *task) {
+	struct wlr_buffer *buffer = task->buffer;
+	struct wlr_gles2_texture *texture = task->texture;
+
+	void *data;
+	uint32_t format;
+	size_t stride;
+	if (!wlr_buffer_begin_data_ptr_access(buffer,
+			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+		return false;
+	}
+
+	const struct wlr_gles2_pixel_format *fmt =
+		get_gles2_format_from_drm(texture->drm_format);
+	assert(fmt);
+
+	const struct wlr_pixel_format_info *drm_fmt =
+		drm_get_pixel_format_info(texture->drm_format);
+	assert(drm_fmt);
+
+	push_gles2_debug(texture->renderer);
+
+	glBindTexture(GL_TEXTURE_2D, texture->tex);
+
+	int rects_len = 0;
+	const pixman_box32_t *rects = pixman_region32_rectangles(&task->region, &rects_len);
+	for (int i = 0; i < rects_len; i++) {
+		pixman_box32_t rect = rects[i];
+
+		glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / drm_fmt->bytes_per_block);
+		glPixelStorei(GL_UNPACK_SKIP_PIXELS_EXT, rect.x1);
+		glPixelStorei(GL_UNPACK_SKIP_ROWS_EXT, rect.y1);
+
+		int width = rect.x2 - rect.x1;
+		int height = rect.y2 - rect.y1;
+		glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x1, rect.y1, width, height,
+			fmt->gl_format, fmt->gl_type, data);
+	}
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	wlr_buffer_end_data_ptr_access(buffer);
+
+	return true;
+}
+
+static bool read_worker_task(struct wlr_gles2_worker_task *task, int fd) {
+	while (true) {
+		errno = 0;
+		ssize_t n = read(fd, task, sizeof(*task));
+		if (errno == EINTR) {
+			continue;
+		}
+		if (n == sizeof(*task)) {
+			return true;
+		} else if (n < 0) {
+			wlr_log_errno(WLR_ERROR, "read() failed");
+		} else if (n > 0) {
+			wlr_log(WLR_ERROR, "Unexpected partial read");
+		}
+		return false;
+	}
+}
+
+static bool write_worker_task(const struct wlr_gles2_worker_task *task, int fd) {
+	while (true) {
+		errno = 0;
+		ssize_t n = write(fd, task, sizeof(*task));
+		if (errno == EINTR) {
+			continue;
+		}
+		if (n == sizeof(*task)) {
+			return true;
+		} else if (n < 0) {
+			wlr_log_errno(WLR_ERROR, "write() failed");
+		} else if (n > 0) {
+			wlr_log(WLR_ERROR, "Unexpected partial write");
+		}
+		return false;
+	}
+}
+
+static void *run_uploads(void *data) {
+	struct wlr_gles2_worker *worker = data;
+
+	wlr_egl_make_current(worker->egl);
+
+	while (true) {
+		struct wlr_gles2_worker_task task = {0};
+		if (!read_worker_task(&task, worker->worker_fd)) {
+			break;
+		}
+		task.ok = process_upload_task(&task);
+		if (!write_worker_task(&task, worker->worker_fd)) {
+			break;
+		}
+	}
+
+	close(worker->worker_fd);
+
+	return NULL;
+}
+
+bool gles2_queue_upload(struct wlr_gles2_renderer *renderer,
+		struct wlr_gles2_worker_task *task) {
+	return write_worker_task(task, renderer->upload_worker.control_fd);
+}
+
+static int handle_upload_worker_result(int fd, uint32_t mask, void *data) {
+	struct wlr_egl *parent_egl = data;
+
+	if (mask & WL_EVENT_ERROR) {
+		wlr_log(WLR_ERROR, "Upload worker FD error");
+		return 0;
+	}
+	if (mask & WL_EVENT_HANGUP) {
+		return 0;
+	}
+
+	if (mask & WL_EVENT_READABLE) {
+		struct wlr_gles2_worker_task task = {0};
+		if (!read_worker_task(&task, fd)) {
+			return 0;
+		}
+		if (task.texture->upload_sync == task.sync) {
+			task.texture->upload_sync = EGL_NO_SYNC_KHR;
+		}
+		// Destroying the sync object implicitly signals it
+		wlr_egl_destroy_sync(parent_egl, task.sync);
+		wlr_buffer_unlock(task.buffer);
+	}
+
+	return 0;
+}
+
+static bool init_upload_worker(struct wlr_gles2_worker *worker,
+		struct wlr_egl *parent_egl, struct wl_event_loop *loop) {
+	EGLint attrs[8] = {0};
+	size_t attrs_len = 0;
+
+	attrs[attrs_len++] = EGL_CONTEXT_CLIENT_VERSION;
+	attrs[attrs_len++] = 2;
+
+	if (parent_egl->exts.EXT_create_context_robustness) {
+		attrs[attrs_len++] = EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_EXT;
+		attrs[attrs_len++] = EGL_LOSE_CONTEXT_ON_RESET_EXT;
+	}
+
+	attrs[attrs_len++] = EGL_NONE;
+	assert(attrs_len <= sizeof(attrs) / sizeof(attrs[0]));
+
+	EGLContext context = eglCreateContext(parent_egl->display,
+		EGL_NO_CONFIG_KHR, parent_egl->context, attrs);
+	if (context == EGL_NO_CONTEXT) {
+		wlr_log(WLR_ERROR, "eglCreateContext failed");
+		return false;
+	}
+
+	worker->egl = wlr_egl_create_with_context(parent_egl->display, context);
+	if (worker->egl == NULL) {
+		eglDestroyContext(parent_egl->display, context);
+		return false;
+	}
+
+	int sockets[2];
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
+		wlr_log_errno(WLR_ERROR, "pipe() failed");
+		goto error_egl;
+	}
+	worker->worker_fd = sockets[0];
+	worker->control_fd = sockets[1];
+
+	worker->event_source = wl_event_loop_add_fd(loop, worker->control_fd,
+		WL_EVENT_READABLE, handle_upload_worker_result, parent_egl);
+	if (worker->event_source == NULL) {
+		wlr_log(WLR_ERROR, "wl_event_loop_add_fd() failed");
+		goto error_fds;
+	}
+
+	if (pthread_create(&worker->thread, NULL, run_uploads, worker) != 0) {
+		wlr_log_errno(WLR_ERROR, "pthread_create failed");
+		goto error_event_source;
+	}
+
+	return true;
+
+error_event_source:
+	wl_event_source_remove(worker->event_source);
+error_fds:
+	close(worker->worker_fd);
+	close(worker->control_fd);
+error_egl:
+	wlr_egl_destroy(worker->egl);
+	return false;
+}
+
+struct wlr_renderer *wlr_gles2_renderer_create_with_drm_fd(int drm_fd,
+		struct wl_event_loop *loop) {
 	struct wlr_egl *egl = wlr_egl_create_with_drm_fd(drm_fd);
 	if (egl == NULL) {
 		wlr_log(WLR_ERROR, "Could not initialize EGL");
 		return NULL;
 	}
 
-	struct wlr_renderer *renderer = wlr_gles2_renderer_create(egl);
+	struct wlr_renderer *renderer = wlr_gles2_renderer_create(egl, loop);
 	if (!renderer) {
 		wlr_log(WLR_ERROR, "Failed to create GLES2 renderer");
 		wlr_egl_destroy(egl);
@@ -671,7 +869,8 @@ struct wlr_renderer *wlr_gles2_renderer_create_with_drm_fd(int drm_fd) {
 	return renderer;
 }
 
-struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
+struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl,
+		struct wl_event_loop *loop) {
 	if (!wlr_egl_make_current(egl)) {
 		return NULL;
 	}
@@ -836,6 +1035,10 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	pop_gles2_debug(renderer);
 
 	wlr_egl_unset_current(renderer->egl);
+
+	if (!init_upload_worker(&renderer->upload_worker, renderer->egl, loop)) {
+		goto error;
+	}
 
 	return &renderer->wlr_renderer;
 

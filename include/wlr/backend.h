@@ -19,6 +19,7 @@ struct wlr_backend_impl;
  */
 struct wlr_backend {
 	const struct wlr_backend_impl *impl;
+	struct wl_event_loop *event_loop;
 
 	struct {
 		/** Raised when destroyed */

@@ -207,7 +207,7 @@ struct wlr_backend *wlr_drm_backend_create(struct wl_display *display,
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
 		return NULL;
 	}
-	wlr_backend_init(&drm->backend, &backend_impl);
+	wlr_backend_init(&drm->backend, &backend_impl, wl_display_get_event_loop(display));
 
 	drm->session = session;
 	wl_list_init(&drm->fbs);

@@ -24,7 +24,7 @@ struct wlr_backend_impl {
  * to the provided struct wlr_backend_impl reference.
  */
 void wlr_backend_init(struct wlr_backend *backend,
-		const struct wlr_backend_impl *impl);
+		const struct wlr_backend_impl *impl, struct wl_event_loop *loop);
 /**
  * Emit the destroy event and clean up common backend state.
  */

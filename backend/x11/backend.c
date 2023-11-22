@@ -400,7 +400,7 @@ struct wlr_backend *wlr_x11_backend_create(struct wl_display *display,
 		return NULL;
 	}
 
-	wlr_backend_init(&x11->backend, &backend_impl);
+	wlr_backend_init(&x11->backend, &backend_impl, wl_display_get_event_loop(display));
 	x11->wl_display = display;
 	wl_list_init(&x11->outputs);
 
