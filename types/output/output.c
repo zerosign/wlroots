@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
-#include <backend/backend.h>
 #include <drm_fourcc.h>
 #include <stdlib.h>
+#include <backend/backend.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/swapchain.h>
 #include <wlr/types/wlr_compositor.h>

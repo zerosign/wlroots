@@ -4,13 +4,12 @@
 
 #include <assert.h>
 #include <stdlib.h>
-#include <types/wlr_tablet_v2.h>
 #include <wayland-util.h>
+#include <types/wlr_tablet_v2.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/util/log.h>
-
 #include "tablet-unstable-v2-protocol.h"
 
 void destroy_tablet_v2(struct wl_resource *resource) {

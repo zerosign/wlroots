@@ -1,9 +1,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_compositor.h>
-#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/util/transform.h>
 #include "types/wlr_scene.h"
 

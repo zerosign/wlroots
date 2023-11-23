@@ -1,28 +1,25 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <assert.h>
+#include <drm_fourcc.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
-
-#include <drm_fourcc.h>
-#include <xcb/dri3.h>
-#include <xcb/present.h>
-#include <xcb/render.h>
-#include <xcb/shm.h>
-#include <xcb/xcb.h>
-#include <xcb/xinput.h>
-
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/interfaces/wlr_touch.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/log.h>
-
+#include <xcb/dri3.h>
+#include <xcb/present.h>
+#include <xcb/render.h>
+#include <xcb/shm.h>
+#include <xcb/xcb.h>
+#include <xcb/xinput.h>
 #include "backend/x11.h"
-#include "util/time.h"
 #include "types/wlr_output.h"
+#include "util/time.h"
 
 static const uint32_t SUPPORTED_OUTPUT_STATE =
 	WLR_OUTPUT_STATE_BACKEND_OPTIONAL |

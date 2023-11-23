@@ -1,31 +1,30 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <drm_fourcc.h>
 #include <fcntl.h>
 #include <math.h>
 #include <poll.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <sys/types.h>
+#include <stdlib.h>
 #include <unistd.h>
-#include <drm_fourcc.h>
+#include <xf86drm.h>
+#include <sys/types.h>
 #include <vulkan/vulkan.h>
+#include <wlr/backend/interface.h>
 #include <wlr/render/interface.h>
+#include <wlr/render/vulkan.h>
 #include <wlr/types/wlr_drm.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
-#include <wlr/render/vulkan.h>
-#include <wlr/backend/interface.h>
-#include <wlr/types/wlr_linux_dmabuf_v1.h>
-#include <xf86drm.h>
-
 #include "render/dmabuf.h"
 #include "render/pixel_format.h"
 #include "render/vulkan.h"
 #include "render/vulkan/shaders/common.vert.h"
-#include "render/vulkan/shaders/texture.frag.h"
-#include "render/vulkan/shaders/quad.frag.h"
 #include "render/vulkan/shaders/output.frag.h"
+#include "render/vulkan/shaders/quad.frag.h"
+#include "render/vulkan/shaders/texture.frag.h"
 #include "types/wlr_buffer.h"
 #include "types/wlr_matrix.h"
 

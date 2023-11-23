@@ -10,11 +10,11 @@
 #define WLR_TYPES_WLR_LINUX_DMABUF_H
 
 #include <stdint.h>
-#include <sys/stat.h>
 #include <wayland-server-core.h>
-#include <wlr/types/wlr_buffer.h>
+#include <sys/stat.h>
 #include <wlr/render/dmabuf.h>
 #include <wlr/render/drm_format_set.h>
+#include <wlr/types/wlr_buffer.h>
 
 struct wlr_surface;
 

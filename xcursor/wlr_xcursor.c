@@ -28,8 +28,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wlr/util/log.h>
 #include <wlr/xcursor.h>
+#include <wlr/util/log.h>
 #include "xcursor/xcursor.h"
 
 static void xcursor_destroy(struct wlr_xcursor *cursor) {

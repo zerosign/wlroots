@@ -1,12 +1,12 @@
 #ifndef RENDER_GLES2_H
 #define RENDER_GLES2_H
 
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <wlr/render/egl.h>
 #include <wlr/render/gles2.h>
 #include <wlr/render/interface.h>

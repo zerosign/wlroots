@@ -4,8 +4,8 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_output.h>
-#include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/util/log.h>
 #include "wlr-output-power-management-unstable-v1-protocol.h"
 

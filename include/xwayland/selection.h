@@ -2,8 +2,8 @@
 #define XWAYLAND_SELECTION_H
 
 #include <stdbool.h>
-#include <xcb/xfixes.h>
 #include <wayland-util.h>
+#include <xcb/xfixes.h>
 
 #define INCR_CHUNK_SIZE (64 * 1024)
 

@@ -1,22 +1,18 @@
 #ifndef BACKEND_X11_H
 #define BACKEND_X11_H
 
-#include <wlr/config.h>
-
-#include <stdbool.h>
-
-#include <wayland-server-core.h>
-#include <xcb/xcb.h>
-#include <xcb/present.h>
-
 #include <pixman.h>
+#include <stdbool.h>
+#include <wayland-server-core.h>
+#include <wlr/config.h>
 #include <wlr/backend/x11.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/interfaces/wlr_touch.h>
-#include <wlr/types/wlr_pointer.h>
 #include <wlr/render/drm_format_set.h>
-
+#include <wlr/types/wlr_pointer.h>
+#include <xcb/present.h>
+#include <xcb/xcb.h>
 #include "config.h"
 
 #if HAVE_XCB_ERRORS

@@ -1,6 +1,6 @@
 #include <assert.h>
-#include <math.h>
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <wlr/util/region.h>
 

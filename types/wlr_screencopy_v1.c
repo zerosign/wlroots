@@ -1,18 +1,18 @@
 #include <assert.h>
-#include <stdlib.h>
 #include <drm_fourcc.h>
+#include <stdlib.h>
+#include <wlr/backend.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_screencopy_v1.h>
-#include <wlr/backend.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include <wlr/util/transform.h>
-#include "wlr-screencopy-unstable-v1-protocol.h"
 #include "render/pixel_format.h"
 #include "render/wlr_renderer.h"
+#include "wlr-screencopy-unstable-v1-protocol.h"
 
 #define SCREENCOPY_MANAGER_VERSION 3
 

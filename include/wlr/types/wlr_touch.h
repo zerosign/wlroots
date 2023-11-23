@@ -10,8 +10,8 @@
 #define WLR_TYPES_WLR_TOUCH_H
 
 #include <stdint.h>
-#include <wlr/types/wlr_input_device.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_input_device.h>
 
 struct wlr_touch_impl;
 

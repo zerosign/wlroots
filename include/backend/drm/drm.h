@@ -6,11 +6,11 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
+#include <xf86drmMode.h>
 #include <wlr/backend/drm.h>
 #include <wlr/backend/session.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/types/wlr_output_layer.h>
-#include <xf86drmMode.h>
 #include "backend/drm/iface.h"
 #include "backend/drm/properties.h"
 #include "backend/drm/renderer.h"

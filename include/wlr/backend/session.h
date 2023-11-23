@@ -2,8 +2,8 @@
 #define WLR_BACKEND_SESSION_H
 
 #include <stdbool.h>
-#include <sys/types.h>
 #include <wayland-server-core.h>
+#include <sys/types.h>
 
 struct libseat;
 

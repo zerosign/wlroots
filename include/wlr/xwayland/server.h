@@ -10,9 +10,9 @@
 #define WLR_XWAYLAND_SERVER_H
 
 #include <stdbool.h>
-#include <sys/types.h>
 #include <time.h>
 #include <wayland-server-core.h>
+#include <sys/types.h>
 
 struct wlr_xwayland_server_options {
 	bool lazy;

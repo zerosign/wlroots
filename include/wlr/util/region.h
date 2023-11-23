@@ -16,8 +16,8 @@
 #ifndef WLR_UTIL_REGION_H
 #define WLR_UTIL_REGION_H
 
-#include <stdbool.h>
 #include <pixman.h>
+#include <stdbool.h>
 #include <wayland-server-protocol.h>
 
 /**

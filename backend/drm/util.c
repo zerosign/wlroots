@@ -1,14 +1,14 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <drm.h>
 #include <drm_fourcc.h>
 #include <drm_mode.h>
-#include <drm.h>
-#include <libdisplay-info/cvt.h>
-#include <libdisplay-info/edid.h>
-#include <libdisplay-info/info.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libdisplay-info/cvt.h>
+#include <libdisplay-info/edid.h>
+#include <libdisplay-info/info.h>
 #include <wlr/util/log.h>
 #include "backend/drm/drm.h"
 #include "backend/drm/util.h"

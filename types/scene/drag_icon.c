@@ -1,7 +1,7 @@
 #include <stdlib.h>
-#include "wlr/types/wlr_compositor.h"
-#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_scene.h>
+#include "wlr/types/wlr_compositor.h"
 
 struct wlr_scene_drag_icon {
 	struct wlr_scene_tree *tree;

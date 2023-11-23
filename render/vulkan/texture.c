@@ -5,12 +5,12 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <wlr/render/wlr_texture.h>
-#include <wlr/render/vulkan.h>
-#include <wlr/util/log.h>
 #include <xf86drm.h>
+#include <sys/stat.h>
+#include <wlr/render/vulkan.h>
+#include <wlr/render/wlr_texture.h>
+#include <wlr/util/log.h>
 #include "render/pixel_format.h"
 #include "render/vulkan.h"
 

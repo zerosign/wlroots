@@ -10,8 +10,8 @@
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_drm.h>
 #include <wlr/util/log.h>
-#include "drm-protocol.h"
 #include "render/drm_format_set.h"
+#include "drm-protocol.h"
 
 #define WLR_DRM_VERSION 2
 

@@ -14,9 +14,9 @@
 #include "backend/drm/drm.h"
 #include "backend/drm/util.h"
 #include "render/drm_format_set.h"
-#include "render/allocator/allocator.h"
 #include "render/pixel_format.h"
 #include "render/wlr_renderer.h"
+#include "render/allocator/allocator.h"
 
 bool init_drm_renderer(struct wlr_drm_backend *drm,
 		struct wlr_drm_renderer *renderer) {

@@ -3,8 +3,9 @@
 #include <drm_fourcc.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 #include <unistd.h>
+#include <xf86drm.h>
+#include <sys/mman.h>
 #include <wlr/backend.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/wlr_renderer.h>
@@ -12,10 +13,9 @@
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
-#include "linux-dmabuf-unstable-v1-protocol.h"
 #include "render/drm_format_set.h"
 #include "util/shm.h"
+#include "linux-dmabuf-unstable-v1-protocol.h"
 
 #define LINUX_DMABUF_VERSION 4
 

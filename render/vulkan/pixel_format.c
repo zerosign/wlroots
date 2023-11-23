@@ -1,9 +1,9 @@
 #include <drm_fourcc.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <xf86drm.h>
 #include <vulkan/vulkan.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
 #include "render/pixel_format.h"
 #include "render/vulkan.h"
 

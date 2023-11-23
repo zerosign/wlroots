@@ -1,9 +1,9 @@
 #ifndef TYPES_WLR_TABLET_V2_H
 #define TYPES_WLR_TABLET_V2_H
 
-#include "tablet-unstable-v2-protocol.h"
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_tablet_v2.h>
+#include "tablet-unstable-v2-protocol.h"
 
 struct wlr_tablet_seat_v2 {
 	struct wl_list link; // wlr_tablet_manager_v2.seats

@@ -1,35 +1,31 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <drm_fourcc.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/mman.h>
-#include <sys/types.h>
 #include <unistd.h>
-
-#include <drm_fourcc.h>
 #include <wayland-server-core.h>
 #include <xf86drm.h>
-
+#include <sys/mman.h>
+#include <sys/types.h>
 #include <wlr/backend/interface.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/util/log.h>
-
 #include "backend/wayland.h"
 #include "render/drm_format_set.h"
 #include "render/pixel_format.h"
-
 #include "drm-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "pointer-gestures-unstable-v1-client-protocol.h"
 #include "presentation-time-client-protocol.h"
+#include "relative-pointer-unstable-v1-client-protocol.h"
+#include "tablet-unstable-v2-client-protocol.h"
+#include "viewporter-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
-#include "tablet-unstable-v2-client-protocol.h"
-#include "relative-pointer-unstable-v1-client-protocol.h"
-#include "viewporter-client-protocol.h"
 
 struct wlr_wl_linux_dmabuf_feedback_v1 {
 	struct wlr_wl_backend *backend;

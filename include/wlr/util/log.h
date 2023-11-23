@@ -16,10 +16,10 @@
 #ifndef WLR_UTIL_LOG_H
 #define WLR_UTIL_LOG_H
 
-#include <stdbool.h>
-#include <stdarg.h>
-#include <string.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <string.h>
 
 enum wlr_log_importance {
 	WLR_SILENT = 0,

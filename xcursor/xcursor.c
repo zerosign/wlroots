@@ -24,11 +24,11 @@
  */
 
 #define _DEFAULT_SOURCE
+#include <dirent.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
 #include "config.h"
 #include "xcursor/xcursor.h"
 

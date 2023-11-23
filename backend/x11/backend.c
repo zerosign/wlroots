@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <drm_fourcc.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -7,27 +8,22 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <xf86drm.h>
-
-#include <wlr/config.h>
-
-#include <drm_fourcc.h>
 #include <wayland-server-core.h>
-#include <xcb/xcb.h>
-#include <xcb/dri3.h>
-#include <xcb/present.h>
-#include <xcb/render.h>
-#include <xcb/shm.h>
-#include <xcb/xcb_renderutil.h>
-#include <xcb/xfixes.h>
-#include <xcb/xinput.h>
-
+#include <xf86drm.h>
+#include <wlr/config.h>
 #include <wlr/backend/interface.h>
 #include <wlr/backend/x11.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/util/log.h>
-
+#include <xcb/dri3.h>
+#include <xcb/present.h>
+#include <xcb/render.h>
+#include <xcb/shm.h>
+#include <xcb/xcb.h>
+#include <xcb/xcb_renderutil.h>
+#include <xcb/xfixes.h>
+#include <xcb/xinput.h>
 #include "backend/x11.h"
 #include "render/drm_format_set.h"
 

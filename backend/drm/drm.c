@@ -13,6 +13,8 @@
 #include <time.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
 #include <wlr/backend/interface.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
@@ -20,16 +22,14 @@
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include <wlr/util/transform.h>
-#include <xf86drm.h>
-#include <xf86drmMode.h>
+#include "config.h"
 #include "backend/drm/drm.h"
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
-#include "render/pixel_format.h"
 #include "render/drm_format_set.h"
+#include "render/pixel_format.h"
 #include "render/wlr_renderer.h"
 #include "util/env.h"
-#include "config.h"
 
 #if HAVE_LIBLIFTOFF
 #include <libliftoff.h>

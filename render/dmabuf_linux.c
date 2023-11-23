@@ -1,10 +1,9 @@
+#include <stdlib.h>
+#include <xf86drm.h>
 #include <linux/dma-buf.h>
 #include <linux/version.h>
-#include <stdlib.h>
 #include <sys/utsname.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
-
 #include "render/dmabuf.h"
 
 bool dmabuf_check_sync_file_import_export(void) {

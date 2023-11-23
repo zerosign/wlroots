@@ -1,8 +1,8 @@
 #ifndef UTIL_SET_H
 #define UTIL_SET_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 /**

@@ -2,9 +2,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
-#include <wlr/types/wlr_session_lock_v1.h>
-#include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/util/log.h>
 #include "ext-session-lock-v1-protocol.h"
 

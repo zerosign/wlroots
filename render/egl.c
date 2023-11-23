@@ -2,14 +2,14 @@
 #include <assert.h>
 #include <drm_fourcc.h>
 #include <fcntl.h>
+#include <gbm.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <gbm.h>
+#include <xf86drm.h>
 #include <wlr/render/egl.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
-#include <xf86drm.h>
 #include "render/egl.h"
 #include "util/env.h"
 

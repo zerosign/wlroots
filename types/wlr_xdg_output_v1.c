@@ -1,8 +1,8 @@
 #include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <wlr/types/wlr_output_layout.h>
+#include <stdlib.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/util/log.h>
 #include "xdg-output-unstable-v1-protocol.h"

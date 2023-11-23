@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
-#include <wlr/types/wlr_content_type_v1.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_content_type_v1.h>
 
 #define CONTENT_TYPE_VERSION 1
 
