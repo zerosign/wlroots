@@ -5,12 +5,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
-
+#include <wlr/config.h>
 #include <wlr/backend/headless.h>
 #include <wlr/backend/interface.h>
 #include <wlr/backend/multi.h>
 #include <wlr/backend/wayland.h>
-#include <wlr/config.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/util/log.h>
 #include "backend/backend.h"

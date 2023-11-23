@@ -1,7 +1,7 @@
 #include <limits.h>
+#include <pixman.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pixman.h>
 #include <wlr/types/wlr_damage_ring.h>
 #include <wlr/util/box.h>
 

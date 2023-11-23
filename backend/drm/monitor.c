@@ -1,7 +1,7 @@
-#include <wlr/util/log.h>
 #include <stdlib.h>
-#include "backend/drm/monitor.h"
+#include <wlr/util/log.h>
 #include "backend/multi.h"
+#include "backend/drm/monitor.h"
 #include "backend/session/session.h"
 
 static void drm_backend_monitor_destroy(struct wlr_drm_backend_monitor* monitor) {

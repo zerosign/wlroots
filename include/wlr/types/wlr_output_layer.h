@@ -11,8 +11,8 @@
 
 #include <wlr/render/drm_format_set.h>
 #include <wlr/types/wlr_output.h>
-#include <wlr/util/box.h>
 #include <wlr/util/addon.h>
+#include <wlr/util/box.h>
 
 /**
  * An output layer.

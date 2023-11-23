@@ -5,10 +5,10 @@
 #include <wlr/backend/session.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
-#include <wlr/interfaces/wlr_touch.h>
-#include <wlr/interfaces/wlr_tablet_tool.h>
-#include <wlr/interfaces/wlr_tablet_pad.h>
 #include <wlr/interfaces/wlr_switch.h>
+#include <wlr/interfaces/wlr_tablet_pad.h>
+#include <wlr/interfaces/wlr_tablet_tool.h>
+#include <wlr/interfaces/wlr_touch.h>
 #include <wlr/util/log.h>
 #include "backend/libinput.h"
 

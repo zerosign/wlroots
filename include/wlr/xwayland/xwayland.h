@@ -11,10 +11,10 @@
 
 #include <stdbool.h>
 #include <wayland-server-core.h>
+#include <wlr/util/addon.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_ewmh.h>
 #include <xcb/xcb_icccm.h>
-#include <wlr/util/addon.h>
 
 struct wlr_box;
 struct wlr_xwm;

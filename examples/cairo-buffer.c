@@ -1,18 +1,18 @@
 #define _POSIX_C_SOURCE 200112L
 
+#include <cairo.h>
+#include <drm_fourcc.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
-#include <cairo.h>
-#include <drm_fourcc.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
-#include <wlr/interfaces/wlr_buffer.h>
 
 /* Simple scene-graph example with a custom buffer drawn by Cairo.
  *

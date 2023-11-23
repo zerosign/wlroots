@@ -9,9 +9,9 @@
 #ifndef WLR_TYPES_WLR_POINTER_CONSTRAINTS_V1_H
 #define WLR_TYPES_WLR_POINTER_CONSTRAINTS_V1_H
 
+#include <pixman.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
-#include <pixman.h>
 #include <wlr/types/wlr_seat.h>
 #include "pointer-constraints-unstable-v1-protocol.h"
 

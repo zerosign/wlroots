@@ -1,8 +1,8 @@
 #ifndef UTIL_ARRAY_H
 #define UTIL_ARRAY_H
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <wayland-util.h>
 
 /**

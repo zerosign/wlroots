@@ -1,16 +1,16 @@
 #include <assert.h>
-#include <errno.h>
 #include <drm_fourcc.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
+#include <xf86drm.h>
 #include <wlr/backend/interface.h>
 #include <wlr/backend/session.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
 #include "backend/drm/drm.h"
 
 struct wlr_drm_backend *get_drm_backend_from_backend(

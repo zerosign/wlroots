@@ -1,9 +1,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <wlr/interfaces/wlr_pointer.h>
+#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
-#include <wlr/types/wlr_pointer.h>
 #include <wlr/util/log.h>
 #include "wlr-virtual-pointer-unstable-v1-protocol.h"
 

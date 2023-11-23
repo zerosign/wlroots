@@ -1,20 +1,14 @@
 #include <stdlib.h>
-
-#include <wlr/config.h>
-
 #include <linux/input-event-codes.h>
-
-#include <wayland-server-protocol.h>
-
-#include <xcb/xcb.h>
-#include <xcb/xfixes.h>
-#include <xcb/xinput.h>
-
+#include <wlr/config.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/interfaces/wlr_touch.h>
 #include <wlr/util/log.h>
-
+#include <xcb/xcb.h>
+#include <xcb/xfixes.h>
+#include <xcb/xinput.h>
+#include <wayland-server-protocol.h>
 #include "backend/x11.h"
 
 static void send_key_event(struct wlr_x11_backend *x11, uint32_t key,

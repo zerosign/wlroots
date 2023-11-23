@@ -1,9 +1,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
+#include <sys/mman.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/util/log.h>
 #include "interfaces/wlr_input_device.h"

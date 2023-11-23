@@ -1,11 +1,10 @@
 #include <assert.h>
 #include <drm_fourcc.h>
 #include <stdlib.h>
+#include <xf86drm.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/swapchain.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
-
 #include "render/drm_format_set.h"
 #include "types/wlr_output.h"
 

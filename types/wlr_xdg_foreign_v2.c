@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <assert.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>

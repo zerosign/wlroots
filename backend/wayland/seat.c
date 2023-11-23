@@ -6,17 +6,14 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-
 #include <wayland-client.h>
-
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_output.h>
-#include <wlr/interfaces/wlr_touch.h>
-#include <wlr/interfaces/wlr_tablet_tool.h>
 #include <wlr/interfaces/wlr_tablet_pad.h>
+#include <wlr/interfaces/wlr_tablet_tool.h>
+#include <wlr/interfaces/wlr_touch.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/util/log.h>
-
 #include "backend/wayland.h"
 #include "util/time.h"
 

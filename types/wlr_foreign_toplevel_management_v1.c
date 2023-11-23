@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <assert.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_seat.h>

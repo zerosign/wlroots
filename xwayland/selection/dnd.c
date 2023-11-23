@@ -6,8 +6,8 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/util/log.h>
 #include <xcb/xfixes.h>
-#include "xwayland/xwm.h"
 #include "xwayland/selection.h"
+#include "xwayland/xwm.h"
 
 static xcb_atom_t data_device_manager_dnd_action_to_atom(
 		struct wlr_xwm *xwm, enum wl_data_device_manager_dnd_action action) {

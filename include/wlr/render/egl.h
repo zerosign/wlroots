@@ -16,13 +16,12 @@
 #define EGL_NO_PLATFORM_SPECIFIC_TYPES
 #endif
 
-#include <wlr/config.h>
-
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
 #include <pixman.h>
 #include <stdbool.h>
 #include <wayland-server-core.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <wlr/config.h>
 #include <wlr/render/dmabuf.h>
 #include <wlr/render/drm_format_set.h>
 

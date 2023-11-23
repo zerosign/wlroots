@@ -1,9 +1,9 @@
 #ifndef UTIL_RECT_UNION_H
 #define UTIL_RECT_UNION_H
 
-#include <stdlib.h>
-#include <stdbool.h>
 #include <pixman.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <wayland-util.h>
 
 /**

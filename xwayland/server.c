@@ -5,16 +5,15 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdlib.h>
 #include <stdnoreturn.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
-#include <wlr/util/log.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <wlr/xwayland.h>
+#include <wlr/util/log.h>
 #include "config.h"
 #include "sockets.h"
 

@@ -1,20 +1,19 @@
 #define _POSIX_C_SOURCE 200112L
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES2/gl2.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include <wayland-server.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
 #include <wlr/backend/wayland.h>
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
-
 #include "xdg-shell-client-protocol.h"
 
 static struct wl_display *remote_display = NULL;

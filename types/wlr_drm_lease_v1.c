@@ -1,15 +1,15 @@
 #include <assert.h>
 #include <errno.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <wlr/backend/drm.h>
 #include <wlr/backend/multi.h>
 #include <wlr/types/wlr_drm_lease_v1.h>
 #include <wlr/util/log.h>
 #include "backend/drm/drm.h"
-#include "drm-lease-v1-protocol.h"
 #include "util/global.h"
+#include "drm-lease-v1-protocol.h"
 
 #define DRM_LEASE_DEVICE_V1_VERSION 1
 

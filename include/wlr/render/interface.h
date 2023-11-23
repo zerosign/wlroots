@@ -11,10 +11,10 @@
 
 #include <stdbool.h>
 #include <wayland-server-core.h>
+#include <wlr/render/dmabuf.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_output.h>
-#include <wlr/render/dmabuf.h>
 
 struct wlr_box;
 struct wlr_fbox;

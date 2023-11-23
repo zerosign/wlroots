@@ -10,9 +10,9 @@
 #define WLR_TYPES_WLR_VIRTUAL_POINTER_V1_H
 
 #include <wayland-server-core.h>
-#include <wayland-server-protocol.h>
-#include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/interfaces/wlr_output.h>
+#include <wlr/interfaces/wlr_pointer.h>
+#include <wayland-server-protocol.h>
 
 struct wlr_virtual_pointer_manager_v1 {
 	struct wl_global *global;

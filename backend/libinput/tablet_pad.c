@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
-#include <string.h>
 #include <libinput.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wlr/interfaces/wlr_tablet_pad.h>
 #include <wlr/util/log.h>
 #include "backend/libinput.h"

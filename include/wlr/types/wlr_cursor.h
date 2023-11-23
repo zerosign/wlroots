@@ -10,8 +10,8 @@
 #define WLR_TYPES_WLR_CURSOR_H
 
 #include <wayland-server-core.h>
-#include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
 
 struct wlr_input_device;
 struct wlr_xcursor_manager;

@@ -1,32 +1,31 @@
 #define _POSIX_C_SOURCE 199309L
 #include <assert.h>
 #include <drm_fourcc.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <wayland-server-protocol.h>
 #include <wayland-util.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <wlr/render/egl.h>
 #include <wlr/render/interface.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+#include <wayland-server-protocol.h>
+#include "common_vert_src.h"
+#include "quad_frag_src.h"
+#include "tex_external_frag_src.h"
+#include "tex_rgba_frag_src.h"
+#include "tex_rgbx_frag_src.h"
 #include "render/egl.h"
 #include "render/gles2.h"
 #include "render/pixel_format.h"
 #include "types/wlr_matrix.h"
 #include "util/time.h"
-
-#include "common_vert_src.h"
-#include "quad_frag_src.h"
-#include "tex_rgba_frag_src.h"
-#include "tex_rgbx_frag_src.h"
-#include "tex_external_frag_src.h"
 
 static const struct wlr_renderer_impl renderer_impl;
 static const struct wlr_render_timer_impl render_timer_impl;

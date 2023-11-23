@@ -1,24 +1,23 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
+#include <libseat.h>
 #include <libudev.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
-#include <wlr/backend/session.h>
-#include <wlr/config.h>
-#include <wlr/util/log.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <wlr/config.h>
+#include <wlr/backend/session.h>
+#include <wlr/util/log.h>
 #include "backend/session/session.h"
 #include "util/time.h"
-
-#include <libseat.h>
 
 #define WAIT_GPU_TIMEOUT 10000 // ms
 

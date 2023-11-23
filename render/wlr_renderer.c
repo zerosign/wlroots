@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <xf86drm.h>
+#include <wlr/config.h>
 #include <wlr/render/interface.h>
 #include <wlr/render/pixman.h>
 #include <wlr/render/wlr_renderer.h>
@@ -13,9 +15,6 @@
 #include <wlr/types/wlr_shm.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
-
-#include <wlr/config.h>
 
 #if WLR_HAS_GLES2_RENDERER
 #include <wlr/render/egl.h>

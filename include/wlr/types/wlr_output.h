@@ -12,11 +12,11 @@
 #include <pixman.h>
 #include <stdbool.h>
 #include <time.h>
-#include <wayland-server-protocol.h>
 #include <wayland-util.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/util/addon.h>
+#include <wayland-server-protocol.h>
 
 enum wlr_output_mode_aspect_ratio {
 	WLR_OUTPUT_MODE_ASPECT_RATIO_NONE,

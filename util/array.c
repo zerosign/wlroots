@@ -1,6 +1,6 @@
-#include "util/array.h"
 #include <assert.h>
 #include <string.h>
+#include "util/array.h"
 
 void array_remove_at(struct wl_array *arr, size_t offset, size_t size) {
 	assert(arr->size >= offset + size);

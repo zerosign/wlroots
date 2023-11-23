@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/log.h>
 #include "primary-selection-unstable-v1-protocol.h"

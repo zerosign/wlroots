@@ -1,8 +1,8 @@
-#include <wlr/types/wlr_xdg_foreign_registry.h>
-#include "util/token.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wlr/types/wlr_xdg_foreign_registry.h>
+#include "util/token.h"
 
 bool wlr_xdg_foreign_exported_init(
 		struct wlr_xdg_foreign_exported *exported,

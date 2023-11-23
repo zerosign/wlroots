@@ -1,14 +1,14 @@
 #ifndef RENDER_VULKAN_H
 #define RENDER_VULKAN_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include <stdbool.h>
 #include <vulkan/vulkan.h>
-#include <wlr/render/wlr_renderer.h>
-#include <wlr/render/wlr_texture.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/render/interface.h>
+#include <wlr/render/wlr_renderer.h>
+#include <wlr/render/wlr_texture.h>
 #include <wlr/util/addon.h>
 #include "util/rect_union.h"
 

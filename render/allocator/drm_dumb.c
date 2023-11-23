@@ -5,20 +5,19 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <unistd.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+#include <sys/mman.h>
 #include <wlr/backend.h>
 #include <wlr/backend/session.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
-#include <xf86drmMode.h>
-
-#include "render/allocator/drm_dumb.h"
 #include "render/drm_format_set.h"
 #include "render/pixel_format.h"
+#include "render/allocator/drm_dumb.h"
 
 static const struct wlr_buffer_impl buffer_impl;
 

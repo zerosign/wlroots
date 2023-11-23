@@ -1,6 +1,6 @@
 #include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>

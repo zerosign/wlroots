@@ -5,12 +5,11 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland/shell.h>

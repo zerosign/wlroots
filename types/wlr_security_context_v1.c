@@ -2,9 +2,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <wlr/types/wlr_security_context_v1.h>
 #include <wlr/util/log.h>
 #include "security-context-v1-protocol.h"

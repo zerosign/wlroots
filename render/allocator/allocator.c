@@ -3,17 +3,17 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
 #include <wlr/config.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
 #include <wlr/util/log.h>
-#include <xf86drm.h>
-#include <xf86drmMode.h>
 #include "backend/backend.h"
+#include "render/wlr_renderer.h"
 #include "render/allocator/allocator.h"
 #include "render/allocator/drm_dumb.h"
 #include "render/allocator/shm.h"
-#include "render/wlr_renderer.h"
 
 #if WLR_HAS_GBM_ALLOCATOR
 #include "render/allocator/gbm.h"

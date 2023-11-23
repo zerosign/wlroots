@@ -2,8 +2,8 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include <assert.h>
-#include <stdlib.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_text_input_v3.h>
 #include <wlr/util/log.h>

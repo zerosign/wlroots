@@ -1,10 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
 #include <libliftoff.h>
-#include <sys/stat.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <wlr/util/log.h>
-
 #include "backend/drm/drm.h"
 #include "backend/drm/iface.h"
 

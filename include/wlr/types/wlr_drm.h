@@ -9,9 +9,9 @@
 #ifndef WLR_TYPES_WLR_DRM_H
 #define WLR_TYPES_WLR_DRM_H
 
-#include <wayland-server-protocol.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/types/wlr_buffer.h>
+#include <wayland-server-protocol.h>
 
 struct wlr_renderer;
 

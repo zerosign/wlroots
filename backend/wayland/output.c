@@ -1,26 +1,22 @@
 #include <assert.h>
+#include <drm_fourcc.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <wayland-client.h>
 #include <sys/mman.h>
 #include <sys/types.h>
-#include <unistd.h>
-
-#include <drm_fourcc.h>
-#include <wayland-client.h>
-
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>
-
 #include "backend/wayland.h"
 #include "render/pixel_format.h"
 #include "render/wlr_renderer.h"
 #include "types/wlr_output.h"
-
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "presentation-time-client-protocol.h"
 #include "viewporter-client-protocol.h"

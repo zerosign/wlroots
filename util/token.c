@@ -1,15 +1,14 @@
 #define _POSIX_C_SOURCE 200809L
-#include "util/token.h"
-#include "wlr/util/log.h"
-
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include "util/token.h"
+#include "wlr/util/log.h"
 
 bool generate_token(char out[static TOKEN_SIZE]) {
 	static FILE *urandom = NULL;

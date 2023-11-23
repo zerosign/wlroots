@@ -2,8 +2,8 @@
 #include <pixman.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <wayland-server-protocol.h>
 #include <wlr/types/wlr_region.h>
+#include <wayland-server-protocol.h>
 #include "types/wlr_region.h"
 
 static const struct wl_region_interface region_impl;

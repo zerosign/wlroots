@@ -1,11 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <wayland-server-core.h>
-#include <wayland-server-protocol.h>
 #include <xkbcommon/xkbcommon.h>
+#include <wayland-server-protocol.h>
 #include "types/wlr_keyboard.h"
 #include "wlr/interfaces/wlr_keyboard.h"
 #include "wlr/types/wlr_keyboard.h"

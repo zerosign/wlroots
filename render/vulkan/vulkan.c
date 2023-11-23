@@ -4,16 +4,16 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <math.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <xf86drm.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <vulkan/vulkan.h>
-#include <wlr/util/log.h>
-#include <wlr/version.h>
 #include <wlr/config.h>
+#include <wlr/version.h>
+#include <wlr/util/log.h>
 #include "render/dmabuf.h"
 #include "render/vulkan.h"
 

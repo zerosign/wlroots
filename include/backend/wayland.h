@@ -2,18 +2,16 @@
 #define BACKEND_WAYLAND_H
 
 #include <stdbool.h>
-
 #include <wayland-client.h>
 #include <wayland-server-core.h>
-
 #include <wlr/backend/wayland.h>
+#include <wlr/render/drm_format_set.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_tablet_pad.h>
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/types/wlr_touch.h>
-#include <wlr/render/drm_format_set.h>
 
 struct wlr_wl_backend {
 	struct wlr_backend backend;

@@ -3,15 +3,15 @@
 #endif
 #include <assert.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <wayland-util.h>
+#include <sys/mman.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_input_method_v2.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
-#include "input-method-unstable-v2-protocol.h"
 #include "util/shm.h"
+#include "input-method-unstable-v2-protocol.h"
 
 // Note: zwp_input_popup_surface_v2 and zwp_input_method_keyboard_grab_v2 objects
 // become inert when the corresponding zwp_input_method_v2 is destroyed
