@@ -436,6 +436,7 @@ struct wlr_vk_shared_buffer {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
 	VkDeviceSize buf_size;
+	void *map;
 	struct wl_array allocs; // struct wlr_vk_allocation
 };
 

@@ -178,6 +178,9 @@ static void shared_buffer_destroy(struct wlr_vk_renderer *r,
 	}
 
 	wl_array_release(&buffer->allocs);
+	if (buffer->map) {
+		vkUnmapMemory(r->dev->dev, buffer->memory);
+	}
 	if (buffer->buffer) {
 		vkDestroyBuffer(r->dev->dev, buffer->buffer, NULL);
 	}
@@ -299,6 +302,12 @@ struct wlr_vk_buffer_span vulkan_get_stage_span(struct wlr_vk_renderer *r,
 	res = vkBindBufferMemory(r->dev->dev, buf->buffer, buf->memory, 0);
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("vkBindBufferMemory", res);
+		goto error;
+	}
+
+	res = vkMapMemory(r->dev->dev, buf->memory, 0, VK_WHOLE_SIZE, 0, &buf->map);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkMapMemory", res);
 		goto error;
 	}
 

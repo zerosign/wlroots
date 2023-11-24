@@ -78,7 +78,6 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		VkAccessFlags src_access) {
 	VkResult res;
 	struct wlr_vk_renderer *renderer = texture->renderer;
-	VkDevice dev = texture->renderer->dev->dev;
 
 	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(texture->format->drm);
 	assert(format_info);
@@ -145,19 +144,9 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		buf_off += height * packed_stride;
 	}
 
-	void *vmap;
-	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
-		bsize, 0, &vmap);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkMapMemory", res);
-		free(copies);
-		return false;
-	}
-
-	copy_pixels(vmap, vdata, texture->wlr_texture.width,
+	char *dst = (char *)span.buffer->map + span.alloc.start;
+	copy_pixels(dst, vdata, texture->wlr_texture.width,
 		stride, bsize, region, format_info);
-
-	vkUnmapMemory(dev, span.buffer->memory);
 
 	VkSemaphoreSignalInfoKHR signal_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO_KHR,
