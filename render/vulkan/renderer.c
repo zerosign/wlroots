@@ -1047,6 +1047,7 @@ static void vulkan_destroy(struct wlr_renderer *wlr_renderer) {
 	}
 
 	vkDestroySemaphore(dev->dev, renderer->timeline_semaphore, NULL);
+	vkDestroySemaphore(dev->dev, renderer->upload_timeline_semaphore, NULL);
 	vkDestroyPipelineLayout(dev->dev, renderer->output_pipe_layout, NULL);
 	vkDestroyDescriptorSetLayout(dev->dev, renderer->output_ds_layout, NULL);
 	vkDestroyCommandPool(dev->dev, renderer->command_pool, NULL);
@@ -2189,6 +2190,12 @@ struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev
 	};
 	res = vkCreateSemaphore(dev->dev, &semaphore_info, NULL,
 		&renderer->timeline_semaphore);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateSemaphore", res);
+		goto error;
+	}
+	res = vkCreateSemaphore(dev->dev, &semaphore_info, NULL,
+		&renderer->upload_timeline_semaphore);
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("vkCreateSemaphore", res);
 		goto error;

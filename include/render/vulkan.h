@@ -51,6 +51,7 @@ struct wlr_vk_device {
 		PFN_vkGetMemoryFdPropertiesKHR vkGetMemoryFdPropertiesKHR;
 		PFN_vkWaitSemaphoresKHR vkWaitSemaphoresKHR;
 		PFN_vkGetSemaphoreCounterValueKHR vkGetSemaphoreCounterValueKHR;
+		PFN_vkSignalSemaphoreKHR vkSignalSemaphoreKHR;
 		PFN_vkGetSemaphoreFdKHR vkGetSemaphoreFdKHR;
 		PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR;
 		PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
@@ -251,6 +252,9 @@ struct wlr_vk_renderer {
 
 	VkSemaphore timeline_semaphore;
 	uint64_t timeline_point;
+
+	VkSemaphore upload_timeline_semaphore;
+	uint64_t upload_timeline_point;
 
 	size_t last_pool_size;
 	struct wl_list descriptor_pools; // wlr_vk_descriptor_pool.link

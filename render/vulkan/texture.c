@@ -81,6 +81,8 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		return false;
 	}
 
+	uint64_t timeline_point = ++renderer->upload_timeline_point;
+
 	void *vmap;
 	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
 		bsize, 0, &vmap);
@@ -140,6 +142,18 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 
 	assert((uint32_t)(map - (char *)vmap) == bsize);
 	vkUnmapMemory(dev, span.buffer->memory);
+
+	VkSemaphoreSignalInfoKHR signal_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO_KHR,
+		.semaphore = renderer->upload_timeline_semaphore,
+		.value = timeline_point,
+	};
+	res = renderer->dev->api.vkSignalSemaphoreKHR(renderer->dev->dev, &signal_info);
+	if (res != VK_SUCCESS) {
+		free(copies);
+		wlr_vk_error("vkMapMemory", res);
+		return false;
+	}
 
 	// record staging cb
 	// will be executed before next frame

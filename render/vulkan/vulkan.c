@@ -617,6 +617,8 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	load_device_proc(dev, "vkWaitSemaphoresKHR", &dev->api.vkWaitSemaphoresKHR);
 	load_device_proc(dev, "vkGetSemaphoreCounterValueKHR",
 		&dev->api.vkGetSemaphoreCounterValueKHR);
+	load_device_proc(dev, "vkSignalSemaphoreKHR",
+		&dev->api.vkSignalSemaphoreKHR);
 	load_device_proc(dev, "vkGetSemaphoreFdKHR", &dev->api.vkGetSemaphoreFdKHR);
 	load_device_proc(dev, "vkImportSemaphoreFdKHR", &dev->api.vkImportSemaphoreFdKHR);
 	load_device_proc(dev, "vkQueueSubmit2KHR", &dev->api.vkQueueSubmit2KHR);
