@@ -46,6 +46,7 @@ wlr_files += files(
 )
 
 wlr_deps += dep_vulkan
+wlr_deps += dependency('threads')
 features += { 'vulkan-renderer': true }
 
 subdir('shaders')

@@ -267,7 +267,7 @@ static struct wlr_renderer *renderer_autocreate(struct wlr_backend *backend, int
 			log_creation_failure(is_auto, "Cannot create Vulkan renderer: no DRM FD available");
 		} else {
 #if WLR_HAS_VULKAN_RENDERER
-			renderer = wlr_vk_renderer_create_with_drm_fd(drm_fd);
+			renderer = wlr_vk_renderer_create_with_drm_fd(loop, drm_fd);
 #else
 			wlr_log(WLR_ERROR, "Cannot create Vulkan renderer: disabled at compile-time");
 #endif

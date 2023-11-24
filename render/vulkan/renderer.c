@@ -369,6 +369,7 @@ bool vulkan_submit_stage_wait(struct wlr_vk_renderer *renderer) {
 		return false;
 	}
 
+	// TODO
 	VkTimelineSemaphoreSubmitInfoKHR timeline_submit_info = {
 		.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR,
 		.signalSemaphoreValueCount = 1,
@@ -2153,7 +2154,8 @@ error:
 	return NULL;
 }
 
-struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev) {
+struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev,
+		struct wl_event_loop *loop) {
 	struct wlr_vk_renderer *renderer;
 	VkResult res;
 	if (!(renderer = calloc(1, sizeof(*renderer)))) {
@@ -2210,6 +2212,10 @@ struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev
 		goto error;
 	}
 
+	if (!vulkan_init_upload_worker(renderer, loop)) {
+		goto error;
+	}
+
 	return &renderer->wlr_renderer;
 
 error:
@@ -2217,7 +2223,8 @@ error:
 	return NULL;
 }
 
-struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
+struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(struct wl_event_loop *loop,
+		int drm_fd) {
 	wlr_log(WLR_INFO, "The vulkan renderer is only experimental and "
 		"not expected to be ready for daily use");
 	wlr_log(WLR_INFO, "Run with VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation "
@@ -2252,7 +2259,7 @@ struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
 		return NULL;
 	}
 
-	return vulkan_renderer_create_for_device(dev);
+	return vulkan_renderer_create_for_device(dev, loop);
 }
 
 VkInstance wlr_vk_renderer_get_instance(struct wlr_renderer *renderer) {
