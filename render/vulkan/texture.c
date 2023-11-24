@@ -36,6 +36,40 @@ static VkImageAspectFlagBits mem_plane_aspect(unsigned i) {
 	}
 }
 
+static void copy_pixels(char *vmap, const char *vdata, uint32_t tex_width,
+		uint32_t stride, uint32_t size, const pixman_region32_t *region,
+		const struct wlr_pixel_format_info *format_info) {
+	int rects_len = 0;
+	const pixman_box32_t *rects = pixman_region32_rectangles(region, &rects_len);
+
+	char *map = vmap;
+	for (int i = 0; i < rects_len; i++) {
+		pixman_box32_t rect = rects[i];
+		uint32_t width = rect.x2 - rect.x1;
+		uint32_t height = rect.y2 - rect.y1;
+		uint32_t src_x = rect.x1;
+		uint32_t src_y = rect.y1;
+		uint32_t packed_stride = (uint32_t)pixel_format_info_min_stride(format_info, width);
+
+		// write data into staging buffer span
+		const char *pdata = vdata; // data iterator
+		pdata += stride * src_y;
+		pdata += format_info->bytes_per_block * src_x;
+		if (src_x == 0 && width == tex_width && stride == packed_stride) {
+			memcpy(map, pdata, packed_stride * height);
+			map += packed_stride * height;
+		} else {
+			for (unsigned i = 0u; i < height; ++i) {
+				memcpy(map, pdata, packed_stride);
+				pdata += stride;
+				map += packed_stride;
+			}
+		}
+	}
+
+	assert((uint32_t)(map - vmap) == size);
+}
+
 // Will transition the texture to shaderReadOnlyOptimal layout for reading
 // from fragment shader later on
 static bool write_pixels(struct wlr_vk_texture *texture,
@@ -83,19 +117,7 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 
 	uint64_t timeline_point = ++renderer->upload_timeline_point;
 
-	void *vmap;
-	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
-		bsize, 0, &vmap);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkMapMemory", res);
-		free(copies);
-		return false;
-	}
-	char *map = (char *)vmap;
-
-	// upload data
-
-	uint32_t buf_off = span.alloc.start + (map - (char *)vmap);
+	uint32_t buf_off = span.alloc.start;
 	for (int i = 0; i < rects_len; i++) {
 		pixman_box32_t rect = rects[i];
 		uint32_t width = rect.x2 - rect.x1;
@@ -103,22 +125,6 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		uint32_t src_x = rect.x1;
 		uint32_t src_y = rect.y1;
 		uint32_t packed_stride = (uint32_t)pixel_format_info_min_stride(format_info, width);
-
-		// write data into staging buffer span
-		const char *pdata = vdata; // data iterator
-		pdata += stride * src_y;
-		pdata += format_info->bytes_per_block * src_x;
-		if (src_x == 0 && width == texture->wlr_texture.width &&
-				stride == packed_stride) {
-			memcpy(map, pdata, packed_stride * height);
-			map += packed_stride * height;
-		} else {
-			for (unsigned i = 0u; i < height; ++i) {
-				memcpy(map, pdata, packed_stride);
-				pdata += stride;
-				map += packed_stride;
-			}
-		}
 
 		copies[i] = (VkBufferImageCopy) {
 			.imageExtent.width = width,
@@ -136,11 +142,21 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 			.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 		};
 
-
 		buf_off += height * packed_stride;
 	}
 
-	assert((uint32_t)(map - (char *)vmap) == bsize);
+	void *vmap;
+	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
+		bsize, 0, &vmap);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkMapMemory", res);
+		free(copies);
+		return false;
+	}
+
+	copy_pixels(vmap, vdata, texture->wlr_texture.width,
+		stride, bsize, region, format_info);
+
 	vkUnmapMemory(dev, span.buffer->memory);
 
 	VkSemaphoreSignalInfoKHR signal_info = {
