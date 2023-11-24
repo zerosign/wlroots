@@ -16,6 +16,8 @@
 #include "render/pixel_format.h"
 #include "render/vulkan.h"
 
+#include "util/time.h"
+
 static const struct wlr_texture_impl texture_impl;
 
 bool wlr_texture_is_vk(struct wlr_texture *wlr_texture) {
@@ -110,8 +112,16 @@ static bool write_upload_task(const struct wlr_vk_upload_task *task, int fd) {
 
 static void process_upload_task(struct wlr_vk_renderer *renderer,
 		struct wlr_vk_upload_task *task) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t start = timespec_to_nsec(&ts);
+
 	copy_pixels(task->dst, task->src, task->buffer->width, task->src_stride,
 		task->dst_size, &task->region, task->format_info);
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t dur_ns = timespec_to_nsec(&ts) - start;
+	wlr_log(WLR_INFO, "UPLOAD: %f ms", (double)dur_ns / 1000 / 1000);
 
 	VkSemaphoreSignalInfoKHR signal_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO_KHR,
@@ -147,6 +157,11 @@ static void handle_upload_task_complete(struct wlr_vk_renderer *renderer,
 	wlr_buffer_end_data_ptr_access(task->buffer);
 	wlr_buffer_unlock(task->buffer);
 	pixman_region32_fini(&task->region);
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t dur_ns = timespec_to_nsec(&ts) - task->start;
+	wlr_log(WLR_INFO, "TOTAL: %f ms", (double)dur_ns / 1000 / 1000);
 }
 
 static int handle_upload_fd_event(int fd, uint32_t mask, void *data) {
@@ -217,6 +232,10 @@ static bool start_upload(struct wlr_vk_texture *texture, struct wlr_buffer *buff
 		VkImageLayout old_layout, VkPipelineStageFlags src_stage,
 		VkAccessFlags src_access) {
 	struct wlr_vk_renderer *renderer = texture->renderer;
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t start = timespec_to_nsec(&ts);
 
 	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(texture->format->drm);
 	assert(format_info);
@@ -292,13 +311,22 @@ static bool start_upload(struct wlr_vk_texture *texture, struct wlr_buffer *buff
 		.src_stride = stride,
 		.dst_size = bsize,
 		.format_info = format_info,
+		.start = start,
 	};
 	pixman_region32_init(&task.region);
 	pixman_region32_copy(&task.region, region);
+#if 1
 	if (!write_upload_task(&task, renderer->upload.control_fd)) {
 		free(copies);
 		return false;
 	}
+#else
+	process_upload_task(renderer, &task);
+	handle_upload_task_complete(renderer, &task);
+#endif
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	start = timespec_to_nsec(&ts);
 
 	// record staging cb
 	// will be executed before next frame
@@ -308,6 +336,10 @@ static bool start_upload(struct wlr_vk_texture *texture, struct wlr_buffer *buff
 		return false;
 	}
 
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t dur_ns = timespec_to_nsec(&ts) - start;
+	wlr_log(WLR_INFO, "STARTUP: %f ms", (double)dur_ns / 1000 / 1000);
+
 	vulkan_change_layout(cb, texture->image,
 		old_layout, src_stage, src_access,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -315,6 +347,7 @@ static bool start_upload(struct wlr_vk_texture *texture, struct wlr_buffer *buff
 
 	vkCmdCopyBufferToImage(cb, span.buffer->buffer, texture->image,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)rects_len, copies);
+
 	vulkan_change_layout(cb, texture->image,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_ACCESS_TRANSFER_WRITE_BIT,

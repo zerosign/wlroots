@@ -317,6 +317,7 @@ struct wlr_vk_upload_task {
 	uint32_t src_stride, dst_size;
 	pixman_region32_t region;
 	const struct wlr_pixel_format_info *format_info;
+	int64_t start;
 };
 
 struct wlr_vk_pipeline *setup_get_or_create_pipeline(
