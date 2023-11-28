@@ -51,7 +51,12 @@ struct wlr_buffer {
 
 	bool dropped;
 	size_t n_locks;
-	bool accessing_data_ptr;
+
+	size_t n_data_ptr_accesses;
+	uint32_t data_ptr_access_flags; // bitfield of wlr_buffer_data_ptr_access_flag
+	void *data_ptr_access_data;
+	uint32_t data_ptr_access_format;
+	size_t data_ptr_access_stride;
 
 	struct {
 		struct wl_signal destroy;
