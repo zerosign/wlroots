@@ -273,14 +273,6 @@ struct wlr_vk_renderer {
 		uint64_t last_timeline_point;
 		struct wl_list buffers; // wlr_vk_shared_buffer.link
 	} stage;
-
-	struct {
-		bool initialized;
-		uint32_t drm_format;
-		uint32_t width, height;
-		VkImage dst_image;
-		VkDeviceMemory dst_img_memory;
-	} read_pixels_cache;
 };
 
 // vertex shader push constant range data
