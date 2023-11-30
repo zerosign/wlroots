@@ -97,7 +97,7 @@ static struct wlr_gbm_buffer *create_buffer(struct wlr_gbm_allocator *alloc,
 
 	bool has_modifier = true;
 	uint64_t fallback_modifier = DRM_FORMAT_MOD_INVALID;
-	uint32_t flags = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING;
+	uint32_t flags = alloc->bo_flags;
 	struct gbm_bo *bo;
 #if HAVE_GBM_BO_CREATE_WITH_MODIFIERS2
 	bo = gbm_bo_create_with_modifiers2(gbm_device, width, height,
@@ -192,7 +192,7 @@ static struct wlr_gbm_allocator *get_gbm_alloc_from_alloc(
 	return alloc;
 }
 
-struct wlr_allocator *wlr_gbm_allocator_create_with_drm_fd(int fd) {
+struct wlr_allocator *wlr_gbm_allocator_create_with_drm_fd(int fd, uint32_t bo_flags) {
 	uint64_t cap;
 	if (drmGetCap(fd, DRM_CAP_PRIME, &cap) ||
 			!(cap & DRM_PRIME_CAP_EXPORT)) {
@@ -207,6 +207,7 @@ struct wlr_allocator *wlr_gbm_allocator_create_with_drm_fd(int fd) {
 	wlr_allocator_init(&alloc->base, &allocator_impl, WLR_BUFFER_CAP_DMABUF);
 
 	alloc->fd = fd;
+	alloc->bo_flags = bo_flags;
 	wl_list_init(&alloc->buffers);
 
 	alloc->gbm_device = gbm_create_device(fd);
