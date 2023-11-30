@@ -109,7 +109,7 @@ struct wlr_allocator *allocator_autocreate_with_drm_fd(
 		if (gbm_fd < 0) {
 			return NULL;
 		}
-		if ((alloc = wlr_gbm_allocator_create(gbm_fd)) != NULL) {
+		if ((alloc = wlr_gbm_allocator_create_with_drm_fd(gbm_fd)) != NULL) {
 			return alloc;
 		}
 		close(gbm_fd);

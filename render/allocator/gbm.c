@@ -192,7 +192,7 @@ static struct wlr_gbm_allocator *get_gbm_alloc_from_alloc(
 	return alloc;
 }
 
-struct wlr_allocator *wlr_gbm_allocator_create(int fd) {
+struct wlr_allocator *wlr_gbm_allocator_create_with_drm_fd(int fd) {
 	uint64_t cap;
 	if (drmGetCap(fd, DRM_CAP_PRIME, &cap) ||
 			!(cap & DRM_PRIME_CAP_EXPORT)) {
