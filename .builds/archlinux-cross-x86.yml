@@ -1,0 +1,26 @@
+image: archlinux
+packages:
+  - meson
+sources:
+  - https://gitlab.freedesktop.org/wlroots/wlroots.git
+  - https://git.sr.ht/~kennylevinsen/seatd#0.7.0
+  - https://gitlab.freedesktop.org/emersion/libliftoff.git#v0.4.0
+tasks:
+  - setup: |
+      # multilib is not enabled by default, packages have to be installed manually
+      sudo sed -i "/\[multilib\]/,/Include/"'s/^#//' /etc/pacman.conf
+      sudo pacman -Syy --noconfirm multilib-devel lib32-wayland lib32-libdrm lib32-libxkbcommon lib32-libxcb lib32-pixman lib32-mesa lib32-systemd
+      # not all dependencies are available in multilib
+      mkdir -p wlroots/subprojects
+      ln -s seatd wlroots/subprojects/seatd
+      ln -s libliftoff wlroots/subprojects/libliftoff
+      cd wlroots
+      meson setup build --fatal-meson-warnings --default-library=both --prefix /usr --cross-file=.builds/x86-linux-gnu.ini --force-fallback=seatd,libliftoff
+  - build: |
+      cd wlroots/build
+      ninja
+      sudo ninja install
+  - tinywl: |
+      cd wlroots/tinywl
+      make
+

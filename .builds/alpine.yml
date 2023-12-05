@@ -1,5 +1,6 @@
 image: alpine/edge
 packages:
+  - clang
   - eudev-dev
   - ffmpeg-dev
   - glslang
@@ -25,7 +26,7 @@ sources:
 tasks:
   - setup: |
       cd wlroots
-      meson setup build --fatal-meson-warnings --default-library=both -Dauto_features=enabled -Dxcb-errors=disabled
+      CC=clang meson setup build --fatal-meson-warnings --default-library=both -Dauto_features=enabled -Dxcb-errors=disabled
   - build: |
       cd wlroots
       ninja -C build
