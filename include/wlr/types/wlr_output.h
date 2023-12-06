@@ -390,7 +390,7 @@ void wlr_output_transformed_resolution(struct wlr_output *output,
  * Computes the transformed and scaled output resolution.
  */
 void wlr_output_effective_resolution(struct wlr_output *output,
-	int *width, int *height);
+	const struct wlr_output_state *state, int *width, int *height);
 /**
  * Attach a buffer to the output. Compositors should call wlr_output_commit()
  * to submit the new frame. The output needs to be enabled.

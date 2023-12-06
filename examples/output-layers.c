@@ -93,7 +93,7 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 	}
 
 	int width, height;
-	wlr_output_effective_resolution(output->wlr_output, &width, &height);
+	wlr_output_effective_resolution(output->wlr_output, NULL, &width, &height);
 
 	struct wlr_render_pass *pass = wlr_output_begin_render_pass(output->wlr_output, &output_state,
 		NULL, NULL);
