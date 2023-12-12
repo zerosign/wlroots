@@ -1321,6 +1321,14 @@ static struct wlr_render_pass *vulkan_begin_buffer_pass(struct wlr_renderer *wlr
 	if (render_pass == NULL) {
 		return NULL;
 	}
+	// TODO: switch to using `VkRenderPassBeginInfo.pClearValues`
+	if (options->clear_buffer) {
+		wlr_render_pass_add_rect(&render_pass->base, &(struct wlr_render_rect_options){
+			.box = { .width = buffer->width, .height = buffer->height },
+			.color = options->clear_color,
+			.blend_mode = WLR_RENDER_BLEND_MODE_NONE,
+		});
+	}
 	return &render_pass->base;
 }
 

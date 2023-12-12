@@ -268,6 +268,14 @@ static struct wlr_render_pass *gles2_begin_buffer_pass(struct wlr_renderer *wlr_
 	if (!pass) {
 		return NULL;
 	}
+	// TODO: switch to using `glClearColor` + `glClear`
+	if (options->clear_buffer) {
+		wlr_render_pass_add_rect(&pass->base, &(struct wlr_render_rect_options){
+			.box = { .width = buffer->buffer->width, .height = buffer->buffer->height },
+			.color = options->clear_color,
+			.blend_mode = WLR_RENDER_BLEND_MODE_NONE,
+		});
+	}
 	return &pass->base;
 }
 
