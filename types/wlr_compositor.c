@@ -273,26 +273,25 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 	}
 }
 
-static void *surface_synced_create_state(struct wlr_surface_synced *synced) {
-	void *state = calloc(1, synced->impl->state_size);
-	if (state == NULL) {
-		return NULL;
+static size_t surface_get_synced_states_size(struct wlr_surface *surface) {
+	size_t size = 0;
+	struct wlr_surface_synced *synced;
+	wl_list_for_each(synced, &surface->synced, link) {
+		size += synced->impl->state_size;
 	}
+	return size;
+}
+
+static void surface_synced_init_state(struct wlr_surface_synced *synced, void *state) {
 	if (synced->impl->init_state) {
 		synced->impl->init_state(state);
 	}
-	return state;
 }
 
-static void surface_synced_destroy_state(struct wlr_surface_synced *synced,
-		void *state) {
-	if (state == NULL) {
-		return;
-	}
+static void surface_synced_finish_state(struct wlr_surface_synced *synced, void *state) {
 	if (synced->impl->finish_state) {
 		synced->impl->finish_state(state);
 	}
-	free(state);
 }
 
 static void surface_synced_move_state(struct wlr_surface_synced *synced,
@@ -471,13 +470,23 @@ static void surface_cache_pending(struct wlr_surface *surface) {
 		goto error_cached;
 	}
 
+	size_t synced_size = surface_get_synced_states_size(surface);
+	if (synced_size > 0) {
+		cached->synced_buffer = calloc(1, synced_size);
+		if (cached->synced_buffer == NULL) {
+			goto error_state;
+		}
+	}
+
+	char *cached_synced_buffer = cached->synced_buffer;
+	size_t offset = 0;
 	void **cached_synced = cached->synced.data;
 	struct wlr_surface_synced *synced;
 	wl_list_for_each(synced, &surface->synced, link) {
-		void *synced_state = surface_synced_create_state(synced);
-		if (synced_state == NULL) {
-			goto error_state;
-		}
+		void *synced_state = &cached_synced_buffer[offset];
+		offset += synced->impl->state_size;
+
+		surface_synced_init_state(synced, synced_state);
 		cached_synced[synced->index] = synced_state;
 	}
 
@@ -695,9 +704,10 @@ static void surface_state_destroy_cached(struct wlr_surface_state *state,
 	void **synced_states = state->synced.data;
 	struct wlr_surface_synced *synced;
 	wl_list_for_each(synced, &surface->synced, link) {
-		surface_synced_destroy_state(synced, synced_states[synced->index]);
+		surface_synced_finish_state(synced, synced_states[synced->index]);
 	}
 
+	free(state->synced_buffer);
 	surface_state_finish(state);
 	wl_list_remove(&state->cached_state_link);
 	free(state);
@@ -1347,27 +1357,23 @@ struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
 	return compositor;
 }
 
-static bool surface_state_add_synced(struct wlr_surface_state *state, void *value) {
+static bool surface_state_add_synced(struct wlr_surface_state *state,
+		struct wlr_surface_synced *synced, void *synced_state) {
 	void **ptr = wl_array_add(&state->synced, sizeof(void *));
 	if (ptr == NULL) {
 		return false;
 	}
-	*ptr = value;
+	*ptr = synced_state;
+
+	surface_synced_init_state(synced, synced_state);
 	return true;
 }
 
-static void *surface_state_remove_synced(struct wlr_surface_state *state,
+static void surface_state_remove_synced(struct wlr_surface_state *state,
 		struct wlr_surface_synced *synced) {
 	void **synced_states = state->synced.data;
-	void *synced_state = synced_states[synced->index];
+	surface_synced_finish_state(synced, synced_states[synced->index]);
 	array_remove_at(&state->synced, synced->index * sizeof(void *), sizeof(void *));
-	return synced_state;
-}
-
-static void surface_state_remove_and_destroy_synced(struct wlr_surface_state *state,
-		struct wlr_surface_synced *synced) {
-	void *synced_state = surface_state_remove_synced(state, synced);
-	surface_synced_destroy_state(synced, synced_state);
 }
 
 bool wlr_surface_synced_init(struct wlr_surface_synced *synced,
@@ -1380,31 +1386,47 @@ bool wlr_surface_synced_init(struct wlr_surface_synced *synced,
 		assert(synced != other);
 	}
 
-	memset(pending, 0, impl->state_size);
-	memset(current, 0, impl->state_size);
-	if (impl->init_state) {
-		impl->init_state(pending);
-		impl->init_state(current);
-	}
-	if (!surface_state_add_synced(&surface->pending, pending)) {
-		goto error_init;
-	}
-	if (!surface_state_add_synced(&surface->current, current)) {
-		goto error_pending;
-	}
-
 	*synced = (struct wlr_surface_synced){
 		.surface = surface,
 		.impl = impl,
 		.index = surface->synced_len,
 	};
 
+	memset(pending, 0, impl->state_size);
+	memset(current, 0, impl->state_size);
+	if (!surface_state_add_synced(&surface->pending, synced, pending)) {
+		return false;
+	}
+	if (!surface_state_add_synced(&surface->current, synced, current)) {
+		goto error_pending;
+	}
+
+	size_t new_buffer_size = surface_get_synced_states_size(surface) + impl->state_size;
 	struct wlr_surface_state *cached;
 	wl_list_for_each(cached, &surface->cached, cached_state_link) {
-		void *synced_state = surface_synced_create_state(synced);
-		if (synced_state == NULL ||
-				!surface_state_add_synced(cached, synced_state)) {
-			surface_synced_destroy_state(synced, synced_state);
+		char *synced_buffer = calloc(1, new_buffer_size);
+		if (synced_buffer == NULL) {
+			goto error_cached;
+		}
+
+		size_t offset = 0;
+		void **cached_synced = cached->synced.data;
+		struct wlr_surface_synced *other;
+		wl_list_for_each(other, &surface->synced, link) {
+			void *new_synced_state = &synced_buffer[offset];
+			offset += other->impl->state_size;
+
+			surface_synced_init_state(other, new_synced_state);
+			surface_synced_move_state(other, new_synced_state, cached_synced[other->index]);
+			surface_synced_finish_state(other, cached_synced[other->index]);
+			cached_synced[other->index] = new_synced_state;
+		}
+
+		free(cached->synced_buffer);
+		cached->synced_buffer = synced_buffer;
+
+		void *synced_state = &synced_buffer[offset];
+		if (!surface_state_add_synced(cached, synced, synced_state)) {
 			goto error_cached;
 		}
 	}
@@ -1420,16 +1442,11 @@ error_cached:;
 		if (cached == failed_at) {
 			break;
 		}
-		surface_state_remove_and_destroy_synced(cached, synced);
+		surface_state_remove_synced(cached, synced);
 	}
 	surface_state_remove_synced(&surface->current, synced);
 error_pending:
 	surface_state_remove_synced(&surface->pending, synced);
-error_init:
-	if (synced->impl->finish_state) {
-		synced->impl->finish_state(pending);
-		synced->impl->finish_state(current);
-	}
 	return false;
 }
 
@@ -1449,15 +1466,11 @@ void wlr_surface_synced_finish(struct wlr_surface_synced *synced) {
 
 	struct wlr_surface_state *cached;
 	wl_list_for_each(cached, &surface->cached, cached_state_link) {
-		surface_state_remove_and_destroy_synced(cached, synced);
+		surface_state_remove_synced(cached, synced);
 	}
 
-	void *pending = surface_state_remove_synced(&surface->pending, synced);
-	void *current = surface_state_remove_synced(&surface->current, synced);
-	if (synced->impl->finish_state) {
-		synced->impl->finish_state(pending);
-		synced->impl->finish_state(current);
-	}
+	surface_state_remove_synced(&surface->pending, synced);
+	surface_state_remove_synced(&surface->current, synced);
 
 	wl_list_remove(&synced->link);
 	synced->surface->synced_len--;

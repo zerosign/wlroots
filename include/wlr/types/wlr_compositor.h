@@ -72,6 +72,8 @@ struct wlr_surface_state {
 
 	// Sync'ed object states, one per struct wlr_surface_synced
 	struct wl_array synced; // void *
+	// Buffer for synced states
+	void *synced_buffer;
 };
 
 struct wlr_surface_role {
