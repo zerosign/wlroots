@@ -231,7 +231,9 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 	wlr_box_transform(&dst_box, &dst_box, wlr_output_transform_invert(output->transform),
 		buffer->width, buffer->height);
 
-	struct wlr_render_pass *pass = wlr_renderer_begin_buffer_pass(renderer, buffer, NULL);
+	struct wlr_render_pass *pass = wlr_renderer_begin_buffer_pass(renderer, buffer, &(struct wlr_buffer_pass_options){
+		.clear_buffer = true,
+	});
 	if (pass == NULL) {
 		wlr_buffer_unlock(buffer);
 		return NULL;
@@ -240,10 +242,6 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 	enum wl_output_transform transform = wlr_output_transform_invert(cursor->transform);
 	transform = wlr_output_transform_compose(transform, output->transform);
 
-	wlr_render_pass_add_rect(pass, &(struct wlr_render_rect_options){
-		.box = { .width = buffer->width, .height = buffer->height },
-		.blend_mode = WLR_RENDER_BLEND_MODE_NONE,
-	});
 	wlr_render_pass_add_texture(pass, &(struct wlr_render_texture_options){
 		.texture = texture,
 		.src_box = cursor->src_box,

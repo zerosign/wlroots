@@ -92,15 +92,13 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
 	struct wlr_render_pass *pass = wlr_output_begin_render_pass(output->wlr_output, &state, NULL,
-		NULL);
+		&(struct wlr_buffer_pass_options){
+			.clear_buffer = true,
+			.clear_color = { 0.3, 0.3, 0.3, 1.0 },
+	});
 	if (pass == NULL) {
 		return;
 	}
-
-	wlr_render_pass_add_rect(pass, &(struct wlr_render_rect_options){
-		.color = { 0.3, 0.3, 0.3, 1.0 },
-		.box = { .width = width, .height = height },
-	});
 
 	if (output->surface != NULL) {
 		struct render_data rdata = {
