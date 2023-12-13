@@ -167,6 +167,7 @@ void push_gles2_debug_(struct wlr_gles2_renderer *renderer,
 void pop_gles2_debug(struct wlr_gles2_renderer *renderer);
 
 struct wlr_gles2_render_pass *begin_gles2_buffer_pass(struct wlr_gles2_buffer *buffer,
-	struct wlr_egl_context *prev_ctx, struct wlr_gles2_render_timer *timer);
+	struct wlr_egl_context *prev_ctx, struct wlr_gles2_render_timer *timer,
+	const struct wlr_render_color *clear_color);
 
 #endif
