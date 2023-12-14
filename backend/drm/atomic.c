@@ -232,7 +232,7 @@ static void plane_disable(struct atomic *atom, struct wlr_drm_plane *plane) {
 
 static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 		struct wlr_drm_plane *plane, struct wlr_drm_fb *fb, uint32_t crtc_id,
-		int32_t x, int32_t y) {
+		int32_t x, int32_t y, uint64_t dst_w, uint64_t dst_h) {
 	uint32_t id = plane->id;
 	const union wlr_drm_plane_props *props = &plane->props;
 
@@ -250,8 +250,8 @@ static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 	atomic_add(atom, id, props->src_y, 0);
 	atomic_add(atom, id, props->src_w, (uint64_t)width << 16);
 	atomic_add(atom, id, props->src_h, (uint64_t)height << 16);
-	atomic_add(atom, id, props->crtc_w, width);
-	atomic_add(atom, id, props->crtc_h, height);
+	atomic_add(atom, id, props->crtc_w, dst_w);
+	atomic_add(atom, id, props->crtc_h, dst_h);
 	atomic_add(atom, id, props->fb_id, fb->id);
 	atomic_add(atom, id, props->crtc_id, crtc_id);
 	atomic_add(atom, id, props->crtc_x, (uint64_t)x);
@@ -345,15 +345,17 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 			atomic_add(&atom, crtc->id, crtc->props.vrr_enabled, vrr_enabled);
 		}
 		set_plane_props(&atom, drm, crtc->primary, state->primary_fb, crtc->id,
-			0, 0);
+			0, 0, output->width, output->height);
 		if (crtc->primary->props.fb_damage_clips != 0) {
 			atomic_add(&atom, crtc->primary->id,
 				crtc->primary->props.fb_damage_clips, fb_damage_clips);
 		}
 		if (crtc->cursor) {
+		struct wlr_drm_fb *fb = get_next_cursor_fb(conn);
 			if (drm_connector_is_cursor_visible(conn)) {
-				set_plane_props(&atom, drm, crtc->cursor, get_next_cursor_fb(conn),
-					crtc->id, conn->cursor_x, conn->cursor_y);
+				set_plane_props(&atom, drm, crtc->cursor, fb, crtc->id,
+					conn->cursor_x, conn->cursor_y, fb->wlr_buf->width,
+					fb->wlr_buf->height);
 			} else {
 				plane_disable(&atom, crtc->cursor);
 			}
