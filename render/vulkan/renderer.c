@@ -55,10 +55,6 @@ struct wlr_vk_renderer *vulkan_get_renderer(struct wlr_renderer *wlr_renderer) {
 	return renderer;
 }
 
-static struct wlr_vk_render_format_setup *find_or_create_render_setup(
-		struct wlr_vk_renderer *renderer, const struct wlr_vk_format *format,
-		bool has_blending_buffer);
-
 static struct wlr_vk_descriptor_pool *alloc_ds(
 		struct wlr_vk_renderer *renderer, VkDescriptorSet *ds,
 		VkDescriptorType type, const VkDescriptorSetLayout *layout,
@@ -163,6 +159,12 @@ static void destroy_render_format_setup(struct wlr_vk_renderer *renderer,
 	wl_list_for_each_safe(pipeline, tmp_pipeline, &setup->pipelines, link) {
 		vkDestroyPipeline(dev, pipeline->vk, NULL);
 		free(pipeline);
+	}
+
+	struct wlr_vk_framebuffer *framebuffer, *tmp_framebuffer;
+	wl_list_for_each_safe(framebuffer, tmp_framebuffer, &setup->framebuffers, link) {
+		vkDestroyFramebuffer(dev, framebuffer->vk, NULL);
+		free(framebuffer);
 	}
 }
 
@@ -571,7 +573,6 @@ static void destroy_render_buffer(struct wlr_vk_render_buffer *buffer) {
 		wlr_vk_error("vkQueueWaitIdle", res);
 	}
 
-	vkDestroyFramebuffer(dev, buffer->framebuffer, NULL);
 	vkDestroyImageView(dev, buffer->image_view, NULL);
 	vkDestroyImage(dev, buffer->image, NULL);
 
@@ -744,6 +745,7 @@ static struct wlr_vk_render_buffer *create_render_buffer(
 			dmabuf.format, (const char*) &dmabuf.format);
 		goto error;
 	}
+	buffer->fmt = &fmt->format;
 
 	VkImageViewCreateInfo view_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -771,40 +773,9 @@ static struct wlr_vk_render_buffer *create_render_buffer(
 
 	bool has_blending_buffer = !using_mutable_srgb;
 
-	buffer->render_setup = find_or_create_render_setup(
-		renderer, &fmt->format, has_blending_buffer);
-	if (!buffer->render_setup) {
+	if (has_blending_buffer && !setup_blend_image(renderer, buffer, dmabuf.width, dmabuf.height)) {
 		goto error;
 	}
-
-	VkImageView attachments[2] = {0};
-	uint32_t attachment_count = 0;
-
-	if (has_blending_buffer) {
-		if (!setup_blend_image(renderer, buffer, dmabuf.width, dmabuf.height)) {
-			goto error;
-		}
-		attachments[attachment_count++] = buffer->blend_image_view;
-	}
-	attachments[attachment_count++] = buffer->image_view;
-
-	VkFramebufferCreateInfo fb_info = {
-		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-		.attachmentCount = attachment_count,
-		.pAttachments = attachments,
-		.flags = 0u,
-		.width = dmabuf.width,
-		.height = dmabuf.height,
-		.layers = 1u,
-		.renderPass = buffer->render_setup->render_pass,
-	};
-
-	res = vkCreateFramebuffer(dev, &fb_info, NULL, &buffer->framebuffer);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkCreateFramebuffer", res);
-		goto error;
-	}
-
 
 	wlr_addon_init(&buffer->addon, &wlr_buffer->addons, renderer,
 		&render_buffer_addon_impl);
@@ -821,7 +792,6 @@ error:
 	vkFreeMemory(dev, buffer->blend_memory, NULL);
 	vkDestroyImageView(dev, buffer->blend_image_view, NULL);
 
-	vkDestroyFramebuffer(dev, buffer->framebuffer, NULL);
 	vkDestroyImageView(dev, buffer->image_view, NULL);
 	vkDestroyImage(dev, buffer->image, NULL);
 	for (size_t i = 0u; i < buffer->mem_count; ++i) {
@@ -1897,12 +1867,12 @@ static bool init_static_render_data(struct wlr_vk_renderer *renderer) {
 	return true;
 }
 
-static struct wlr_vk_render_format_setup *find_or_create_render_setup(
+struct wlr_vk_render_format_setup *find_or_create_render_setup(
 		struct wlr_vk_renderer *renderer, const struct wlr_vk_format *format,
 		bool has_blending_buffer) {
 	struct wlr_vk_render_format_setup *setup;
 	wl_list_for_each(setup, &renderer->render_format_setups, link) {
-		if (setup->render_format == format) {
+		if (setup->render_format == format && setup->has_blending_buffer == has_blending_buffer) {
 			return setup;
 		}
 	}
@@ -1914,8 +1884,10 @@ static struct wlr_vk_render_format_setup *find_or_create_render_setup(
 	}
 
 	setup->render_format = format;
+	setup->has_blending_buffer = has_blending_buffer;
 	setup->renderer = renderer;
 	wl_list_init(&setup->pipelines);
+	wl_list_init(&setup->framebuffers);
 
 	VkDevice dev = renderer->dev->dev;
 	VkResult res;
@@ -2150,6 +2122,91 @@ static struct wlr_vk_render_format_setup *find_or_create_render_setup(
 
 error:
 	destroy_render_format_setup(renderer, setup);
+	return NULL;
+}
+
+struct wlr_vk_framebuffer *get_or_create_framebuffer(
+		struct wlr_vk_render_format_setup *setup,
+		int width, int height) {
+	struct wlr_vk_framebuffer *framebuffer;
+	wl_list_for_each(framebuffer, &setup->framebuffers, link) {
+		if (framebuffer->width == width && framebuffer->height == height) {
+			return framebuffer;
+		}
+	}
+
+	framebuffer = calloc(1u, sizeof(*framebuffer));
+	if (!framebuffer) {
+		wlr_log(WLR_ERROR, "Allocation failed");
+		return NULL;
+	}
+
+	bool using_mutable_srgb = !setup->has_blending_buffer;
+
+	VkResult res;
+	VkDevice dev = setup->renderer->dev->dev;
+	VkFramebufferAttachmentImageInfo attachments[2] = {0};
+	uint32_t attachment_count = 0;
+
+	VkFormat view_formats[] = {
+		setup->render_format->vk,
+		setup->render_format->vk_srgb,
+	};
+	VkFormat blend_view_formats[] = {
+		VK_FORMAT_R16G16B16A16_SFLOAT,
+	};
+
+	if (setup->has_blending_buffer) {
+		attachments[attachment_count++] = (VkFramebufferAttachmentImageInfo) {
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
+			.flags = 0,
+			.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+			.width = width,
+			.height = height,
+			.layerCount = 1,
+			.viewFormatCount = 1,
+			.pViewFormats = blend_view_formats,
+		};
+	}
+	attachments[attachment_count++] = (VkFramebufferAttachmentImageInfo) {
+		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
+		.flags = using_mutable_srgb ? VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : 0,
+		.usage = vulkan_render_usage,
+		.width = width,
+		.height = height,
+		.layerCount = 1,
+		.viewFormatCount = using_mutable_srgb ? 2 : 1,
+		.pViewFormats = view_formats,
+	};
+
+	VkFramebufferAttachmentsCreateInfo fb_attachments_info = {
+		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO,
+		.attachmentImageInfoCount = attachment_count,
+		.pAttachmentImageInfos = attachments,
+	};
+	VkFramebufferCreateInfo fb_info = {
+		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+		.pNext = &fb_attachments_info,
+		.attachmentCount = attachment_count,
+		.pAttachments = NULL,
+		.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT,
+		.width = width,
+		.height = height,
+		.layers = 1u,
+		.renderPass = setup->render_pass,
+	};
+
+	res = vkCreateFramebuffer(dev, &fb_info, NULL, &framebuffer->vk);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateFramebuffer", res);
+		goto error;
+	}
+
+	wl_list_insert(&setup->framebuffers, &framebuffer->link);
+	return framebuffer;
+
+error:
+	free(framebuffer);
 	return NULL;
 }
 
