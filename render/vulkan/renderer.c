@@ -1287,17 +1287,14 @@ static struct wlr_render_pass *vulkan_begin_buffer_pass(struct wlr_renderer *wlr
 		}
 	}
 
-	struct wlr_vk_render_pass *render_pass = vulkan_begin_render_pass(renderer, render_buffer);
+	const struct wlr_render_color *clear_color = NULL;
+	if (options->clear_buffer) {
+		clear_color = &options->clear_color;
+	}
+
+	struct wlr_vk_render_pass *render_pass = vulkan_begin_render_pass(renderer, render_buffer, clear_color);
 	if (render_pass == NULL) {
 		return NULL;
-	}
-	// TODO: switch to using `VkRenderPassBeginInfo.pClearValues`
-	if (options->clear_buffer) {
-		wlr_render_pass_add_rect(&render_pass->base, &(struct wlr_render_rect_options){
-			.box = { .width = buffer->width, .height = buffer->height },
-			.color = options->clear_color,
-			.blend_mode = WLR_RENDER_BLEND_MODE_NONE,
-		});
 	}
 	return &render_pass->base;
 }
@@ -1869,10 +1866,10 @@ static bool init_static_render_data(struct wlr_vk_renderer *renderer) {
 
 struct wlr_vk_render_format_setup *find_or_create_render_setup(
 		struct wlr_vk_renderer *renderer, const struct wlr_vk_format *format,
-		bool has_blending_buffer) {
+		bool has_blending_buffer, bool clear_on_load) {
 	struct wlr_vk_render_format_setup *setup;
 	wl_list_for_each(setup, &renderer->render_format_setups, link) {
-		if (setup->render_format == format && setup->has_blending_buffer == has_blending_buffer) {
+		if (setup->render_format == format && setup->has_blending_buffer == has_blending_buffer && setup->clear_on_load == clear_on_load) {
 			return setup;
 		}
 	}
@@ -1885,19 +1882,21 @@ struct wlr_vk_render_format_setup *find_or_create_render_setup(
 
 	setup->render_format = format;
 	setup->has_blending_buffer = has_blending_buffer;
+	setup->clear_on_load = clear_on_load;
 	setup->renderer = renderer;
 	wl_list_init(&setup->pipelines);
 	wl_list_init(&setup->framebuffers);
 
 	VkDevice dev = renderer->dev->dev;
 	VkResult res;
+	VkAttachmentLoadOp load_op = clear_on_load ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
 
 	if (has_blending_buffer) {
 		VkAttachmentDescription attachments[2] = {
 			{
 				.format = VK_FORMAT_R16G16B16A16_SFLOAT,
 				.samples = VK_SAMPLE_COUNT_1_BIT,
-				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+				.loadOp = load_op,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -1907,7 +1906,7 @@ struct wlr_vk_render_format_setup *find_or_create_render_setup(
 			{
 				.format = format->vk,
 				.samples = VK_SAMPLE_COUNT_1_BIT,
-				.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+				.loadOp = load_op,
 				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -2013,7 +2012,7 @@ struct wlr_vk_render_format_setup *find_or_create_render_setup(
 		VkAttachmentDescription attachment = {
 			.format = format->vk_srgb,
 			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+			.loadOp = load_op,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,

@@ -650,7 +650,7 @@ static const struct wlr_render_pass_impl render_pass_impl = {
 };
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
-		struct wlr_vk_render_buffer *buffer) {
+		struct wlr_vk_render_buffer *buffer, const struct wlr_render_color *clear_color) {
 	struct wlr_vk_render_pass *pass = calloc(1, sizeof(*pass));
 	if (pass == NULL) {
 		return NULL;
@@ -662,7 +662,7 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 
 	bool has_blending_buffer = buffer->blend_image != VK_NULL_HANDLE;
 	struct wlr_vk_render_format_setup *render_setup = find_or_create_render_setup(
-		renderer, buffer->fmt, has_blending_buffer);
+		renderer, buffer->fmt, has_blending_buffer, clear_color != NULL);
 	if (render_setup == NULL) {
 		free(pass);
 		return NULL;
@@ -697,6 +697,17 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 	VkRect2D rect = { .extent = { width, height } };
 	VkImageView attachments[2] = {0};
 	uint32_t attachment_count = 0;
+	VkClearValue clear_values[2] = { 0 };
+	if (clear_color) {
+		clear_values[0] = clear_values[1] = (VkClearValue){
+			.color.float32 = {
+				color_to_linear(clear_color->r),
+				color_to_linear(clear_color->g),
+				color_to_linear(clear_color->b),
+				clear_color->a,
+			}
+		};
+	}
 
 	if (buffer->blend_image_view != VK_NULL_HANDLE) {
 		attachments[attachment_count++] = buffer->blend_image_view;
@@ -714,7 +725,8 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 		.renderArea = rect,
 		.renderPass = render_setup->render_pass,
 		.framebuffer = framebuffer->vk,
-		.clearValueCount = 0,
+		.clearValueCount = clear_color ? attachment_count : 0,
+		.pClearValues = clear_values,
 	};
 	vkCmdBeginRenderPass(cb->vk, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 

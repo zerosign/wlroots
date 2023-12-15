@@ -193,6 +193,7 @@ struct wlr_vk_render_format_setup {
 	struct wl_list link; // wlr_vk_renderer.render_format_setups
 	const struct wlr_vk_format *render_format; // used in renderpass
 	bool has_blending_buffer;
+	bool clear_on_load;
 	VkRenderPass render_pass;
 
 	VkPipeline output_pipe;
@@ -311,7 +312,7 @@ struct wlr_vk_texture_view {
 
 struct wlr_vk_render_format_setup *find_or_create_render_setup(
 	struct wlr_vk_renderer *renderer, const struct wlr_vk_format *format,
-	bool has_blending_buffer);
+	bool has_blending_buffer, bool clear_on_load);
 struct wlr_vk_pipeline *setup_get_or_create_pipeline(
 	struct wlr_vk_render_format_setup *setup,
 	const struct wlr_vk_pipeline_key *key);
@@ -350,7 +351,7 @@ struct wlr_vk_render_pass {
 };
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
-	struct wlr_vk_render_buffer *buffer);
+	struct wlr_vk_render_buffer *buffer, const struct wlr_render_color *clear_color);
 
 // Suballocates a buffer span with the given size that can be mapped
 // and used as staging buffer. The allocation is implicitly released when the
