@@ -33,9 +33,8 @@ enum wlr_surface_state_field {
 
 struct wlr_surface_state {
 	uint32_t committed; // enum wlr_surface_state_field
-	// Sequence number of the surface state. Incremented on each commit, may
-	// overflow.
-	uint32_t seq;
+	// Sequence number of the surface state. Incremented on each commit.
+	uint64_t seq;
 
 	struct wlr_buffer *buffer;
 	int32_t dx, dy; // relative to previous position
@@ -385,7 +384,7 @@ void wlr_surface_get_buffer_source_box(struct wlr_surface *surface,
  * A lock preventing cached state from being applied.
  */
 struct wlr_surface_cached_lock {
-	uint32_t seq;
+	uint64_t seq;
 };
 
 /**
