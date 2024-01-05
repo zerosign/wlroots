@@ -515,7 +515,16 @@ void vulkan_change_layout(VkCommandBuffer cb, VkImage img,
 	VkImageLayout ol, VkPipelineStageFlags srcs, VkAccessFlags srca,
 	VkImageLayout nl, VkPipelineStageFlags dsts, VkAccessFlags dsta);
 
+#if __STDC_VERSION__ >= 202311L
+
+#define wlr_vk_error(fmt, res, ...) wlr_log(WLR_ERROR, fmt ": %s (%d)", \
+	vulkan_strerror(res), res __VA_OPT(,) __VA_ARGS__)
+
+#else
+
 #define wlr_vk_error(fmt, res, ...) wlr_log(WLR_ERROR, fmt ": %s (%d)", \
 	vulkan_strerror(res), res, ##__VA_ARGS__)
+
+#endif
 
 #endif // RENDER_VULKAN_H

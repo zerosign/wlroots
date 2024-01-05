@@ -220,9 +220,20 @@ void drm_page_flip_destroy(struct wlr_drm_page_flip *page_flip);
 struct wlr_drm_layer *get_drm_layer(struct wlr_drm_backend *drm,
 	struct wlr_output_layer *layer);
 
+#if __STDC_VERSION__ >= 202311L
+
+#define wlr_drm_conn_log(conn, verb, fmt, ...) \
+	wlr_log(verb, "connector %s: " fmt, conn->name __VA_OPT__(,) __VA_ARGS__)
+#define wlr_drm_conn_log_errno(conn, verb, fmt, ...) \
+	wlr_log_errno(verb, "connector %s: " fmt, conn->name __VA_OPT(,) __VA_ARGS__)
+
+#else
+
 #define wlr_drm_conn_log(conn, verb, fmt, ...) \
 	wlr_log(verb, "connector %s: " fmt, conn->name, ##__VA_ARGS__)
 #define wlr_drm_conn_log_errno(conn, verb, fmt, ...) \
 	wlr_log_errno(verb, "connector %s: " fmt, conn->name, ##__VA_ARGS__)
+
+#endif
 
 #endif

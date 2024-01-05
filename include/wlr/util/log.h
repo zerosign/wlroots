@@ -64,13 +64,23 @@ void _wlr_vlog(enum wlr_log_importance verbosity, const char *format, va_list ar
 #define _WLR_FILENAME __FILE__
 #endif
 
-#define wlr_log(verb, fmt, ...) \
-	_wlr_log(verb, "[%s:%d] " fmt, _WLR_FILENAME, __LINE__, ##__VA_ARGS__)
-
 #define wlr_vlog(verb, fmt, args) \
 	_wlr_vlog(verb, "[%s:%d] " fmt, _WLR_FILENAME, __LINE__, args)
 
+#if __STDC_VERSION__ >= 202311L
+
+#define wlr_log(verb, fmt, ...) \
+	_wlr_log(verb, "[%s:%d] " fmt, _WLR_FILENAME, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define wlr_log_errno(verb, fmt, ...) \
+	wlr_log(verb, fmt ": %s" __VA_OPT__(,) __VA_ARGS__, strerror(errno))
+
+#else
+
+#define wlr_log(verb, fmt, ...) \
+	_wlr_log(verb, "[%s:%d] " fmt, _WLR_FILENAME, __LINE__, ##__VA_ARGS__)
 #define wlr_log_errno(verb, fmt, ...) \
 	wlr_log(verb, fmt ": %s", ##__VA_ARGS__, strerror(errno))
+
+#endif
 
 #endif
