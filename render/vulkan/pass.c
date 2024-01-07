@@ -87,7 +87,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 	assert(stage_cb != NULL);
 	renderer->stage.cb = NULL;
 
-	if (render_buffer->blend_image) {
+	if (!pass->srgb_pathway) {
 		// Apply output shader to map blend image to actual output image
 		vkCmdNextSubpass(render_cb->vk, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -109,14 +109,14 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 		};
 		mat3_to_mat4(final_matrix, vert_pcr_data.mat4);
 
-		bind_pipeline(pass, render_buffer->render_setup->output_pipe_srgb);
+		bind_pipeline(pass, render_buffer->plain.render_setup->output_pipe_srgb);
 		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,
 			VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vert_pcr_data), &vert_pcr_data);
 		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,
 			VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(vert_pcr_data),
 			sizeof(frag_pcr_data), &frag_pcr_data);
 		VkDescriptorSet ds[] = {
-			render_buffer->blend_descriptor_set, // set 0
+			render_buffer->plain.blend_descriptor_set, // set 0
 			renderer->output_ds_lut3d_dummy, // set 1
 		};
 		size_t ds_len = sizeof(ds) / sizeof(ds[0]);
@@ -218,26 +218,30 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 
 	// also add acquire/release barriers for the current render buffer
 	VkImageLayout src_layout = VK_IMAGE_LAYOUT_GENERAL;
-	if (!render_buffer->transitioned) {
-		src_layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-		render_buffer->transitioned = true;
-	}
-
-	if (render_buffer->blend_image) {
+	if (pass->srgb_pathway) {
+		if (!render_buffer->srgb.transitioned) {
+			src_layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+			render_buffer->srgb.transitioned = true;
+		}
+	} else {
+		if (!render_buffer->plain.transitioned) {
+			src_layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+			render_buffer->plain.transitioned = true;
+		}
 		// The render pass changes the blend image layout from
 		// color attachment to read only, so on each frame, before
 		// the render pass starts, we change it back
 		VkImageLayout blend_src_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		if (!render_buffer->blend_transitioned) {
+		if (!render_buffer->plain.blend_transitioned) {
 			blend_src_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-			render_buffer->blend_transitioned = true;
+			render_buffer->plain.blend_transitioned = true;
 		}
 
 		VkImageMemoryBarrier blend_acq_barrier = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-			.image = render_buffer->blend_image,
+			.image = render_buffer->plain.blend_image,
 			.oldLayout = blend_src_layout,
 			.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
@@ -435,7 +439,7 @@ error:
 
 static void render_pass_mark_box_updated(struct wlr_vk_render_pass *pass,
 		const struct wlr_box *box) {
-	if (!pass->render_buffer->blend_image) {
+	if (pass->srgb_pathway) {
 		return;
 	}
 
@@ -495,8 +499,11 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 		wlr_matrix_project_box(matrix, &box, WL_OUTPUT_TRANSFORM_NORMAL, 0, proj);
 		wlr_matrix_multiply(matrix, pass->projection, matrix);
 
+		struct wlr_vk_render_format_setup *setup = pass->srgb_pathway ?
+			pass->render_buffer->srgb.render_setup :
+			pass->render_buffer->plain.render_setup;
 		struct wlr_vk_pipeline *pipe = setup_get_or_create_pipeline(
-			pass->render_buffer->render_setup,
+			setup,
 			&(struct wlr_vk_pipeline_key) {
 				.source = WLR_VK_SHADER_SOURCE_SINGLE_COLOR,
 				.layout = { .ycbcr_format = NULL },
@@ -560,7 +567,6 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		const struct wlr_render_texture_options *options) {
 	struct wlr_vk_render_pass *pass = get_render_pass(wlr_pass);
 	struct wlr_vk_renderer *renderer = pass->renderer;
-	struct wlr_vk_render_buffer *render_buffer = pass->render_buffer;
 	VkCommandBuffer cb = pass->command_buffer->vk;
 
 	struct wlr_vk_texture *texture = vulkan_get_texture(options->texture);
@@ -605,8 +611,11 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	};
 	mat3_to_mat4(matrix, vert_pcr_data.mat4);
 
+	struct wlr_vk_render_format_setup *setup = pass->srgb_pathway ?
+		pass->render_buffer->srgb.render_setup :
+		pass->render_buffer->plain.render_setup;
 	struct wlr_vk_pipeline *pipe = setup_get_or_create_pipeline(
-		render_buffer->render_setup,
+		setup,
 		&(struct wlr_vk_pipeline_key) {
 			.source = WLR_VK_SHADER_SOURCE_TEXTURE,
 			.layout = {
@@ -672,12 +681,25 @@ static const struct wlr_render_pass_impl render_pass_impl = {
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
 		struct wlr_vk_render_buffer *buffer) {
+	bool using_srgb_pathway = buffer->srgb.framebuffer != VK_NULL_HANDLE;
+
+	if (!using_srgb_pathway && !buffer->plain.image_view) {
+		struct wlr_dmabuf_attributes attribs;
+		wlr_buffer_get_dmabuf(buffer->wlr_buffer, &attribs);
+		if (!vulkan_setup_plain_framebuffer(buffer, &attribs)) {
+			wlr_log(WLR_ERROR, "Failed to set up blend image");
+			return NULL;
+		}
+	}
+
 	struct wlr_vk_render_pass *pass = calloc(1, sizeof(*pass));
 	if (pass == NULL) {
 		return NULL;
 	}
+
 	wlr_render_pass_init(&pass->base, &render_pass_impl);
 	pass->renderer = renderer;
+	pass->srgb_pathway = using_srgb_pathway;
 
 	rect_union_init(&pass->updated_region);
 
@@ -713,10 +735,15 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 	VkRenderPassBeginInfo rp_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 		.renderArea = rect,
-		.renderPass = buffer->render_setup->render_pass,
-		.framebuffer = buffer->framebuffer,
 		.clearValueCount = 0,
 	};
+	if (pass->srgb_pathway) {
+		rp_info.renderPass = buffer->srgb.render_setup->render_pass;
+		rp_info.framebuffer = buffer->srgb.framebuffer;
+	} else {
+		rp_info.renderPass = buffer->plain.render_setup->render_pass;
+		rp_info.framebuffer = buffer->plain.framebuffer;
+	}
 	vkCmdBeginRenderPass(cb->vk, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
 	vkCmdSetViewport(cb->vk, 0, 1, &(VkViewport){

@@ -187,6 +187,7 @@ struct wlr_vk_pipeline {
 struct wlr_vk_render_format_setup {
 	struct wl_list link; // wlr_vk_renderer.render_format_setups
 	const struct wlr_vk_format *render_format; // used in renderpass
+	bool use_blending_buffer;
 	VkRenderPass render_pass;
 
 	VkPipeline output_pipe_srgb;
@@ -201,23 +202,43 @@ struct wlr_vk_render_buffer {
 	struct wlr_buffer *wlr_buffer;
 	struct wlr_addon addon;
 	struct wlr_vk_renderer *renderer;
-	struct wlr_vk_render_format_setup *render_setup;
 	struct wl_list link; // wlr_vk_renderer.buffers
 
-	VkImage image;
-	VkImageView image_view;
-	VkFramebuffer framebuffer;
-	uint32_t mem_count;
 	VkDeviceMemory memories[WLR_DMABUF_MAX_PLANES];
-	bool transitioned;
+	uint32_t mem_count;
+	VkImage image;
 
-	VkImage blend_image;
-	VkImageView blend_image_view;
-	VkDeviceMemory blend_memory;
-	VkDescriptorSet blend_descriptor_set;
-	struct wlr_vk_descriptor_pool *blend_attachment_pool;
-	bool blend_transitioned;
+	// Framebuffer and image view for rendering directly onto the buffer image.
+	// This requires that the image support an _SRGB VkFormat, and does
+	// not work with color transforms.
+	struct {
+		struct wlr_vk_render_format_setup *render_setup;
+		VkImageView image_view;
+		VkFramebuffer framebuffer;
+		bool transitioned;
+	} srgb;
+
+	// Framebuffer, image view, and blending image to render indirectly
+	// onto the buffer image. This works for general image types and permits
+	// color transforms.
+	struct {
+		struct wlr_vk_render_format_setup *render_setup;
+
+		VkImageView image_view;
+		VkFramebuffer framebuffer;
+		bool transitioned;
+
+		VkImage blend_image;
+		VkImageView blend_image_view;
+		VkDeviceMemory blend_memory;
+		VkDescriptorSet blend_descriptor_set;
+		struct wlr_vk_descriptor_pool *blend_attachment_pool;
+		bool blend_transitioned;
+	} plain;
 };
+
+bool vulkan_setup_plain_framebuffer(struct wlr_vk_render_buffer *buffer,
+	const struct wlr_dmabuf_attributes *dmabuf);
 
 struct wlr_vk_command_buffer {
 	VkCommandBuffer vk;
@@ -351,6 +372,7 @@ struct wlr_vk_render_pass {
 	VkPipeline bound_pipeline;
 	float projection[9];
 	bool failed;
+	bool srgb_pathway; // if false, rendering via intermediate blending buffer
 };
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
