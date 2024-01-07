@@ -30,6 +30,9 @@ struct wlr_render_timer;
 struct wlr_buffer_pass_options {
 	/* Timer to measure the duration of the render pass */
 	struct wlr_render_timer *timer;
+	/* Color transform to apply to the output of the render pass,
+	 * leave NULL to indicate sRGB/no custom transform */
+	struct wlr_color_transform *color_transform;
 };
 
 /**

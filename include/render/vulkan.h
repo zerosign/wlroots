@@ -248,6 +248,8 @@ struct wlr_vk_command_buffer {
 	struct wl_list destroy_textures; // wlr_vk_texture.destroy_link
 	// Staging shared buffers to release after the command buffer completes
 	struct wl_list stage_buffers; // wlr_vk_shared_buffer.link
+	// Color transform to unref after the command buffer completes
+	struct wlr_color_transform *color_transform;
 
 	// For DMA-BUF implicit sync interop, may be NULL
 	VkSemaphore binary_semaphore;
@@ -301,6 +303,8 @@ struct wlr_vk_renderer {
 	struct wl_list foreign_textures; // wlr_vk_texture.foreign_link
 
 	struct wl_list render_buffers; // wlr_vk_render_buffer.link
+
+	struct wl_list color_transforms; // wlr_vk_color_transform.link
 
 	// Pool of command buffers
 	struct wlr_vk_command_buffer command_buffers[VULKAN_COMMAND_BUFFERS_CAP];
@@ -373,10 +377,11 @@ struct wlr_vk_render_pass {
 	float projection[9];
 	bool failed;
 	bool srgb_pathway; // if false, rendering via intermediate blending buffer
+	struct wlr_color_transform *color_transform;
 };
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
-	struct wlr_vk_render_buffer *buffer);
+	struct wlr_vk_render_buffer *buffer, const struct wlr_buffer_pass_options *options);
 
 // Suballocates a buffer span with the given size that can be mapped
 // and used as staging buffer. The allocation is implicitly released when the
@@ -486,6 +491,22 @@ struct wlr_vk_buffer_span {
 	struct wlr_vk_shared_buffer *buffer;
 	struct wlr_vk_allocation alloc;
 };
+
+
+// Lookup table for a color transform
+struct wlr_vk_color_transform {
+	struct wlr_addon addon; // owned by: wlr_vk_renderer
+	struct wl_list link; // wlr_vk_renderer, list of all color transforms
+
+	struct {
+		VkImage image;
+		VkImageView image_view;
+		VkDeviceMemory memory;
+		VkDescriptorSet ds;
+		struct wlr_vk_descriptor_pool *ds_pool;
+	} lut_3d;
+};
+void vk_color_transform_destroy(struct wlr_addon *addon);
 
 // util
 const char *vulkan_strerror(VkResult err);

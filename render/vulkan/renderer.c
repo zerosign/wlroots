@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <drm_fourcc.h>
 #include <vulkan/vulkan.h>
+#include <wlr/render/color.h>
 #include <wlr/render/interface.h>
 #include <wlr/types/wlr_drm.h>
 #include <wlr/util/box.h>
@@ -456,6 +457,11 @@ static void release_command_buffer_resources(struct wlr_vk_command_buffer *cb,
 
 		wl_list_remove(&buf->link);
 		wl_list_insert(&renderer->stage.buffers, &buf->link);
+	}
+
+	if (cb->color_transform) {
+		wlr_color_transform_unref(cb->color_transform);
+		cb->color_transform = NULL;
 	}
 }
 
@@ -1074,6 +1080,12 @@ static void vulkan_destroy(struct wlr_renderer *wlr_renderer) {
 		destroy_render_buffer(render_buffer);
 	}
 
+	struct wlr_vk_color_transform *color_transform, *color_transform_tmp;
+	wl_list_for_each_safe(color_transform, color_transform_tmp,
+			&renderer->color_transforms, link) {
+		vk_color_transform_destroy(&color_transform->addon);
+	}
+
 	struct wlr_vk_render_format_setup *setup, *tmp_setup;
 	wl_list_for_each_safe(setup, tmp_setup,
 			&renderer->render_format_setups, link) {
@@ -1380,7 +1392,8 @@ static struct wlr_render_pass *vulkan_begin_buffer_pass(struct wlr_renderer *wlr
 		}
 	}
 
-	struct wlr_vk_render_pass *render_pass = vulkan_begin_render_pass(renderer, render_buffer);
+	struct wlr_vk_render_pass *render_pass = vulkan_begin_render_pass(
+		renderer, render_buffer, options);
 	if (render_pass == NULL) {
 		return NULL;
 	}
@@ -2397,6 +2410,7 @@ struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev
 	wl_list_init(&renderer->output_descriptor_pools);
 	wl_list_init(&renderer->render_format_setups);
 	wl_list_init(&renderer->render_buffers);
+	wl_list_init(&renderer->color_transforms);
 	wl_list_init(&renderer->pipeline_layouts);
 
 	if (!init_static_render_data(renderer)) {
