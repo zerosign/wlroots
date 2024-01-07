@@ -157,6 +157,13 @@ enum wlr_vk_shader_source {
 	WLR_VK_SHADER_SOURCE_SINGLE_COLOR,
 };
 
+// Constants used to pick the color transform for the blend-to-output
+// fragment shader. Must match those in shaders/output.frag
+enum wlr_vk_output_transform {
+	WLR_VK_OUTPUT_TRANSFORM_INVERSE_SRGB = 0,
+	WLR_VK_OUTPUT_TRANSFORM_LUT3D = 1,
+};
+
 struct wlr_vk_pipeline_key {
 	struct wlr_vk_pipeline_layout_key layout;
 	enum wlr_vk_shader_source source;
@@ -182,7 +189,8 @@ struct wlr_vk_render_format_setup {
 	const struct wlr_vk_format *render_format; // used in renderpass
 	VkRenderPass render_pass;
 
-	VkPipeline output_pipe;
+	VkPipeline output_pipe_srgb;
+	VkPipeline output_pipe_lut3d;
 
 	struct wlr_vk_renderer *renderer;
 	struct wl_list pipelines; // struct wlr_vk_pipeline.link

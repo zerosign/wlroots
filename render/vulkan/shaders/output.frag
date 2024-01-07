@@ -1,6 +1,6 @@
 #version 450
 
-layout (input_attachment_index = 0, binding = 0) uniform subpassInput in_color;
+layout (input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput in_color;
 
 layout(set = 1, binding = 0) uniform sampler3D lut_3d;
 
@@ -12,6 +12,12 @@ layout(push_constant) uniform UBO {
 	layout(offset = 80) float lut_3d_offset;
 	float lut_3d_scale;
 } data;
+
+layout (constant_id = 0) const int OUTPUT_TRANSFORM = 0;
+
+// Matches enum wlr_vk_output_transform
+#define OUTPUT_TRANSFORM_INVERSE_SRGB 0
+#define OUTPUT_TRANSFORM_LUT_3D 1
 
 float linear_channel_to_srgb(float x) {
 	return max(min(x * 12.92, 0.04045), 1.055 * pow(x, 1. / 2.4) - 0.055);
@@ -33,10 +39,22 @@ vec4 linear_color_to_srgb(vec4 color) {
 
 void main() {
 	vec4 val = subpassLoad(in_color).rgba;
+	if (OUTPUT_TRANSFORM == OUTPUT_TRANSFORM_LUT_3D) {
+		if (val.a == 0) {
+			out_color = vec4(0);
+			return;
+		}
+		// Convert from pre-multiplied alpha to straight alpha
+		vec3 rgb = val.rgb / val.a;
 
-	// temporary code to use the 3d look up table; to be dropped next commit
-	vec3 pos = data.lut_3d_offset + vec3(0.5,0.5,0.5) * data.lut_3d_scale;
-	val.rgb *= texture(lut_3d, pos).rgb;
+		// Apply 3D LUT
+		vec3 pos = data.lut_3d_offset + rgb * data.lut_3d_scale;
+		rgb = texture(lut_3d, pos).rgb;
 
-	out_color = linear_color_to_srgb(val);
+		// Back to pre-multiplied alpha
+		out_color = vec4(rgb * val.a, val.a);
+	} else { // OUTPUT_TRANSFORM_INVERSE_SRGB
+		// Produce post-premultiplied sRGB encoded values
+		out_color = linear_color_to_srgb(val);
+	}
 }

@@ -109,7 +109,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 		};
 		mat3_to_mat4(final_matrix, vert_pcr_data.mat4);
 
-		bind_pipeline(pass, render_buffer->render_setup->output_pipe);
+		bind_pipeline(pass, render_buffer->render_setup->output_pipe_srgb);
 		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,
 			VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vert_pcr_data), &vert_pcr_data);
 		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,

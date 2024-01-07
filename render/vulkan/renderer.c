@@ -156,7 +156,8 @@ static void destroy_render_format_setup(struct wlr_vk_renderer *renderer,
 
 	VkDevice dev = renderer->dev->dev;
 	vkDestroyRenderPass(dev, setup->render_pass, NULL);
-	vkDestroyPipeline(dev, setup->output_pipe, NULL);
+	vkDestroyPipeline(dev, setup->output_pipe_srgb, NULL);
+	vkDestroyPipeline(dev, setup->output_pipe_lut3d, NULL);
 
 	struct wlr_vk_pipeline *pipeline, *tmp_pipeline;
 	wl_list_for_each_safe(pipeline, tmp_pipeline, &setup->pipelines, link) {
@@ -1698,9 +1699,23 @@ struct wlr_vk_pipeline *setup_get_or_create_pipeline(
 }
 
 static bool init_blend_to_output_pipeline(struct wlr_vk_renderer *renderer,
-		VkRenderPass rp, VkPipelineLayout pipe_layout, VkPipeline *pipe) {
+		VkRenderPass rp, VkPipelineLayout pipe_layout, VkPipeline *pipe,
+		enum wlr_vk_output_transform transform) {
 	VkResult res;
 	VkDevice dev = renderer->dev->dev;
+
+	uint32_t output_transform_type = transform;
+	VkSpecializationMapEntry spec_entry = {
+		.constantID = 0,
+		.offset = 0,
+		.size = sizeof(uint32_t),
+	};
+	VkSpecializationInfo specialization = {
+		.mapEntryCount = 1,
+		.pMapEntries = &spec_entry,
+		.dataSize = sizeof(uint32_t),
+		.pData = &output_transform_type,
+	};
 
 	VkPipelineShaderStageCreateInfo tex_stages[2] = {
 		{
@@ -1714,6 +1729,7 @@ static bool init_blend_to_output_pipeline(struct wlr_vk_renderer *renderer,
 			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
 			.module = renderer->output_module,
 			.pName = "main",
+			.pSpecializationInfo = &specialization,
 		},
 	};
 
@@ -2179,7 +2195,12 @@ static struct wlr_vk_render_format_setup *find_or_create_render_setup(
 		// this is only well defined if render pass has a 2nd subpass
 		if (!init_blend_to_output_pipeline(
 				renderer, setup->render_pass, renderer->output_pipe_layout,
-				 &setup->output_pipe)) {
+				&setup->output_pipe_lut3d, WLR_VK_OUTPUT_TRANSFORM_LUT3D)) {
+			goto error;
+		}
+		if (!init_blend_to_output_pipeline(
+			renderer, setup->render_pass, renderer->output_pipe_layout,
+			&setup->output_pipe_srgb, WLR_VK_OUTPUT_TRANSFORM_INVERSE_SRGB)) {
 			goto error;
 		}
 	} else {
