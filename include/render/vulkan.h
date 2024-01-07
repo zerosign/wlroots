@@ -243,9 +243,21 @@ struct wlr_vk_renderer {
 
 	// for blend->output subpass
 	VkPipelineLayout output_pipe_layout;
-	VkDescriptorSetLayout output_ds_layout;
+	VkDescriptorSetLayout output_ds_srgb_layout;
+	VkDescriptorSetLayout output_ds_lut3d_layout;
+	VkSampler output_sampler_lut3d;
+	// descriptor set indicating dummy 1x1x1 image, for use in the lut3d slot
+	VkDescriptorSet output_ds_lut3d_dummy;
+	struct wlr_vk_descriptor_pool *output_ds_lut3d_dummy_pool;
+
 	size_t last_output_pool_size;
 	struct wl_list output_descriptor_pools; // wlr_vk_descriptor_pool.link
+
+	// dummy sampler to bind when output shader is not using a lookup table
+	VkImage dummy3d_image;
+	VkDeviceMemory dummy3d_mem;
+	VkImageView dummy3d_image_view;
+	bool dummy3d_image_transitioned;
 
 	VkSemaphore timeline_semaphore;
 	uint64_t timeline_point;
@@ -284,6 +296,11 @@ struct wlr_vk_vert_pcr_data {
 	float mat4[4][4];
 	float uv_off[2];
 	float uv_size[2];
+};
+
+struct wlr_vk_frag_output_pcr_data {
+	float lut_3d_offset;
+	float lut_3d_scale;
 };
 
 struct wlr_vk_texture_view {

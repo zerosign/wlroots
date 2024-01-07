@@ -138,7 +138,7 @@ struct wlr_vk_descriptor_pool *vulkan_alloc_texture_ds(
 struct wlr_vk_descriptor_pool *vulkan_alloc_blend_ds(
 	struct wlr_vk_renderer *renderer, VkDescriptorSet *ds) {
 	return alloc_ds(renderer, ds, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-		&renderer->output_ds_layout, &renderer->output_descriptor_pools,
+		&renderer->output_ds_srgb_layout, &renderer->output_descriptor_pools,
 		&renderer->last_output_pool_size);
 }
 
@@ -1045,10 +1045,20 @@ static void vulkan_destroy(struct wlr_renderer *wlr_renderer) {
 		vkDestroySamplerYcbcrConversion(dev->dev, pipeline_layout->ycbcr.conversion, NULL);
 	}
 
+	if (renderer->output_ds_lut3d_dummy_pool) {
+		vulkan_free_ds(renderer, renderer->output_ds_lut3d_dummy_pool,
+			renderer->output_ds_lut3d_dummy);
+	}
+	vkDestroyImageView(dev->dev, renderer->dummy3d_image_view, NULL);
+	vkDestroyImage(dev->dev, renderer->dummy3d_image, NULL);
+	vkFreeMemory(dev->dev, renderer->dummy3d_mem, NULL);
+
 	vkDestroySemaphore(dev->dev, renderer->timeline_semaphore, NULL);
 	vkDestroyPipelineLayout(dev->dev, renderer->output_pipe_layout, NULL);
-	vkDestroyDescriptorSetLayout(dev->dev, renderer->output_ds_layout, NULL);
+	vkDestroyDescriptorSetLayout(dev->dev, renderer->output_ds_srgb_layout, NULL);
+	vkDestroyDescriptorSetLayout(dev->dev, renderer->output_ds_lut3d_layout, NULL);
 	vkDestroyCommandPool(dev->dev, renderer->command_pool, NULL);
+	vkDestroySampler(dev->dev, renderer->output_sampler_lut3d, NULL);
 
 	if (renderer->read_pixels_cache.initialized) {
 		vkFreeMemory(dev->dev, renderer->read_pixels_cache.dst_img_memory, NULL);
@@ -1384,13 +1394,11 @@ static bool init_tex_layouts(struct wlr_vk_renderer *renderer,
 	return true;
 }
 
-static bool init_blend_to_output_layouts(struct wlr_vk_renderer *renderer,
-		VkDescriptorSetLayout *out_ds_layout,
-		VkPipelineLayout *out_pipe_layout) {
+static bool init_blend_to_output_layouts(struct wlr_vk_renderer *renderer) {
 	VkResult res;
 	VkDevice dev = renderer->dev->dev;
 
-	VkDescriptorSetLayoutBinding ds_binding = {
+	VkDescriptorSetLayoutBinding ds_binding_input = {
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
 		.descriptorCount = 1,
@@ -1401,32 +1409,83 @@ static bool init_blend_to_output_layouts(struct wlr_vk_renderer *renderer,
 	VkDescriptorSetLayoutCreateInfo ds_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		.bindingCount = 1,
-		.pBindings = &ds_binding,
+		.pBindings = &ds_binding_input,
 	};
 
-	res = vkCreateDescriptorSetLayout(dev, &ds_info, NULL, out_ds_layout);
+	res = vkCreateDescriptorSetLayout(dev, &ds_info, NULL, &renderer->output_ds_srgb_layout);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateDescriptorSetLayout", res);
+		return false;
+	}
+
+	VkSamplerCreateInfo sampler_create_info = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_LINEAR,
+		.minFilter = VK_FILTER_LINEAR,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.minLod = 0.f,
+		.maxLod = 0.25f,
+	};
+
+	res = vkCreateSampler(renderer->dev->dev, &sampler_create_info, NULL,
+		&renderer->output_sampler_lut3d);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateSampler", res);
+		return false;
+	}
+
+	VkDescriptorSetLayoutBinding ds_binding_lut3d = {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = &renderer->output_sampler_lut3d,
+	};
+
+	VkDescriptorSetLayoutCreateInfo ds_lut3d_info = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = 1,
+		.pBindings = &ds_binding_lut3d,
+	};
+
+	res = vkCreateDescriptorSetLayout(dev, &ds_lut3d_info, NULL,
+		&renderer->output_ds_lut3d_layout);
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("vkCreateDescriptorSetLayout", res);
 		return false;
 	}
 
 	// pipeline layout -- standard vertex uniforms, no shader uniforms
-	VkPushConstantRange pc_ranges[1] = {
+	VkPushConstantRange pc_ranges[2] = {
 		{
+			.offset = 0,
 			.size = sizeof(struct wlr_vk_vert_pcr_data),
 			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		},
+		{
+			.offset = sizeof(struct wlr_vk_vert_pcr_data),
+			.size = sizeof(struct wlr_vk_frag_output_pcr_data),
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		},
+	};
+
+	VkDescriptorSetLayout out_ds_layouts[2] = {
+		renderer->output_ds_srgb_layout,
+		renderer->output_ds_lut3d_layout,
 	};
 
 	VkPipelineLayoutCreateInfo pl_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = 1,
-		.pSetLayouts = out_ds_layout,
-		.pushConstantRangeCount = 1,
+		.setLayoutCount = 2,
+		.pSetLayouts = out_ds_layouts,
+		.pushConstantRangeCount = 2,
 		.pPushConstantRanges = pc_ranges,
 	};
 
-	res = vkCreatePipelineLayout(dev, &pl_info, NULL, out_pipe_layout);
+	res = vkCreatePipelineLayout(dev, &pl_info, NULL, &renderer->output_pipe_layout);
 	if (res != VK_SUCCESS) {
 		wlr_vk_error("vkCreatePipelineLayout", res);
 		return false;
@@ -1820,6 +1879,106 @@ struct wlr_vk_pipeline_layout *get_or_create_pipeline_layout(
 	return pipeline_layout;
 }
 
+
+/* The fragment shader for the blend->image subpass can be configured to either
+ * use or not a sampler3d lookup table; however, even if the shader does not use
+ * the sampler, a valid descriptor set should be bound. Create that here, linked to
+ * a 1x1x1 image.
+ */
+static bool init_dummy_images(struct wlr_vk_renderer *renderer) {
+	VkResult res;
+	VkDevice dev = renderer->dev->dev;
+
+	VkFormat format = VK_FORMAT_R32G32B32A32_SFLOAT;
+
+	VkImageCreateInfo img_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_3D,
+		.format = format,
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.extent = (VkExtent3D) { 1, 1, 1 },
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+	};
+	res = vkCreateImage(dev, &img_info, NULL, &renderer->dummy3d_image);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateImage failed", res);
+		return false;
+	}
+
+	VkMemoryRequirements mem_reqs = {0};
+	vkGetImageMemoryRequirements(dev, renderer->dummy3d_image, &mem_reqs);
+	int mem_type_index = vulkan_find_mem_type(renderer->dev,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mem_reqs.memoryTypeBits);
+	if (mem_type_index == -1) {
+		wlr_log(WLR_ERROR, "Failed to find suitable memory type");
+		return false;
+	}
+	VkMemoryAllocateInfo mem_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = mem_reqs.size,
+		.memoryTypeIndex = mem_type_index,
+	};
+	res = vkAllocateMemory(dev, &mem_info, NULL, &renderer->dummy3d_mem);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkAllocateMemory failed", res);
+		return false;
+	}
+	res = vkBindImageMemory(dev, renderer->dummy3d_image, renderer->dummy3d_mem, 0);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkBindMemory failed", res);
+		return false;
+	}
+
+	VkImageViewCreateInfo view_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.viewType = VK_IMAGE_VIEW_TYPE_3D,
+		.format = format,
+		.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.subresourceRange = (VkImageSubresourceRange) {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		},
+		.image = renderer->dummy3d_image,
+	};
+	res = vkCreateImageView(dev, &view_info, NULL, &renderer->dummy3d_image_view);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateImageView failed", res);
+		return false;
+	}
+
+	renderer->output_ds_lut3d_dummy_pool = vulkan_alloc_texture_ds(renderer,
+		renderer->output_ds_lut3d_layout, &renderer->output_ds_lut3d_dummy);
+	if (!renderer->output_ds_lut3d_dummy_pool) {
+		wlr_log(WLR_ERROR, "Failed to allocate descriptor");
+		return false;
+	}
+	VkDescriptorImageInfo ds_img_info = {
+		.imageView = renderer->dummy3d_image_view,
+		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+	};
+	VkWriteDescriptorSet ds_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.dstSet = renderer->output_ds_lut3d_dummy,
+		.pImageInfo = &ds_img_info,
+	};
+	vkUpdateDescriptorSets(dev, 1, &ds_write, 0, NULL);
+
+	return true;
+}
+
 // Creates static render data, such as sampler, layouts and shader modules
 // for the given renderer.
 // Cleanup is done by destroying the renderer.
@@ -1827,8 +1986,11 @@ static bool init_static_render_data(struct wlr_vk_renderer *renderer) {
 	VkResult res;
 	VkDevice dev = renderer->dev->dev;
 
-	if (!init_blend_to_output_layouts(renderer, &renderer->output_ds_layout,
-			&renderer->output_pipe_layout)) {
+	if (!init_blend_to_output_layouts(renderer)) {
+		return false;
+	}
+
+	if (!init_dummy_images(renderer)) {
 		return false;
 	}
 

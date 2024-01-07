@@ -103,14 +103,26 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 			.uv_off = { 0, 0 },
 			.uv_size = { 1, 1 },
 		};
+		struct wlr_vk_frag_output_pcr_data frag_pcr_data = {
+			.lut_3d_offset = 0.5f / 1,
+			.lut_3d_scale = (float)(1 - 1) / 1,
+		};
 		mat3_to_mat4(final_matrix, vert_pcr_data.mat4);
 
 		bind_pipeline(pass, render_buffer->render_setup->output_pipe);
 		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,
 			VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vert_pcr_data), &vert_pcr_data);
+		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,
+			VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(vert_pcr_data),
+			sizeof(frag_pcr_data), &frag_pcr_data);
+		VkDescriptorSet ds[] = {
+			render_buffer->blend_descriptor_set, // set 0
+			renderer->output_ds_lut3d_dummy, // set 1
+		};
+		size_t ds_len = sizeof(ds) / sizeof(ds[0]);
 		vkCmdBindDescriptorSets(render_cb->vk,
 			VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->output_pipe_layout,
-			0, 1, &render_buffer->blend_descriptor_set, 0, NULL);
+			0, ds_len, ds, 0, NULL);
 
 		const pixman_region32_t *clip = rect_union_evaluate(&pass->updated_region);
 		int clip_rects_len;
@@ -684,6 +696,14 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 		vulkan_reset_command_buffer(cb);
 		free(pass);
 		return NULL;
+	}
+
+	if (!renderer->dummy3d_image_transitioned) {
+		renderer->dummy3d_image_transitioned = true;
+		vulkan_change_layout(cb->vk, renderer->dummy3d_image,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_SHADER_READ_BIT);
 	}
 
 	int width = buffer->wlr_buffer->width;
