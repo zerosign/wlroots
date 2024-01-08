@@ -150,8 +150,6 @@ struct wlr_output {
 	enum wlr_output_adaptive_sync_status adaptive_sync_status;
 	uint32_t render_format;
 
-	bool needs_frame;
-
 	// true for example with VR headsets
 	bool non_desktop;
 
