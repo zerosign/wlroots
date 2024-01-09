@@ -72,6 +72,10 @@ struct wlr_surface_state {
 
 	// Sync'ed object states, one per struct wlr_surface_synced
 	struct wl_array synced; // void *
+
+	// private state
+
+	struct wlr_surface_state_group *group;
 };
 
 struct wlr_surface_state_lock {
@@ -79,6 +83,11 @@ struct wlr_surface_state_lock {
 	struct wlr_surface *surface;
 	uint32_t seq;
 	struct wl_listener surface_destroy;
+};
+
+struct wlr_surface_transaction {
+	// private state
+	struct wl_array *surfaces; // struct wlr_surface *
 };
 
 struct wlr_surface_role {
@@ -192,7 +201,7 @@ struct wlr_surface {
 	struct wl_resource *role_resource;
 
 	struct {
-		struct wl_signal client_commit;
+		struct wl_signal client_commit; // struct wlr_surface_client_commit_event
 		struct wl_signal commit;
 
 		/**
@@ -244,6 +253,14 @@ struct wlr_surface {
 
 	struct wl_list synced; // wlr_surface_synced.link
 	size_t synced_len;
+
+	struct wlr_surface_state *txn_state; // NULL if not added to a transaction
+
+	struct wl_array txn_buffer;
+};
+
+struct wlr_surface_client_commit_event {
+	struct wlr_surface_transaction *transaction;
 };
 
 struct wlr_renderer;
@@ -440,6 +457,41 @@ void wlr_surface_state_lock_release(struct wlr_surface_state_lock *lock);
  * Returns true if the lock is locked, false otherwise.
  */
 bool wlr_surface_state_lock_locked(struct wlr_surface_state_lock *lock);
+
+/**
+ * Initialize a surface transaction with an existing buffer.
+ *
+ * After the transaction is committed or dropped, the buffer can be reused.
+ */
+void wlr_surface_transaction_init(struct wlr_surface_transaction *txn, struct wl_array *buffer);
+
+/**
+ * Add a state lock to the transaction. If the locked state is a part of a state
+ * group, the group is treated as a set of locks which are added individually
+ * instead.
+ *
+ * Adding locks for different states of the same surface is not allowed.
+ *
+ * On success, the lock is moved to the transaction, and true is returned.
+ * On failure, false is returned.
+ */
+bool wlr_surface_transaction_add_lock(struct wlr_surface_transaction *txn,
+	struct wlr_surface_state_lock *lock);
+
+/**
+ * Drop the transaction, releasing all its locks.
+ */
+void wlr_surface_transaction_drop(struct wlr_surface_transaction *txn);
+
+/**
+ * Commit the transaction, releasing all its locks. The corresponding states are
+ * added into a state group, which is committed only once all its states can be
+ * committed.
+ *
+ * On success, true is returned.
+ * On failure, the transaction is dropped, and false is returned.
+ */
+bool wlr_surface_transaction_commit(struct wlr_surface_transaction *txn);
 
 /**
  * Set the preferred buffer scale for the surface.
