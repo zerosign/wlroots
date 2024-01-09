@@ -256,6 +256,8 @@ static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 	atomic_add(atom, id, props->crtc_id, crtc_id);
 	atomic_add(atom, id, props->crtc_x, (uint64_t)x);
 	atomic_add(atom, id, props->crtc_y, (uint64_t)y);
+	if (plane->props.rotation)
+		atomic_add(atom, id, props->rotation, DRM_MODE_ROTATE_0);
 }
 
 static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
