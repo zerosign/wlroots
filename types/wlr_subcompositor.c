@@ -34,6 +34,7 @@ static void subsurface_destroy(struct wlr_subsurface *subsurface) {
 	wlr_surface_synced_finish(&subsurface->parent_synced);
 
 	wl_list_remove(&subsurface->surface_client_commit.link);
+	wl_list_remove(&subsurface->parent_client_commit.link);
 	wl_list_remove(&subsurface->parent_destroy.link);
 
 	wl_resource_set_user_data(subsurface->resource, NULL);
@@ -247,10 +248,19 @@ static struct wlr_surface_synced_impl surface_synced_impl = {
 	.move_state = surface_synced_move_state,
 };
 
-static void subsurface_handle_parent_destroy(struct wl_listener *listener,
-		void *data) {
+static void subsurface_handle_parent_client_commit(struct wl_listener *listener, void *data) {
 	struct wlr_subsurface *subsurface =
-		wl_container_of(listener, subsurface, parent_destroy);
+		wl_container_of(listener, subsurface, parent_client_commit);
+	struct wlr_surface_client_commit_event *event = data;
+	if (wlr_surface_state_lock_locked(&subsurface->cached_lock)) {
+		if (!wlr_surface_transaction_add_lock(event->transaction, &subsurface->cached_lock)) {
+			wl_resource_post_no_memory(subsurface->resource);
+		}
+	}
+}
+
+static void subsurface_handle_parent_destroy(struct wl_listener *listener, void *data) {
+	struct wlr_subsurface *subsurface = wl_container_of(listener, subsurface, parent_destroy);
 	// Once the parent is destroyed, the client has no way to use the
 	// wl_subsurface object anymore, so we can destroy it.
 	subsurface_destroy(subsurface);
@@ -274,6 +284,7 @@ static void subsurface_handle_surface_client_commit(
 	}
 }
 
+#if 0
 static void collect_damage_iter(struct wlr_surface *surface,
 		int sx, int sy, void *data) {
 	struct wlr_subsurface *subsurface = data;
@@ -283,8 +294,10 @@ static void collect_damage_iter(struct wlr_surface *surface,
 		subsurface->current.y + sy,
 		surface->current.width, surface->current.height);
 }
+#endif
 
 void subsurface_handle_parent_commit(struct wlr_subsurface *subsurface) {
+#if 0
 	struct wlr_surface *surface = subsurface->surface;
 
 	bool moved = subsurface->current.x != subsurface->previous.x ||
@@ -303,6 +316,7 @@ void subsurface_handle_parent_commit(struct wlr_subsurface *subsurface) {
 		wlr_surface_for_each_surface(surface,
 			collect_damage_iter, subsurface);
 	}
+#endif
 
 	if (!subsurface->added) {
 		subsurface->added = true;
@@ -311,8 +325,10 @@ void subsurface_handle_parent_commit(struct wlr_subsurface *subsurface) {
 		subsurface_consider_map(subsurface);
 	}
 
+#if 0
 	subsurface->previous.x = subsurface->current.x;
 	subsurface->previous.y = subsurface->current.y;
+#endif
 }
 
 struct wlr_subsurface *wlr_subsurface_try_from_wlr_surface(struct wlr_surface *surface) {
@@ -399,6 +415,8 @@ static void subcompositor_handle_get_subsurface(struct wl_client *client,
 
 	// link parent
 	subsurface->parent = parent;
+	wl_signal_add(&parent->events.client_commit, &subsurface->parent_client_commit);
+	subsurface->parent_client_commit.notify = subsurface_handle_parent_client_commit;
 	wl_signal_add(&parent->events.destroy, &subsurface->parent_destroy);
 	subsurface->parent_destroy.notify = subsurface_handle_parent_destroy;
 
