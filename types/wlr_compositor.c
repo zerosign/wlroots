@@ -230,47 +230,39 @@ static void surface_update_damage(pixman_region32_t *buffer_damage,
 		struct wlr_surface_state *current, struct wlr_surface_state *pending) {
 	pixman_region32_clear(buffer_damage);
 
-	if (pending->width != current->width ||
-			pending->height != current->height ||
-			!wlr_fbox_equal(&pending->viewport.src, &current->viewport.src)) {
-		// Damage the whole buffer on resize or viewport source box change
-		pixman_region32_union_rect(buffer_damage, buffer_damage, 0, 0,
-			pending->buffer_width, pending->buffer_height);
-	} else {
-		// Copy over surface damage + buffer damage
-		pixman_region32_t surface_damage;
-		pixman_region32_init(&surface_damage);
+	// Copy over surface damage + buffer damage
+	pixman_region32_t surface_damage;
+	pixman_region32_init(&surface_damage);
 
-		pixman_region32_copy(&surface_damage, &pending->surface_damage);
+	pixman_region32_copy(&surface_damage, &pending->surface_damage);
 
-		if (pending->viewport.has_dst) {
-			int src_width, src_height;
-			surface_state_viewport_src_size(pending, &src_width, &src_height);
-			float scale_x = (float)pending->viewport.dst_width / src_width;
-			float scale_y = (float)pending->viewport.dst_height / src_height;
-			wlr_region_scale_xy(&surface_damage, &surface_damage,
-				1.0 / scale_x, 1.0 / scale_y);
-		}
-		if (pending->viewport.has_src) {
-			// This is lossy: do a best-effort conversion
-			pixman_region32_translate(&surface_damage,
-				floor(pending->viewport.src.x),
-				floor(pending->viewport.src.y));
-		}
-
-		wlr_region_scale(&surface_damage, &surface_damage, pending->scale);
-
-		int width, height;
-		surface_state_transformed_buffer_size(pending, &width, &height);
-		wlr_region_transform(&surface_damage, &surface_damage,
-			wlr_output_transform_invert(pending->transform),
-			width, height);
-
-		pixman_region32_union(buffer_damage,
-			&pending->buffer_damage, &surface_damage);
-
-		pixman_region32_fini(&surface_damage);
+	if (pending->viewport.has_dst) {
+		int src_width, src_height;
+		surface_state_viewport_src_size(pending, &src_width, &src_height);
+		float scale_x = (float)pending->viewport.dst_width / src_width;
+		float scale_y = (float)pending->viewport.dst_height / src_height;
+		wlr_region_scale_xy(&surface_damage, &surface_damage,
+			1.0 / scale_x, 1.0 / scale_y);
 	}
+	if (pending->viewport.has_src) {
+		// This is lossy: do a best-effort conversion
+		pixman_region32_translate(&surface_damage,
+			floor(pending->viewport.src.x),
+			floor(pending->viewport.src.y));
+	}
+
+	wlr_region_scale(&surface_damage, &surface_damage, pending->scale);
+
+	int width, height;
+	surface_state_transformed_buffer_size(pending, &width, &height);
+	wlr_region_transform(&surface_damage, &surface_damage,
+		wlr_output_transform_invert(pending->transform),
+		width, height);
+
+	pixman_region32_union(buffer_damage,
+		&pending->buffer_damage, &surface_damage);
+
+	pixman_region32_fini(&surface_damage);
 }
 
 static void *surface_synced_create_state(struct wlr_surface_synced *synced) {
@@ -512,15 +504,6 @@ static void surface_commit_state(struct wlr_surface *surface,
 
 	surface_update_damage(&surface->buffer_damage, &surface->current, next);
 
-	pixman_region32_clear(&surface->external_damage);
-	if (surface->current.width > next->width ||
-			surface->current.height > next->height ||
-			next->dx != 0 || next->dy != 0) {
-		pixman_region32_union_rect(&surface->external_damage,
-			&surface->external_damage, -next->dx, -next->dy,
-			surface->current.width, surface->current.height);
-	}
-
 	surface->previous.scale = surface->current.scale;
 	surface->previous.transform = surface->current.transform;
 	surface->previous.width = surface->current.width;
@@ -732,7 +715,6 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 	surface_state_finish(&surface->pending);
 	surface_state_finish(&surface->current);
 	pixman_region32_fini(&surface->buffer_damage);
-	pixman_region32_fini(&surface->external_damage);
 	pixman_region32_fini(&surface->opaque_region);
 	pixman_region32_fini(&surface->input_region);
 	if (surface->buffer != NULL) {
@@ -782,7 +764,6 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	wl_list_init(&surface->current_outputs);
 	wl_list_init(&surface->cached);
 	pixman_region32_init(&surface->buffer_damage);
-	pixman_region32_init(&surface->external_damage);
 	pixman_region32_init(&surface->opaque_region);
 	pixman_region32_init(&surface->input_region);
 	wlr_addon_set_init(&surface->addons);
@@ -1207,8 +1188,6 @@ void wlr_surface_get_effective_damage(struct wlr_surface *surface,
 		float scale_y = (float)surface->current.viewport.dst_height / src_height;
 		wlr_region_scale_xy(damage, damage, scale_x, scale_y);
 	}
-
-	pixman_region32_union(damage, damage, &surface->external_damage);
 }
 
 void wlr_surface_get_buffer_source_box(struct wlr_surface *surface,
