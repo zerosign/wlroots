@@ -69,6 +69,7 @@ static void subsurface_handle_set_position(struct wl_client *client,
 
 	subsurface->pending.x = x;
 	subsurface->pending.y = y;
+	subsurface->pending.committed |= WLR_SUBSURFACE_PARENT_STATE_POSITION;
 }
 
 static struct wlr_subsurface *subsurface_find_sibling(
@@ -120,6 +121,7 @@ static void subsurface_handle_place_above(struct wl_client *client,
 	wl_list_insert(node, &subsurface->pending.link);
 
 	subsurface->reordered = true;
+	subsurface->pending.committed |= WLR_SUBSURFACE_PARENT_STATE_ORDER;
 }
 
 static void subsurface_handle_place_below(struct wl_client *client,
@@ -152,6 +154,7 @@ static void subsurface_handle_place_below(struct wl_client *client,
 	wl_list_insert(node->prev, &subsurface->pending.link);
 
 	subsurface->reordered = true;
+	subsurface->pending.committed |= WLR_SUBSURFACE_PARENT_STATE_ORDER;
 }
 
 static void subsurface_handle_set_sync(struct wl_client *client,
@@ -240,6 +243,9 @@ static void surface_synced_move_state(void *_dst, void *_src) {
 	dst->x = src->x;
 	dst->y = src->y;
 	dst->synced = src->synced;
+
+	dst->committed = src->committed;
+	src->committed = 0;
 
 	// For the sake of simplicity, copying the position in list is done by the
 	// parent itself
