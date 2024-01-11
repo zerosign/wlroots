@@ -20,7 +20,7 @@
 #error "Lock-free C11 atomic pointers are required"
 #endif
 
-#define SHM_VERSION 1
+#define SHM_VERSION 2
 
 struct wlr_shm {
 	struct wl_global *global;
@@ -466,8 +466,14 @@ error_fd:
 	close(fd);
 }
 
+static void shm_handle_release(struct wl_client *client,
+		struct wl_resource *resource) {
+	wl_resource_destroy(resource);
+}
+
 static const struct wl_shm_interface shm_impl = {
 	.create_pool = shm_handle_create_pool,
+	.release = shm_handle_release,
 };
 
 static void shm_bind(struct wl_client *client, void *data, uint32_t version,
@@ -497,6 +503,8 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 
 struct wlr_shm *wlr_shm_create(struct wl_display *display, uint32_t version,
 		const uint32_t *formats, size_t formats_len) {
+	assert(version <= SHM_VERSION);
+
 	// ARGB8888 and XRGB8888 must be supported per the wl_shm spec
 	bool has_argb8888 = false, has_xrgb8888 = false;
 	for (size_t i = 0; i < formats_len; i++) {
@@ -528,7 +536,7 @@ struct wlr_shm *wlr_shm_create(struct wl_display *display, uint32_t version,
 		shm->formats[i] = convert_drm_format_to_wl_shm(formats[i]);
 	}
 
-	shm->global = wl_global_create(display, &wl_shm_interface, SHM_VERSION,
+	shm->global = wl_global_create(display, &wl_shm_interface, version,
 		shm, shm_bind);
 	if (shm->global == NULL) {
 		wlr_log(WLR_ERROR, "wl_global_create failed");

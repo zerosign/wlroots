@@ -103,7 +103,7 @@ internal_config = configuration_data()
 
 wayland_project_options = ['tests=false', 'documentation=false']
 wayland_server = dependency('wayland-server',
-	version: '>=1.22',
+	version: '>=1.22.90',
 	fallback: 'wayland',
 	default_options: wayland_project_options,
 )
