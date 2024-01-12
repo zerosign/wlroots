@@ -544,6 +544,11 @@ void wlr_output_set_layers(struct wlr_output *output,
 	wlr_output_state_set_layers(&output->pending, layers, layers_len);
 }
 
+void wlr_output_set_color_format(struct wlr_output *output,
+		enum wlr_output_color_format value) {
+	wlr_output_state_set_color_format(&output->pending, value);
+}
+
 static void output_state_clear_gamma_lut(struct wlr_output_state *state) {
 	free(state->gamma_lut);
 	state->gamma_lut = NULL;

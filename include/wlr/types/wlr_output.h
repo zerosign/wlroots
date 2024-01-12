@@ -26,6 +26,14 @@ enum wlr_output_mode_aspect_ratio {
 	WLR_OUTPUT_MODE_ASPECT_RATIO_256_135,
 };
 
+enum wlr_output_color_format {
+	WLR_OUTPUT_COLOR_FORMAT_UNSPEC,
+	WLR_OUTPUT_COLOR_FORMAT_RGB,
+	WLR_OUTPUT_COLOR_FORMAT_YCBCR444,
+	WLR_OUTPUT_COLOR_FORMAT_YCBCR422,
+	WLR_OUTPUT_COLOR_FORMAT_YCBCR420,
+};
+
 struct wlr_output_mode {
 	int32_t width, height;
 	int32_t refresh; // mHz
@@ -108,6 +116,8 @@ struct wlr_output_state {
 
 	struct wlr_output_layer_state *layers;
 	size_t layers_len;
+
+	enum wlr_output_color_format color_format;
 };
 
 struct wlr_output_impl;
@@ -423,6 +433,14 @@ void wlr_output_set_damage(struct wlr_output *output,
  */
 void wlr_output_set_layers(struct wlr_output *output,
 	struct wlr_output_layer_state *layers, size_t layers_len);
+
+/**
+ * Set the output color format. This is the color encoding the signal that
+ * goes out to the wire.
+ */
+void wlr_output_set_color_format(struct wlr_output *output,
+		enum wlr_output_color_format value);
+
 /**
  * Test whether the pending output state would be accepted by the backend. If
  * this function returns true, wlr_output_commit() can only fail due to a
@@ -675,6 +693,13 @@ void wlr_output_state_set_damage(struct wlr_output_state *state,
  */
 void wlr_output_state_set_layers(struct wlr_output_state *state,
 	struct wlr_output_layer_state *layers, size_t layers_len);
+
+/**
+ * Set the output color format. This is the color encoding the signal that
+ * goes out to the wire.
+ */
+void wlr_output_state_set_color_format(struct wlr_output_state *state,
+		enum wlr_output_color_format value);
 
 /**
  * Copies the output state from src to dst. It is safe to then
