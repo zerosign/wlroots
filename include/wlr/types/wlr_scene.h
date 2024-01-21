@@ -469,6 +469,7 @@ void wlr_scene_output_set_position(struct wlr_scene_output *scene_output,
 
 struct wlr_scene_output_state_options {
 	struct wlr_scene_timer *timer;
+	struct wlr_color_transform *color_transform;
 
 	/**
 	 * Allows use of a custom swapchain. This can be useful when trying out an

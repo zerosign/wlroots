@@ -1861,6 +1861,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 	struct wlr_render_pass *render_pass = wlr_renderer_begin_buffer_pass(output->renderer, buffer,
 			&(struct wlr_buffer_pass_options){
 		.timer = timer ? timer->render_timer : NULL,
+		.color_transform = options->color_transform,
 	});
 	if (render_pass == NULL) {
 		wlr_buffer_unlock(buffer);
