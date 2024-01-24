@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <strings.h>
+#include <xkbcommon/xkbcommon.h>
 #include <wayland-server-core.h>
 
 #include <wlr/backend/headless.h>
@@ -13,6 +15,7 @@
 #include <wlr/config.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/util/log.h>
+#include <wlr/types/wlr_keyboard.h>
 #include "backend/backend.h"
 #include "backend/multi.h"
 #include "render/allocator/allocator.h"
@@ -146,6 +149,37 @@ static size_t parse_outputs_env(const char *name) {
 	return outputs;
 }
 
+// This code was copied from sway wm source code,
+// from https://github.com/swaywm/sway/blob/7cf4e1d/sway/input/keyboard.c
+// ____________________________________________________
+static struct modifier_key {
+	char *name;
+	uint32_t mod;
+} modifiers[] = {
+	{ XKB_MOD_NAME_SHIFT, WLR_MODIFIER_SHIFT },
+	{ XKB_MOD_NAME_CAPS , WLR_MODIFIER_CAPS  },
+	{ XKB_MOD_NAME_CTRL , WLR_MODIFIER_CTRL  },
+	{ "Ctrl"            , WLR_MODIFIER_CTRL  },
+	{ XKB_MOD_NAME_ALT  , WLR_MODIFIER_ALT   },
+	{ "Alt"             , WLR_MODIFIER_ALT   },
+	{ XKB_MOD_NAME_NUM  , WLR_MODIFIER_MOD2  },
+	{ "Mod3"            , WLR_MODIFIER_MOD3  },
+	{ XKB_MOD_NAME_LOGO , WLR_MODIFIER_LOGO  },
+	{ "Mod5"            , WLR_MODIFIER_MOD5  },
+};
+
+static uint32_t get_modifier_mask_by_name(const char *name) {
+	int i;
+	for (i = 0; i < (int)(sizeof(modifiers) / sizeof(struct modifier_key)); ++i) {
+		if (strcasecmp(modifiers[i].name, name) == 0) {
+			return modifiers[i].mod;
+		}
+	}
+
+	return 0;
+}
+// ____________________________________________________)
+
 static struct wlr_backend *attempt_wl_backend(struct wl_display *display) {
 	struct wlr_backend *backend = wlr_wl_backend_create(display, NULL);
 	if (backend == NULL) {
@@ -155,6 +189,37 @@ static struct wlr_backend *attempt_wl_backend(struct wl_display *display) {
 	size_t outputs = parse_outputs_env("WLR_WL_OUTPUTS");
 	for (size_t i = 0; i < outputs; ++i) {
 		wlr_wl_output_create(backend);
+	}
+
+	char* keyboard_shortcut = getenv("WLR_WL_GRAB_INPUT_SHORTCUT");
+	if (keyboard_shortcut) {
+		wlr_log(WLR_INFO, "Loading user-specified input grab keyboard shortcut: %s",
+			keyboard_shortcut);
+		xkb_keysym_t input_grab_keysym = 0;
+		uint32_t input_grab_modifier_mask = 0;
+		keyboard_shortcut = strdup(keyboard_shortcut);
+
+		char *saveptr;
+		char *key_name = strtok_r(keyboard_shortcut, "+", &saveptr);
+		while (key_name  != NULL) {
+
+			uint32_t modifier_mask = get_modifier_mask_by_name(key_name);
+			input_grab_modifier_mask = input_grab_modifier_mask | modifier_mask;
+			if(modifier_mask == 0) {
+				input_grab_keysym = xkb_keysym_from_name(key_name,XKB_KEYSYM_CASE_INSENSITIVE);
+				if(input_grab_keysym == 0) {
+					wlr_log(WLR_ERROR,
+							"The key shortcut contains an unrecognized key name. ignoring key shortcut");
+					input_grab_keysym = 0;
+					input_grab_modifier_mask = 0;
+					free(keyboard_shortcut);
+					return backend;
+				}
+			}
+			key_name  = strtok_r(NULL, "+", &saveptr);
+		}
+	free(keyboard_shortcut);
+	wlr_wl_backend_set_grab_input_shortcut(backend, input_grab_modifier_mask, input_grab_keysym);
 	}
 
 	return backend;

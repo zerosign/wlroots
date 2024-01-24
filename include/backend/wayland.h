@@ -18,6 +18,8 @@
 struct wlr_wl_backend {
 	struct wlr_backend backend;
 
+	uint32_t input_grab_modifiers_mask; //for input grab.
+	xkb_keysym_t input_grab_keysym; //for input grab.
 	/* local state */
 	bool started;
 	struct wl_display *local_display;
@@ -49,6 +51,9 @@ struct wlr_wl_backend {
 	struct xdg_activation_v1 *activation_v1;
 	struct wl_subcompositor *subcompositor;
 	struct wp_viewporter *viewporter;
+	struct zwp_pointer_constraints_v1 *pointer_constraints;
+	struct zwp_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit_manager;
+	struct zwp_keyboard_shortcuts_inhibitor_v1 *shortcuts_inhibit;
 	char *drm_render_name;
 };
 
@@ -135,6 +140,7 @@ struct wlr_wl_seat {
 	struct wlr_wl_pointer *active_pointer;
 	struct wl_list pointers; // wlr_wl_pointer.link
 
+	struct wl_surface *grab_surface; //for fake grabbing input. may be NULL when keyboard focus is not on any wayland output
 	struct zwp_pointer_gesture_swipe_v1 *gesture_swipe;
 	struct zwp_pointer_gesture_pinch_v1 *gesture_pinch;
 	struct zwp_pointer_gesture_hold_v1 *gesture_hold;
@@ -151,6 +157,8 @@ struct wlr_wl_seat {
 	struct wlr_tablet_tool wlr_tablet_tool;
 	struct zwp_tablet_pad_v2 *zwp_tablet_pad_v2;
 	struct wlr_tablet_pad wlr_tablet_pad;
+	struct zwp_confined_pointer_v1 *confined_pointer;
+	bool has_grab; //for fake grabbing input. may be NULL when no grab was initiated yet.
 
 	struct wl_list link; // wlr_wl_backend.seats
 };

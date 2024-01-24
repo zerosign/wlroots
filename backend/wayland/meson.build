@@ -23,6 +23,8 @@ client_protos = [
 	'xdg-activation-v1',
 	'xdg-decoration-unstable-v1',
 	'xdg-shell',
+	'pointer-constraints-unstable-v1',
+	'keyboard-shortcuts-inhibit-unstable-v1',
 ]
 
 foreach proto : client_protos

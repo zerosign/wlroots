@@ -6,6 +6,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <xkbcommon/xkbcommon.h>
 
 #include <wayland-client.h>
 
@@ -19,6 +20,151 @@
 
 #include "backend/wayland.h"
 #include "util/time.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
+#include "pointer-constraints-unstable-v1-client-protocol.h"
+
+//these functions are based on functions with simillar names from xwayland code
+// (https://gitlab.freedesktop.org/xorg/xserver/-/blob/befef003/hw/xwayland/xwayland-input.c)
+// ______________________________________________________________________
+static void wlr_wl_seat_destroy_confined_pointer(struct wlr_wl_seat *seat) {
+	if(seat->confined_pointer != NULL) {
+		zwp_confined_pointer_v1_destroy(seat->confined_pointer);
+		seat->confined_pointer = NULL;
+	}
+
+}
+
+static void wlr_wl_seat_unconfine_pointer(struct wlr_wl_seat *seat) {
+
+	if (seat->confined_pointer) {
+		wlr_wl_seat_destroy_confined_pointer(seat);
+	}
+}
+
+static void wlr_wl_seat_confine_pointer(struct wlr_wl_seat *seat) {
+	struct zwp_pointer_constraints_v1 *pointer_constraints =
+		seat->backend->pointer_constraints;
+
+	if (!pointer_constraints) {
+		return;
+	}
+
+
+	if (!seat->wl_pointer) {
+		return;
+	}
+
+	if (seat->confined_pointer) {
+		return;
+	}
+
+
+	wlr_wl_seat_unconfine_pointer(seat);
+
+	struct wl_surface *surface = seat->grab_surface;
+		  if(surface == NULL) {
+		  wlr_log (WLR_INFO, "surface is null!!!");
+		  return;
+		}
+	seat->confined_pointer =
+		zwp_pointer_constraints_v1_confine_pointer(pointer_constraints,
+												   surface,
+												   seat->wl_pointer,
+												   NULL,
+												   ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+}
+
+
+static void maybe_fake_grab_devices(struct wlr_wl_seat *seat) {
+	wlr_log (WLR_INFO,"Grabbed seat '%s' input!!!!", seat->name);
+	struct wlr_wl_backend *backend = seat->backend;
+
+	wlr_wl_seat_confine_pointer(seat);
+	if (!backend->shortcuts_inhibit_manager) {
+		  return;
+	}
+
+	if (backend->shortcuts_inhibit) {
+		  return;
+	}
+	struct wl_surface *surface =  seat->grab_surface;
+	if(surface == NULL) {
+		wlr_log (WLR_INFO, "surface is null!!!");
+		return;
+	}
+	backend->shortcuts_inhibit =
+		zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts (
+			backend->shortcuts_inhibit_manager,
+			surface,
+			seat->wl_seat);
+}
+
+static void maybe_fake_ungrab_devices(struct wlr_wl_seat *seat)
+{
+	wlr_log (WLR_INFO,"Released seat '%s' input!!!!", seat->name);
+	struct wlr_wl_backend *backend = seat->backend;
+
+	wlr_wl_seat_unconfine_pointer(seat);
+
+	if (!backend->shortcuts_inhibit) {
+		return;
+	}
+	zwp_keyboard_shortcuts_inhibitor_v1_destroy (backend->shortcuts_inhibit);
+	backend->shortcuts_inhibit = NULL;
+}
+// ______________________________________________________________________
+static bool fake_grab_input_shortcut_was_pressed(xkb_keysym_t keysym, uint32_t depressed_modifiers,
+		xkb_keysym_t input_grab_keysym, uint32_t input_grab_modifiers_mask) {
+
+	xkb_keysym_t input_grab_keysym_lowercase = xkb_keysym_to_lower(input_grab_keysym);
+	xkb_keysym_t keysym_lowercase = xkb_keysym_to_lower(keysym);
+
+	if(!input_grab_keysym && !input_grab_modifiers_mask) {
+		return false;
+	}
+
+	bool input_grab_only_modifiers = (input_grab_modifiers_mask == depressed_modifiers)
+			&& !input_grab_keysym;
+	bool input_grab_only_keysym = !input_grab_modifiers_mask
+			&& (input_grab_keysym_lowercase == keysym_lowercase);
+	bool input_grab_modifiers_and_keysym= (input_grab_modifiers_mask == depressed_modifiers)
+			&& (input_grab_keysym_lowercase==keysym_lowercase);
+
+	return input_grab_only_modifiers || input_grab_only_keysym || input_grab_modifiers_and_keysym;
+}
+
+static void maybe_toggle_fake_grab(struct wlr_wl_seat *seat, uint32_t key, uint32_t state) {
+	if(seat->grab_surface == NULL) {
+		wlr_log (WLR_INFO, "input surface is null. not grabbing/releasing!");
+		return;
+	}
+
+	struct wlr_keyboard *keyboard = &seat->wlr_keyboard;
+	struct xkb_state *xkb_state = keyboard->xkb_state;
+
+	xkb_keysym_t input_grab_keysym = seat->backend->input_grab_keysym;
+	uint32_t input_grab_modifiers_mask = seat->backend->input_grab_modifiers_mask;
+	uint32_t depressed_modifiers = keyboard->modifiers.depressed;
+
+	xkb_keysym_t keysym = xkb_state_key_get_one_sym(xkb_state, key + 8);
+
+	if(state != WL_KEYBOARD_KEY_STATE_RELEASED) {
+		  return;
+	}
+
+	if(fake_grab_input_shortcut_was_pressed(keysym, depressed_modifiers, input_grab_keysym,
+			input_grab_modifiers_mask)) {
+		seat->has_grab = !seat->has_grab;
+
+		if (seat->has_grab) {
+			maybe_fake_grab_devices(seat);
+		}
+
+		else {
+			maybe_fake_ungrab_devices(seat);
+		}
+	}
+}
 
 static void keyboard_handle_keymap(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t format, int32_t fd, uint32_t size) {
@@ -27,8 +173,10 @@ static void keyboard_handle_keymap(void *data, struct wl_keyboard *wl_keyboard,
 
 static void keyboard_handle_enter(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, struct wl_surface *surface, struct wl_array *keys) {
-	struct wlr_keyboard *keyboard = data;
+	struct wlr_wl_seat *seat = data;
+	struct wlr_keyboard *keyboard = &seat->wlr_keyboard;
 
+	seat->grab_surface = surface;
 	uint32_t *keycode_ptr;
 	wl_array_for_each(keycode_ptr, keys) {
 		struct wlr_keyboard_key_event event = {
@@ -43,8 +191,10 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *wl_keyboard,
 
 static void keyboard_handle_leave(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, struct wl_surface *surface) {
-	struct wlr_keyboard *keyboard = data;
+	struct wlr_wl_seat *seat = data;
+	struct wlr_keyboard *keyboard = &seat->wlr_keyboard;
 
+	seat->grab_surface = NULL;
 	size_t num_keycodes = keyboard->num_keycodes;
 	uint32_t pressed[num_keycodes + 1];
 	memcpy(pressed, keyboard->keycodes,
@@ -65,7 +215,8 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *wl_keyboard,
 
 static void keyboard_handle_key(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, uint32_t time, uint32_t key, uint32_t state) {
-	struct wlr_keyboard *keyboard = data;
+	struct wlr_wl_seat *seat = data;
+	struct wlr_keyboard *keyboard = &seat->wlr_keyboard;
 
 	struct wlr_keyboard_key_event wlr_event = {
 		.keycode = key,
@@ -74,12 +225,14 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *wl_keyboard,
 		.update_state = false,
 	};
 	wlr_keyboard_notify_key(keyboard, &wlr_event);
+	maybe_toggle_fake_grab (seat,key,state);
 }
 
 static void keyboard_handle_modifiers(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
 		uint32_t mods_locked, uint32_t group) {
-	struct wlr_keyboard *keyboard = data;
+	struct wlr_wl_seat *seat = data;
+	struct wlr_keyboard *keyboard = &seat->wlr_keyboard;
 	wlr_keyboard_notify_modifiers(keyboard, mods_depressed, mods_latched,
 		mods_locked, group);
 }
@@ -109,8 +262,9 @@ void init_seat_keyboard(struct wlr_wl_seat *seat) {
 	snprintf(name, sizeof(name), "wayland-keyboard-%s", seat->name);
 
 	wlr_keyboard_init(&seat->wlr_keyboard, &keyboard_impl, name);
+	//passing wlr_wl_seat instead of wlr_keyboard to enable the fake input grab functionality
 	wl_keyboard_add_listener(seat->wl_keyboard, &keyboard_listener,
-		&seat->wlr_keyboard);
+		seat);
 
 	wl_signal_emit_mutable(&seat->backend->backend.events.new_input,
 		&seat->wlr_keyboard.base);

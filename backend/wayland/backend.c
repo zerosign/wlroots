@@ -30,6 +30,8 @@
 #include "tablet-unstable-v2-client-protocol.h"
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "pointer-constraints-unstable-v1-client-protocol.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
 
 struct wlr_wl_linux_dmabuf_feedback_v1 {
 	struct wlr_wl_backend *backend;
@@ -405,6 +407,12 @@ static void registry_global(void *data, struct wl_registry *registry,
 	} else if (strcmp(iface, wp_viewporter_interface.name) == 0) {
 		wl->viewporter = wl_registry_bind(registry, name,
 			&wp_viewporter_interface, 1);
+	} else if (strcmp(iface,zwp_pointer_constraints_v1_interface.name)==0) {
+		wl->pointer_constraints = wl_registry_bind(registry, name,
+			&zwp_pointer_constraints_v1_interface, 1);
+	} else if(strcmp(iface,zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name)==0) {
+		wl->shortcuts_inhibit_manager = wl_registry_bind(registry, name,
+			&zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1);
 	}
 }
 
@@ -505,6 +513,12 @@ static void backend_destroy(struct wlr_backend *backend) {
 	}
 	if (wl->tablet_manager) {
 		zwp_tablet_manager_v2_destroy(wl->tablet_manager);
+	}
+	if(wl->pointer_constraints) {
+		zwp_pointer_constraints_v1_destroy (wl->pointer_constraints);
+	}
+	if(wl->shortcuts_inhibit_manager) {
+		zwp_keyboard_shortcuts_inhibit_manager_v1_destroy (wl->shortcuts_inhibit_manager);
 	}
 	if (wl->presentation) {
 		wp_presentation_destroy(wl->presentation);
@@ -701,4 +715,11 @@ error_wl:
 struct wl_display *wlr_wl_backend_get_remote_display(struct wlr_backend *backend) {
 	struct wlr_wl_backend *wl = get_wl_backend_from_backend(backend);
 	return wl->remote_display;
+}
+
+void wlr_wl_backend_set_grab_input_shortcut(struct wlr_backend *backend, uint32_t modifiers_mask,
+		xkb_keysym_t keysym) {
+	struct wlr_wl_backend *wl = get_wl_backend_from_backend(backend);
+	wl->input_grab_modifiers_mask = modifiers_mask;
+	wl->input_grab_keysym = keysym;
 }
