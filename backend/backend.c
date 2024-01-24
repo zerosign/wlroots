@@ -212,28 +212,25 @@ static bool attempt_drm_backend(struct wl_display *display,
 		wlr_log(WLR_INFO, "Found %zu GPUs", num_gpus);
 	}
 
-	struct wlr_backend *primary_drm = NULL;
+	bool ok = false;
 	for (size_t i = 0; i < (size_t)num_gpus; ++i) {
-		struct wlr_backend *drm = wlr_drm_backend_create(display, session,
-			gpus[i], primary_drm);
+		struct wlr_backend *drm = wlr_drm_backend_create(display, session, gpus[i]);
 		if (!drm) {
 			wlr_log(WLR_ERROR, "Failed to create DRM backend");
 			continue;
 		}
 
-		if (!primary_drm) {
-			primary_drm = drm;
-		}
-
 		wlr_multi_backend_add(backend, drm);
+		ok = true;
 	}
-	if (!primary_drm) {
+
+	if (!ok) {
 		wlr_log(WLR_ERROR, "Could not successfully create backend on any GPU");
-		return NULL;
+		return false;
 	}
 
 	if (getenv("WLR_DRM_DEVICES") == NULL) {
-		drm_backend_monitor_create(backend, primary_drm, session, display);
+		drm_backend_monitor_create(backend, session, display);
 	}
 
 	return true;

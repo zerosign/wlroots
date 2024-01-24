@@ -228,13 +228,12 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 
 static void surface_update_damage(pixman_region32_t *buffer_damage,
 		struct wlr_surface_state *current, struct wlr_surface_state *pending) {
-	pixman_region32_clear(buffer_damage);
-
 	if (pending->width != current->width ||
 			pending->height != current->height ||
 			!wlr_fbox_equal(&pending->viewport.src, &current->viewport.src)) {
 		// Damage the whole buffer on resize or viewport source box change
-		pixman_region32_union_rect(buffer_damage, buffer_damage, 0, 0,
+		pixman_region32_fini(buffer_damage);
+		pixman_region32_init_rect(buffer_damage, 0, 0,
 			pending->buffer_width, pending->buffer_height);
 	} else {
 		// Copy over surface damage + buffer damage
@@ -394,8 +393,12 @@ static void surface_state_move(struct wlr_surface_state *state,
 }
 
 static void surface_apply_damage(struct wlr_surface *surface) {
+	wl_list_remove(&surface->current_buffer_release.link);
+
 	if (surface->current.buffer == NULL) {
 		// NULL commit
+		wl_list_init(&surface->current_buffer_release.link);
+
 		if (surface->buffer != NULL) {
 			wlr_buffer_unlock(&surface->buffer->base);
 		}
@@ -404,13 +407,19 @@ static void surface_apply_damage(struct wlr_surface *surface) {
 		return;
 	}
 
+	// lock the buffer during the commit so that everything watching the surface
+	// can have a chance to take a look at the buffer.
+	wlr_buffer_lock(surface->current.buffer);
+
+	wl_signal_add(&surface->current.buffer->events.release,
+		&surface->current_buffer_release);
+
 	surface->opaque = buffer_is_opaque(surface->current.buffer);
 
 	if (surface->buffer != NULL) {
 		if (wlr_client_buffer_apply_damage(surface->buffer,
 				surface->current.buffer, &surface->buffer_damage)) {
-			wlr_buffer_unlock(surface->current.buffer);
-			surface->current.buffer = NULL;
+			wlr_surface_consume(surface);
 			return;
 		}
 	}
@@ -421,6 +430,7 @@ static void surface_apply_damage(struct wlr_surface *surface) {
 
 	struct wlr_client_buffer *buffer = wlr_client_buffer_create(
 			surface->current.buffer, surface->renderer);
+	wlr_surface_consume(surface);
 
 	if (buffer == NULL) {
 		wlr_log(WLR_ERROR, "Failed to upload buffer");
@@ -497,9 +507,25 @@ error:
 	wl_resource_post_no_memory(surface->resource);
 }
 
+static void surface_clean_state(struct wlr_surface *surface) {
+	assert(surface->consumed);
+
+	wl_list_remove(&surface->current_buffer_release.link);
+	wl_list_init(&surface->current_buffer_release.link);
+	pixman_region32_clear(&surface->buffer_damage);
+	surface->current.buffer = NULL;
+	surface->consumed = false;
+}
+
 static void surface_commit_state(struct wlr_surface *surface,
 		struct wlr_surface_state *next) {
 	assert(next->cached_state_locks == 0);
+
+	// if the surface was consumed that means we don't own the current buffer
+	// anymore.
+	if (surface->consumed) {
+		surface_clean_state(surface);
+	}
 
 	bool invalid_buffer = next->committed & WLR_SURFACE_STATE_BUFFER;
 
@@ -560,8 +586,8 @@ static void surface_commit_state(struct wlr_surface *surface,
 	// Release the buffer after emitting the commit event, so that listeners can
 	// access it. Don't leave the buffer locked so that wl_shm buffers can be
 	// released immediately on commit when they are uploaded to the GPU.
+	surface->consumed = true;
 	wlr_buffer_unlock(surface->current.buffer);
-	surface->current.buffer = NULL;
 }
 
 static void surface_handle_commit(struct wl_client *client,
@@ -709,6 +735,10 @@ static void surface_destroy_role_object(struct wlr_surface *surface);
 static void surface_handle_resource_destroy(struct wl_resource *resource) {
 	struct wlr_surface *surface = wlr_surface_from_resource(resource);
 
+	if (surface->consumed) {
+		surface_clean_state(surface);
+	}
+
 	struct wlr_surface_output *surface_output, *surface_output_tmp;
 	wl_list_for_each_safe(surface_output, surface_output_tmp,
 			&surface->current_outputs, link) {
@@ -728,6 +758,7 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 	}
 
 	wl_list_remove(&surface->renderer_destroy.link);
+	wl_list_remove(&surface->current_buffer_release.link);
 	wl_list_remove(&surface->role_resource_destroy.link);
 	surface_state_finish(&surface->pending);
 	surface_state_finish(&surface->current);
@@ -746,6 +777,21 @@ static void surface_handle_renderer_destroy(struct wl_listener *listener,
 	struct wlr_surface *surface =
 		wl_container_of(listener, surface, renderer_destroy);
 	wl_resource_destroy(surface->resource);
+}
+
+static void surface_handle_current_buffer_release(struct wl_listener *listener,
+		void *data) {
+	struct wlr_surface *surface = wl_container_of(listener, surface, current_buffer_release);
+	surface_clean_state(surface);
+}
+
+void wlr_surface_consume(struct wlr_surface *surface) {
+	if (surface->consumed || !surface->current.buffer) {
+		return;
+	}
+
+	surface->consumed = true;
+	wlr_buffer_unlock(surface->current.buffer);
 }
 
 static struct wlr_surface *surface_create(struct wl_client *client,
@@ -796,6 +842,9 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	}
 
 	wl_list_init(&surface->role_resource_destroy.link);
+
+	surface->current_buffer_release.notify = surface_handle_current_buffer_release;
+	wl_list_init(&surface->current_buffer_release.link);
 
 	return surface;
 }
