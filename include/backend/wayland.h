@@ -93,6 +93,10 @@ struct wlr_wl_output {
 	bool configured;
 	uint32_t enter_serial;
 
+	bool toplevel_configured;
+	int32_t toplevel_configure_width;
+	int32_t toplevel_configure_height;
+
 	struct {
 		struct wlr_wl_pointer *pointer;
 		struct wl_surface *surface;

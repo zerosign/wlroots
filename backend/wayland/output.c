@@ -645,8 +645,7 @@ static const struct wlr_drm_format_set *output_get_formats(
 	return NULL;
 }
 
-static void output_destroy(struct wlr_output *wlr_output) {
-	struct wlr_wl_output *output = get_wl_output_from_output(wlr_output);
+static void output_destroy(struct wlr_wl_output *output) {
 	if (output == NULL) {
 		return;
 	}
@@ -683,6 +682,11 @@ static void output_destroy(struct wlr_output *wlr_output) {
 	free(output);
 }
 
+static void output_impl_handle_destroy(struct wlr_output *wlr_output) {
+	struct wlr_wl_output *output = get_wl_output_from_output(wlr_output);
+	output_destroy(output);
+}
+
 void update_wl_output_cursor(struct wlr_wl_output *output) {
 	struct wlr_wl_pointer *pointer = output->cursor.pointer;
 	if (pointer) {
@@ -702,7 +706,7 @@ static bool output_move_cursor(struct wlr_output *_output, int x, int y) {
 }
 
 static const struct wlr_output_impl output_impl = {
-	.destroy = output_destroy,
+	.destroy = output_impl_handle_destroy,
 	.test = output_test,
 	.commit = output_commit,
 	.set_cursor = output_set_cursor,
@@ -715,15 +719,63 @@ bool wlr_output_is_wl(struct wlr_output *wlr_output) {
 	return wlr_output->impl == &output_impl;
 }
 
+static void output_init(struct wlr_wl_output *output,
+		const struct wlr_output_state *state) {
+	struct wlr_output *wlr_output = &output->wlr_output;
+	output->configured = true;
+
+	wlr_output_init(wlr_output, &output->backend->backend, &output_impl,
+		wl_display_get_event_loop(output->backend->local_display), state);
+
+	wlr_output->adaptive_sync_status = WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
+
+	size_t output_num = ++last_output_num;
+
+	char name[64];
+	snprintf(name, sizeof(name), "WL-%zu", output_num);
+	wlr_output_set_name(wlr_output, name);
+
+	char description[128];
+	snprintf(description, sizeof(description), "Wayland output %zu", output_num);
+	wlr_output_set_description(wlr_output, description);
+
+	if (output->own_surface) {
+		wlr_wl_output_set_title(wlr_output, NULL);
+	}
+}
+
 static void xdg_surface_handle_configure(void *data,
 		struct xdg_surface *xdg_surface, uint32_t serial) {
 	struct wlr_wl_output *output = data;
 	assert(output && output->xdg_surface == xdg_surface);
 
-	output->configured = true;
 	xdg_surface_ack_configure(xdg_surface, serial);
 
-	// nothing else?
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+
+	if (!output->configured) {
+		wlr_output_state_set_custom_mode(&state, 1280, 720, 0);
+	}
+
+	if (output->toplevel_configured) {
+		output->toplevel_configured = false;
+
+		int32_t width = output->toplevel_configure_width;
+		int32_t height = output->toplevel_configure_height;
+
+		if (width > 0 && height > 0) {
+			wlr_output_state_set_custom_mode(&state, width, height, 0);
+		}
+	}
+
+	if (!output->configured) {
+		output_init(output, &state);
+	} else {
+		wlr_output_send_request_state(&output->wlr_output, &state);
+	}
+
+	wlr_output_state_finish(&state);
 }
 
 static const struct xdg_surface_listener xdg_surface_listener = {
@@ -736,15 +788,9 @@ static void xdg_toplevel_handle_configure(void *data,
 	struct wlr_wl_output *output = data;
 	assert(output && output->xdg_toplevel == xdg_toplevel);
 
-	if (width == 0 || height == 0) {
-		return;
-	}
-
-	struct wlr_output_state state;
-	wlr_output_state_init(&state);
-	wlr_output_state_set_custom_mode(&state, width, height, 0);
-	wlr_output_send_request_state(&output->wlr_output, &state);
-	wlr_output_state_finish(&state);
+	output->toplevel_configured = true;
+	output->toplevel_configure_width = width;
+	output->toplevel_configure_height = height;
 }
 
 static void xdg_toplevel_handle_close(void *data,
@@ -767,27 +813,6 @@ static struct wlr_wl_output *output_create(struct wlr_wl_backend *backend,
 		wlr_log(WLR_ERROR, "Failed to allocate wlr_wl_output");
 		return NULL;
 	}
-	struct wlr_output *wlr_output = &output->wlr_output;
-
-	struct wlr_output_state state;
-	wlr_output_state_init(&state);
-	wlr_output_state_set_custom_mode(&state, 1280, 720, 0);
-
-	wlr_output_init(wlr_output, &backend->backend, &output_impl,
-		wl_display_get_event_loop(backend->local_display), &state);
-	wlr_output_state_finish(&state);
-
-	wlr_output->adaptive_sync_status = WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
-
-	size_t output_num = ++last_output_num;
-
-	char name[64];
-	snprintf(name, sizeof(name), "WL-%zu", output_num);
-	wlr_output_set_name(wlr_output, name);
-
-	char description[128];
-	snprintf(description, sizeof(description), "Wayland output %zu", output_num);
-	wlr_output_set_description(wlr_output, description);
 
 	output->surface = surface;
 	output->backend = backend;
@@ -862,14 +887,14 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 			ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 	}
 
-	wlr_wl_output_set_title(&output->wlr_output, NULL);
-
 	xdg_toplevel_set_app_id(output->xdg_toplevel, "wlroots");
 	xdg_surface_add_listener(output->xdg_surface,
 			&xdg_surface_listener, output);
 	xdg_toplevel_add_listener(output->xdg_toplevel,
 			&xdg_toplevel_listener, output);
 	wl_surface_commit(output->surface);
+
+	wl_display_flush(backend->remote_display);
 
 	struct wl_event_loop *event_loop = wl_display_get_event_loop(backend->local_display);
 	while (!output->configured) {
@@ -891,7 +916,12 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 	return &output->wlr_output;
 
 error:
-	wlr_output_destroy(&output->wlr_output);
+	if (output->configured) {
+		wlr_output_destroy(&output->wlr_output);
+	} else {
+		output_destroy(output);
+	}
+
 	return NULL;
 }
 
@@ -905,6 +935,12 @@ struct wlr_output *wlr_wl_output_create_from_surface(struct wlr_backend *wlr_bac
 		wl_surface_destroy(surface);
 		return NULL;
 	}
+
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_custom_mode(&state, 1280, 720, 0);
+	output_init(output, &state);
+	wlr_output_state_finish(&state);
 
 	output_start(output);
 
