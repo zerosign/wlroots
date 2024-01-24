@@ -26,6 +26,7 @@ static const struct prop_info connector_info[] = {
 	{ "EDID", INDEX(edid) },
 	{ "PATH", INDEX(path) },
 	{ "content type", INDEX(content_type) },
+	{ "force color format", INDEX(force_color_format) },
 	{ "link-status", INDEX(link_status) },
 	{ "max bpc", INDEX(max_bpc) },
 	{ "non-desktop", INDEX(non_desktop) },

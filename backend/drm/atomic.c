@@ -335,6 +335,10 @@ static bool atomic_crtc_commit(struct wlr_drm_connector *conn,
 	if (modeset && active && conn->props.max_bpc != 0 && conn->max_bpc_bounds[1] != 0) {
 		atomic_add(&atom, conn->id, conn->props.max_bpc, pick_max_bpc(conn, state->primary_fb));
 	}
+	if (modeset && active && conn->props.force_color_format && state->base->color_format) {
+		uint32_t format = 1 << (state->base->color_format - 1);
+		atomic_add(&atom, conn->id, conn->props.force_color_format, format);
+	}
 	atomic_add(&atom, crtc->id, crtc->props.mode_id, mode_id);
 	atomic_add(&atom, crtc->id, crtc->props.active, active);
 	if (active) {

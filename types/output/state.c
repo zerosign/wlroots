@@ -114,6 +114,11 @@ void wlr_output_state_set_layers(struct wlr_output_state *state,
 	state->layers_len = layers_len;
 }
 
+void wlr_output_state_set_color_format(struct wlr_output_state *state,
+		enum wlr_output_color_format value) {
+	state->color_format = value;
+}
+
 bool wlr_output_state_copy(struct wlr_output_state *dst,
 		const struct wlr_output_state *src) {
 	struct wlr_output_state copy = *src;
