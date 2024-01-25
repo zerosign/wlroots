@@ -178,6 +178,9 @@ static void shared_buffer_destroy(struct wlr_vk_renderer *r,
 	}
 
 	wl_array_release(&buffer->allocs);
+	if (buffer->map) {
+		vkUnmapMemory(r->dev->dev, buffer->memory);
+	}
 	if (buffer->buffer) {
 		vkDestroyBuffer(r->dev->dev, buffer->buffer, NULL);
 	}
@@ -302,6 +305,12 @@ struct wlr_vk_buffer_span vulkan_get_stage_span(struct wlr_vk_renderer *r,
 		goto error;
 	}
 
+	res = vkMapMemory(r->dev->dev, buf->memory, 0, VK_WHOLE_SIZE, 0, &buf->map);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkMapMemory", res);
+		goto error;
+	}
+
 	struct wlr_vk_allocation *a = wl_array_add(&buf->allocs, sizeof(*a));
 	if (a == NULL) {
 		wlr_log_errno(WLR_ERROR, "Allocation failed");
@@ -360,6 +369,7 @@ bool vulkan_submit_stage_wait(struct wlr_vk_renderer *renderer) {
 		return false;
 	}
 
+	// TODO
 	VkTimelineSemaphoreSubmitInfoKHR timeline_submit_info = {
 		.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR,
 		.signalSemaphoreValueCount = 1,
@@ -1048,6 +1058,7 @@ static void vulkan_destroy(struct wlr_renderer *wlr_renderer) {
 	}
 
 	vkDestroySemaphore(dev->dev, renderer->timeline_semaphore, NULL);
+	vkDestroySemaphore(dev->dev, renderer->upload_timeline_semaphore, NULL);
 	vkDestroyPipelineLayout(dev->dev, renderer->output_pipe_layout, NULL);
 	vkDestroyDescriptorSetLayout(dev->dev, renderer->output_ds_layout, NULL);
 	vkDestroyCommandPool(dev->dev, renderer->command_pool, NULL);
@@ -2145,7 +2156,8 @@ error:
 	return NULL;
 }
 
-struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev) {
+struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev,
+		struct wl_event_loop *loop) {
 	struct wlr_vk_renderer *renderer;
 	VkResult res;
 	if (!(renderer = calloc(1, sizeof(*renderer)))) {
@@ -2195,6 +2207,16 @@ struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev
 		wlr_vk_error("vkCreateSemaphore", res);
 		goto error;
 	}
+	res = vkCreateSemaphore(dev->dev, &semaphore_info, NULL,
+		&renderer->upload_timeline_semaphore);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkCreateSemaphore", res);
+		goto error;
+	}
+
+	if (!vulkan_init_upload_worker(renderer, loop)) {
+		goto error;
+	}
 
 	return &renderer->wlr_renderer;
 
@@ -2203,7 +2225,8 @@ error:
 	return NULL;
 }
 
-struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
+struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(struct wl_event_loop *loop,
+		int drm_fd) {
 	wlr_log(WLR_INFO, "The vulkan renderer is only experimental and "
 		"not expected to be ready for daily use");
 	wlr_log(WLR_INFO, "Run with VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation "
@@ -2238,7 +2261,7 @@ struct wlr_renderer *wlr_vk_renderer_create_with_drm_fd(int drm_fd) {
 		return NULL;
 	}
 
-	return vulkan_renderer_create_for_device(dev);
+	return vulkan_renderer_create_for_device(dev, loop);
 }
 
 VkInstance wlr_vk_renderer_get_instance(struct wlr_renderer *renderer) {

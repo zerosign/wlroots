@@ -2,9 +2,11 @@
 #include <assert.h>
 #include <drm_fourcc.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <wlr/render/wlr_texture.h>
@@ -13,6 +15,8 @@
 #include <xf86drm.h>
 #include "render/pixel_format.h"
 #include "render/vulkan.h"
+
+#include "util/time.h"
 
 static const struct wlr_texture_impl texture_impl;
 
@@ -36,15 +40,202 @@ static VkImageAspectFlagBits mem_plane_aspect(unsigned i) {
 	}
 }
 
+static void copy_pixels(char *vmap, const char *vdata, uint32_t tex_width,
+		uint32_t stride, uint32_t size, const pixman_region32_t *region,
+		const struct wlr_pixel_format_info *format_info) {
+	int rects_len = 0;
+	const pixman_box32_t *rects = pixman_region32_rectangles(region, &rects_len);
+
+	char *map = vmap;
+	for (int i = 0; i < rects_len; i++) {
+		pixman_box32_t rect = rects[i];
+		uint32_t width = rect.x2 - rect.x1;
+		uint32_t height = rect.y2 - rect.y1;
+		uint32_t src_x = rect.x1;
+		uint32_t src_y = rect.y1;
+		uint32_t packed_stride = (uint32_t)pixel_format_info_min_stride(format_info, width);
+
+		// write data into staging buffer span
+		const char *pdata = vdata; // data iterator
+		pdata += stride * src_y;
+		pdata += format_info->bytes_per_block * src_x;
+		if (src_x == 0 && width == tex_width && stride == packed_stride) {
+			memcpy(map, pdata, packed_stride * height);
+			map += packed_stride * height;
+		} else {
+			for (unsigned i = 0u; i < height; ++i) {
+				memcpy(map, pdata, packed_stride);
+				pdata += stride;
+				map += packed_stride;
+			}
+		}
+	}
+
+	assert((uint32_t)(map - vmap) == size);
+}
+
+static bool read_upload_task(struct wlr_vk_upload_task *task, int fd) {
+	while (true) {
+		errno = 0;
+		ssize_t n = read(fd, task, sizeof(*task));
+		if (errno == EINTR) {
+			continue;
+		}
+		if (n == sizeof(*task)) {
+			return true;
+		} else if (n < 0) {
+			wlr_log_errno(WLR_ERROR, "read() failed");
+		} else if (n > 0) {
+			wlr_log(WLR_ERROR, "Unexpected partial read");
+		}
+		return false;
+	}
+}
+
+static bool write_upload_task(const struct wlr_vk_upload_task *task, int fd) {
+	while (true) {
+		errno = 0;
+		ssize_t n = write(fd, task, sizeof(*task));
+		if (errno == EINTR) {
+			continue;
+		}
+		if (n == sizeof(*task)) {
+			return true;
+		} else if (n < 0) {
+			wlr_log_errno(WLR_ERROR, "write() failed");
+		} else if (n > 0) {
+			wlr_log(WLR_ERROR, "Unexpected partial write");
+		}
+		return false;
+	}
+}
+
+static void process_upload_task(struct wlr_vk_renderer *renderer,
+		struct wlr_vk_upload_task *task) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t start = timespec_to_nsec(&ts);
+
+	copy_pixels(task->dst, task->src, task->buffer->width, task->src_stride,
+		task->dst_size, &task->region, task->format_info);
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t dur_ns = timespec_to_nsec(&ts) - start;
+	wlr_log(WLR_INFO, "UPLOAD: %f ms", (double)dur_ns / 1000 / 1000);
+
+	VkSemaphoreSignalInfoKHR signal_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO_KHR,
+		.semaphore = renderer->upload_timeline_semaphore,
+		.value = task->timeline_point,
+	};
+	VkResult res = renderer->dev->api.vkSignalSemaphoreKHR(renderer->dev->dev, &signal_info);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkMapMemory", res);
+	}
+}
+
+static void *run_uploads(void *data) {
+	struct wlr_vk_renderer *renderer = data;
+
+	while (true) {
+		struct wlr_vk_upload_task task = {0};
+		if (!read_upload_task(&task, renderer->upload.worker_fd)) {
+			break;
+		}
+		process_upload_task(renderer, &task);
+		if (!write_upload_task(&task, renderer->upload.worker_fd)) {
+			break;
+		}
+	}
+
+	close(renderer->upload.worker_fd);
+	return NULL;
+}
+
+static void handle_upload_task_complete(struct wlr_vk_renderer *renderer,
+		struct wlr_vk_upload_task *task) {
+	wlr_buffer_end_data_ptr_access(task->buffer);
+	wlr_buffer_unlock(task->buffer);
+	pixman_region32_fini(&task->region);
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t dur_ns = timespec_to_nsec(&ts) - task->start;
+	wlr_log(WLR_INFO, "TOTAL: %f ms", (double)dur_ns / 1000 / 1000);
+}
+
+static int handle_upload_fd_event(int fd, uint32_t mask, void *data) {
+	struct wlr_vk_renderer *renderer = data;
+
+	if (mask & WL_EVENT_ERROR) {
+		wlr_log(WLR_ERROR, "Upload worker FD error");
+		return 0;
+	}
+	if (mask & WL_EVENT_HANGUP) {
+		return 0;
+	}
+
+	if (mask & WL_EVENT_READABLE) {
+		struct wlr_vk_upload_task task = {0};
+		if (!read_upload_task(&task, fd)) {
+			return 0;
+		}
+		handle_upload_task_complete(renderer, &task);
+	}
+
+	return 0;
+}
+
+bool vulkan_init_upload_worker(struct wlr_vk_renderer *renderer,
+		struct wl_event_loop *loop) {
+	int sockets[2];
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
+		wlr_log_errno(WLR_ERROR, "pipe() failed");
+		return false;
+	}
+	renderer->upload.worker_fd = sockets[0];
+	renderer->upload.control_fd = sockets[1];
+
+	renderer->upload.event_source = wl_event_loop_add_fd(loop,
+		renderer->upload.control_fd, WL_EVENT_READABLE,
+		handle_upload_fd_event, renderer);
+	if (renderer->upload.event_source == NULL) {
+		wlr_log(WLR_ERROR, "wl_event_loop_add_fd() failed");
+		goto error_fds;
+	}
+
+	// Block all signals in the new thread: let the main thread handle these
+	sigset_t saved_sigset, new_sigset;
+	sigfillset(&new_sigset);
+	pthread_sigmask(SIG_BLOCK, &new_sigset, &saved_sigset);
+	int ret = pthread_create(&renderer->upload.thread, NULL, run_uploads, renderer);
+	pthread_sigmask(SIG_SETMASK, &saved_sigset, NULL);
+	if (ret != 0) {
+		wlr_log_errno(WLR_ERROR, "pthread_create() failed");
+		goto error_event_source;
+	}
+
+	return true;
+
+error_event_source:
+	wl_event_source_remove(renderer->upload.event_source);
+error_fds:
+	close(renderer->upload.worker_fd);
+	close(renderer->upload.control_fd);
+	return false;
+}
+
 // Will transition the texture to shaderReadOnlyOptimal layout for reading
 // from fragment shader later on
-static bool write_pixels(struct wlr_vk_texture *texture,
+static bool start_upload(struct wlr_vk_texture *texture, struct wlr_buffer *buffer,
 		uint32_t stride, const pixman_region32_t *region, const void *vdata,
 		VkImageLayout old_layout, VkPipelineStageFlags src_stage,
 		VkAccessFlags src_access) {
-	VkResult res;
 	struct wlr_vk_renderer *renderer = texture->renderer;
-	VkDevice dev = texture->renderer->dev->dev;
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t start = timespec_to_nsec(&ts);
 
 	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(texture->format->drm);
 	assert(format_info);
@@ -81,19 +272,9 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		return false;
 	}
 
-	void *vmap;
-	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
-		bsize, 0, &vmap);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkMapMemory", res);
-		free(copies);
-		return false;
-	}
-	char *map = (char *)vmap;
+	uint64_t timeline_point = ++renderer->upload_timeline_point;
 
-	// upload data
-
-	uint32_t buf_off = span.alloc.start + (map - (char *)vmap);
+	uint32_t buf_off = span.alloc.start;
 	for (int i = 0; i < rects_len; i++) {
 		pixman_box32_t rect = rects[i];
 		uint32_t width = rect.x2 - rect.x1;
@@ -101,22 +282,6 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		uint32_t src_x = rect.x1;
 		uint32_t src_y = rect.y1;
 		uint32_t packed_stride = (uint32_t)pixel_format_info_min_stride(format_info, width);
-
-		// write data into staging buffer span
-		const char *pdata = vdata; // data iterator
-		pdata += stride * src_y;
-		pdata += format_info->bytes_per_block * src_x;
-		if (src_x == 0 && width == texture->wlr_texture.width &&
-				stride == packed_stride) {
-			memcpy(map, pdata, packed_stride * height);
-			map += packed_stride * height;
-		} else {
-			for (unsigned i = 0u; i < height; ++i) {
-				memcpy(map, pdata, packed_stride);
-				pdata += stride;
-				map += packed_stride;
-			}
-		}
 
 		copies[i] = (VkBufferImageCopy) {
 			.imageExtent.width = width,
@@ -134,12 +299,34 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 			.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 		};
 
-
 		buf_off += height * packed_stride;
 	}
 
-	assert((uint32_t)(map - (char *)vmap) == bsize);
-	vkUnmapMemory(dev, span.buffer->memory);
+	struct wlr_vk_upload_task task = {
+		.buffer = wlr_buffer_lock(buffer),
+		.memory = span.buffer->memory,
+		.timeline_point = timeline_point,
+		.dst = (char *)span.buffer->map + span.alloc.start,
+		.src = vdata,
+		.src_stride = stride,
+		.dst_size = bsize,
+		.format_info = format_info,
+		.start = start,
+	};
+	pixman_region32_init(&task.region);
+	pixman_region32_copy(&task.region, region);
+#if 1
+	if (!write_upload_task(&task, renderer->upload.control_fd)) {
+		free(copies);
+		return false;
+	}
+#else
+	process_upload_task(renderer, &task);
+	handle_upload_task_complete(renderer, &task);
+#endif
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	start = timespec_to_nsec(&ts);
 
 	// record staging cb
 	// will be executed before next frame
@@ -149,6 +336,10 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		return false;
 	}
 
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	int64_t dur_ns = timespec_to_nsec(&ts) - start;
+	wlr_log(WLR_INFO, "STARTUP: %f ms", (double)dur_ns / 1000 / 1000);
+
 	vulkan_change_layout(cb, texture->image,
 		old_layout, src_stage, src_access,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -156,6 +347,7 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 
 	vkCmdCopyBufferToImage(cb, span.buffer->buffer, texture->image,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)rects_len, copies);
+
 	vulkan_change_layout(cb, texture->image,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -180,19 +372,21 @@ static bool vulkan_texture_update_from_buffer(struct wlr_texture *wlr_texture,
 		return false;
 	}
 
-	bool ok = true;
-
 	if (format != texture->format->drm) {
-		ok = false;
-		goto out;
+		goto error;
 	}
 
-	ok = write_pixels(texture, stride, damage, data, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+	if (!start_upload(texture, buffer, stride, damage, data,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT)) {
+		goto error;
+	}
 
-out:
+	return true;
+
+error:
 	wlr_buffer_end_data_ptr_access(buffer);
-	return ok;
+	return false;
 }
 
 void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
@@ -390,7 +584,8 @@ static void texture_set_format(struct wlr_vk_texture *texture,
 }
 
 static struct wlr_texture *vulkan_texture_from_pixels(
-		struct wlr_vk_renderer *renderer, uint32_t drm_fmt, uint32_t stride,
+		struct wlr_vk_renderer *renderer, struct wlr_buffer *buffer,
+		uint32_t drm_fmt, uint32_t stride,
 		uint32_t width, uint32_t height, const void *data) {
 	VkResult res;
 	VkDevice dev = renderer->dev->dev;
@@ -476,7 +671,8 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 
 	pixman_region32_t region;
 	pixman_region32_init_rect(&region, 0, 0, width, height);
-	if (!write_pixels(texture, stride, &region, data, VK_IMAGE_LAYOUT_UNDEFINED,
+	if (!start_upload(texture, buffer, stride, &region, data,
+			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0)) {
 		goto error;
 	}
@@ -829,8 +1025,10 @@ struct wlr_texture *vulkan_texture_from_buffer(struct wlr_renderer *wlr_renderer
 	} else if (wlr_buffer_begin_data_ptr_access(buffer,
 			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
 		struct wlr_texture *tex = vulkan_texture_from_pixels(renderer,
-			format, stride, buffer->width, buffer->height, data);
-		wlr_buffer_end_data_ptr_access(buffer);
+			buffer, format, stride, buffer->width, buffer->height, data);
+		if (tex == NULL) {
+			wlr_buffer_end_data_ptr_access(buffer);
+		}
 		return tex;
 	} else {
 		return NULL;

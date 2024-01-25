@@ -1,6 +1,7 @@
 #ifndef RENDER_VULKAN_H
 #define RENDER_VULKAN_H
 
+#include <pthread.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
@@ -51,6 +52,7 @@ struct wlr_vk_device {
 		PFN_vkGetMemoryFdPropertiesKHR vkGetMemoryFdPropertiesKHR;
 		PFN_vkWaitSemaphoresKHR vkWaitSemaphoresKHR;
 		PFN_vkGetSemaphoreCounterValueKHR vkGetSemaphoreCounterValueKHR;
+		PFN_vkSignalSemaphoreKHR vkSignalSemaphoreKHR;
 		PFN_vkGetSemaphoreFdKHR vkGetSemaphoreFdKHR;
 		PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR;
 		PFN_vkQueueSubmit2KHR vkQueueSubmit2KHR;
@@ -254,6 +256,9 @@ struct wlr_vk_renderer {
 	VkSemaphore timeline_semaphore;
 	uint64_t timeline_point;
 
+	VkSemaphore upload_timeline_semaphore;
+	uint64_t upload_timeline_point;
+
 	size_t last_pool_size;
 	struct wl_list descriptor_pools; // wlr_vk_descriptor_pool.link
 	struct wl_list render_format_setups; // wlr_vk_render_format_setup.link
@@ -267,6 +272,12 @@ struct wlr_vk_renderer {
 
 	// Pool of command buffers
 	struct wlr_vk_command_buffer command_buffers[VULKAN_COMMAND_BUFFERS_CAP];
+
+	struct {
+		pthread_t thread;
+		int worker_fd, control_fd;
+		struct wl_event_source *event_source;
+	} upload;
 
 	struct {
 		struct wlr_vk_command_buffer *cb;
@@ -299,6 +310,18 @@ struct wlr_vk_texture_view {
 	struct wlr_vk_descriptor_pool *ds_pool;
 };
 
+struct wlr_vk_upload_task {
+	struct wlr_buffer *buffer;
+	VkDeviceMemory memory;
+	uint64_t timeline_point;
+	char *dst;
+	const char *src;
+	uint32_t src_stride, dst_size;
+	pixman_region32_t region;
+	const struct wlr_pixel_format_info *format_info;
+	int64_t start;
+};
+
 struct wlr_vk_pipeline *setup_get_or_create_pipeline(
 	struct wlr_vk_render_format_setup *setup,
 	const struct wlr_vk_pipeline_key *key);
@@ -310,7 +333,8 @@ struct wlr_vk_texture_view *vulkan_texture_get_or_create_view(
 	const struct wlr_vk_pipeline_layout *layout);
 
 // Creates a vulkan renderer for the given device.
-struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev);
+struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev,
+	struct wl_event_loop *loop);
 
 // stage utility - for uploading/retrieving data
 // Gets an command buffer in recording state which is guaranteed to be
@@ -380,6 +404,9 @@ bool vulkan_read_pixels(struct wlr_vk_renderer *vk_renderer,
 	uint32_t width, uint32_t height, uint32_t src_x, uint32_t src_y,
 	uint32_t dst_x, uint32_t dst_y, void *data);
 
+bool vulkan_init_upload_worker(struct wlr_vk_renderer *renderer,
+	struct wl_event_loop *loop);
+
 // State (e.g. image texture) associated with a surface.
 struct wlr_vk_texture {
 	struct wlr_texture wlr_texture;
@@ -435,6 +462,7 @@ struct wlr_vk_shared_buffer {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
 	VkDeviceSize buf_size;
+	void *map;
 	struct wl_array allocs; // struct wlr_vk_allocation
 };
 

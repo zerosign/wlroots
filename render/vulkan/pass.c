@@ -300,26 +300,37 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 		.semaphore = renderer->timeline_semaphore,
 		.value = stage_timeline_point,
 	};
-	VkSubmitInfo2KHR stage_submit = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
-		.commandBufferInfoCount = 1,
-		.pCommandBufferInfos = &stage_cb_info,
-		.signalSemaphoreInfoCount = 1,
-		.pSignalSemaphoreInfos = &stage_signal,
-	};
 
-	VkSemaphoreSubmitInfoKHR stage_wait;
+	VkSemaphoreSubmitInfoKHR stage_wait[2];
+	uint32_t stage_wait_len = 0;
+
+	if (renderer->upload_timeline_point > 0) {
+		stage_wait[stage_wait_len++] = (VkSemaphoreSubmitInfoKHR){
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+			.semaphore = renderer->upload_timeline_semaphore,
+			.value = renderer->upload_timeline_point,
+			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
+		};
+	}
+
 	if (renderer->stage.last_timeline_point > 0) {
-		stage_wait = (VkSemaphoreSubmitInfoKHR){
+		stage_wait[stage_wait_len++] = (VkSemaphoreSubmitInfoKHR){
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
 			.semaphore = renderer->timeline_semaphore,
 			.value = renderer->stage.last_timeline_point,
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR,
 		};
-
-		stage_submit.waitSemaphoreInfoCount = 1;
-		stage_submit.pWaitSemaphoreInfos = &stage_wait;
 	}
+
+	VkSubmitInfo2KHR stage_submit = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
+		.commandBufferInfoCount = 1,
+		.pCommandBufferInfos = &stage_cb_info,
+		.waitSemaphoreInfoCount = stage_wait_len,
+		.pWaitSemaphoreInfos = stage_wait,
+		.signalSemaphoreInfoCount = 1,
+		.pSignalSemaphoreInfos = &stage_signal,
+	};
 
 	renderer->stage.last_timeline_point = stage_timeline_point;
 

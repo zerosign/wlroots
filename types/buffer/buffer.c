@@ -26,7 +26,7 @@ static void buffer_consider_destroy(struct wlr_buffer *buffer) {
 		return;
 	}
 
-	assert(!buffer->accessing_data_ptr);
+	assert(buffer->n_data_ptr_accesses == 0);
 
 	wl_signal_emit_mutable(&buffer->events.destroy, NULL);
 	wlr_addon_set_finish(&buffer->addons);
@@ -74,21 +74,39 @@ bool wlr_buffer_get_dmabuf(struct wlr_buffer *buffer,
 
 bool wlr_buffer_begin_data_ptr_access(struct wlr_buffer *buffer, uint32_t flags,
 		void **data, uint32_t *format, size_t *stride) {
-	assert(!buffer->accessing_data_ptr);
 	if (!buffer->impl->begin_data_ptr_access) {
 		return false;
 	}
-	if (!buffer->impl->begin_data_ptr_access(buffer, flags, data, format, stride)) {
-		return false;
+	if (buffer->n_data_ptr_accesses == 0) {
+		if (!buffer->impl->begin_data_ptr_access(buffer, flags, data, format, stride)) {
+			return false;
+		}
+		buffer->data_ptr_access_flags = flags;
+		buffer->data_ptr_access_data = *data;
+		buffer->data_ptr_access_format = *format;
+		buffer->data_ptr_access_stride = *stride;
+	} else {
+		if (buffer->data_ptr_access_flags != flags) {
+			return false;
+		}
+		*data = buffer->data_ptr_access_data;
+		*format = buffer->data_ptr_access_format;
+		*stride = buffer->data_ptr_access_stride;
 	}
-	buffer->accessing_data_ptr = true;
+	buffer->n_data_ptr_accesses++;
 	return true;
 }
 
 void wlr_buffer_end_data_ptr_access(struct wlr_buffer *buffer) {
-	assert(buffer->accessing_data_ptr);
-	buffer->impl->end_data_ptr_access(buffer);
-	buffer->accessing_data_ptr = false;
+	assert(buffer->n_data_ptr_accesses > 0);
+	buffer->n_data_ptr_accesses--;
+	if (buffer->n_data_ptr_accesses == 0) {
+		buffer->impl->end_data_ptr_access(buffer);
+		buffer->data_ptr_access_flags = 0;
+		buffer->data_ptr_access_data = NULL;
+		buffer->data_ptr_access_format = 0;
+		buffer->data_ptr_access_stride = 0;
+	}
 }
 
 bool wlr_buffer_get_shm(struct wlr_buffer *buffer,

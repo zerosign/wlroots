@@ -199,7 +199,7 @@ struct wlr_backend *wlr_libinput_backend_create(struct wl_display *display,
 		wlr_log(WLR_ERROR, "Allocation failed: %s", strerror(errno));
 		return NULL;
 	}
-	wlr_backend_init(&backend->backend, &backend_impl);
+	wlr_backend_init(&backend->backend, &backend_impl, wl_display_get_event_loop(display));
 
 	wl_list_init(&backend->devices);
 
