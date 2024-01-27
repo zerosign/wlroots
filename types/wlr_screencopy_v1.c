@@ -533,8 +533,7 @@ static void capture_output(struct wl_client *wl_client,
 		goto error;
 	}
 
-	int buffer_age;
-	struct wlr_buffer *buffer = wlr_swapchain_acquire(output->swapchain, &buffer_age);
+	struct wlr_buffer *buffer = wlr_swapchain_acquire(output->swapchain);
 	if (buffer == NULL) {
 		goto error;
 	}

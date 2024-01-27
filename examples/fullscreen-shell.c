@@ -91,8 +91,7 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
-	struct wlr_render_pass *pass = wlr_output_begin_render_pass(output->wlr_output, &state, NULL,
-		NULL);
+	struct wlr_render_pass *pass = wlr_output_begin_render_pass(output->wlr_output, &state, NULL);
 	if (pass == NULL) {
 		return;
 	}

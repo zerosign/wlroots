@@ -87,7 +87,7 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		return NULL;
 	}
 
-	struct wlr_buffer *dst = wlr_swapchain_acquire(surf->swapchain, NULL);
+	struct wlr_buffer *dst = wlr_swapchain_acquire(surf->swapchain);
 	if (!dst) {
 		wlr_log(WLR_ERROR, "Failed to acquire multi-GPU swapchain buffer");
 		goto error_tex;
