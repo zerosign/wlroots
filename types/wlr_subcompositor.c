@@ -26,7 +26,7 @@ static const struct wl_subsurface_interface subsurface_implementation;
 
 static void subsurface_destroy(struct wlr_subsurface *subsurface) {
 	if (subsurface->has_cache) {
-		wlr_surface_unlock_cached(subsurface->surface, subsurface->cached_seq);
+		wlr_surface_unlock_cached(subsurface->surface, subsurface->cached_lock);
 	}
 
 	wlr_surface_unmap(subsurface->surface);
@@ -177,7 +177,7 @@ static void subsurface_handle_set_desync(struct wl_client *client,
 		if (!subsurface_is_synchronized(subsurface) &&
 				subsurface->has_cache) {
 			wlr_surface_unlock_cached(subsurface->surface,
-				subsurface->cached_seq);
+				subsurface->cached_lock);
 			subsurface->has_cache = false;
 		}
 	}
@@ -274,9 +274,9 @@ static void subsurface_handle_surface_client_commit(
 			return;
 		}
 		subsurface->has_cache = true;
-		subsurface->cached_seq = wlr_surface_lock_pending(surface);
+		subsurface->cached_lock = wlr_surface_lock_pending(surface);
 	} else if (subsurface->has_cache) {
-		wlr_surface_unlock_cached(surface, subsurface->cached_seq);
+		wlr_surface_unlock_cached(surface, subsurface->cached_lock);
 		subsurface->has_cache = false;
 	}
 }
@@ -302,7 +302,7 @@ void subsurface_handle_parent_commit(struct wlr_subsurface *subsurface) {
 	}
 
 	if (subsurface->synchronized && subsurface->has_cache) {
-		wlr_surface_unlock_cached(surface, subsurface->cached_seq);
+		wlr_surface_unlock_cached(surface, subsurface->cached_lock);
 		subsurface->has_cache = false;
 	}
 

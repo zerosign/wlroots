@@ -957,13 +957,13 @@ static void surface_destroy_role_object(struct wlr_surface *surface) {
 	wl_list_init(&surface->role_resource_destroy.link);
 }
 
-uint32_t wlr_surface_lock_pending(struct wlr_surface *surface) {
+struct wlr_surface_cached_lock wlr_surface_lock_pending(struct wlr_surface *surface) {
 	surface->pending.cached_state_locks++;
-	return surface->pending.seq;
+	return (struct wlr_surface_cached_lock){surface->pending.seq};
 }
 
-void wlr_surface_unlock_cached(struct wlr_surface *surface, uint32_t seq) {
-	if (surface->pending.seq == seq) {
+void wlr_surface_unlock_cached(struct wlr_surface *surface, struct wlr_surface_cached_lock lock) {
+	if (surface->pending.seq == lock.seq) {
 		assert(surface->pending.cached_state_locks > 0);
 		surface->pending.cached_state_locks--;
 		return;
@@ -972,7 +972,7 @@ void wlr_surface_unlock_cached(struct wlr_surface *surface, uint32_t seq) {
 	bool found = false;
 	struct wlr_surface_state *cached;
 	wl_list_for_each(cached, &surface->cached, cached_state_link) {
-		if (cached->seq == seq) {
+		if (cached->seq == lock.seq) {
 			found = true;
 			break;
 		}

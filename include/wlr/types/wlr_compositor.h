@@ -33,9 +33,8 @@ enum wlr_surface_state_field {
 
 struct wlr_surface_state {
 	uint32_t committed; // enum wlr_surface_state_field
-	// Sequence number of the surface state. Incremented on each commit, may
-	// overflow.
-	uint32_t seq;
+	// Sequence number of the surface state. Incremented on each commit.
+	uint64_t seq;
 
 	struct wlr_buffer *buffer;
 	int32_t dx, dy; // relative to previous position
@@ -424,6 +423,13 @@ void wlr_surface_get_buffer_source_box(struct wlr_surface *surface,
 	struct wlr_fbox *box);
 
 /**
+ * A lock preventing cached state from being applied.
+ */
+struct wlr_surface_cached_lock {
+	uint64_t seq;
+};
+
+/**
  * Acquire a lock for the pending surface state.
  *
  * The state won't be committed before the caller releases the lock. Instead,
@@ -432,7 +438,7 @@ void wlr_surface_get_buffer_source_box(struct wlr_surface *surface,
  *
  * Returns a surface commit sequence number for the cached state.
  */
-uint32_t wlr_surface_lock_pending(struct wlr_surface *surface);
+struct wlr_surface_cached_lock wlr_surface_lock_pending(struct wlr_surface *surface);
 
 /**
  * Release a lock for a cached state.
@@ -440,7 +446,7 @@ uint32_t wlr_surface_lock_pending(struct wlr_surface *surface);
  * Callers should not assume that the cached state will immediately be
  * committed. Another caller may still have an active lock.
  */
-void wlr_surface_unlock_cached(struct wlr_surface *surface, uint32_t seq);
+void wlr_surface_unlock_cached(struct wlr_surface *surface, struct wlr_surface_cached_lock lock);
 
 /**
  * Set the preferred buffer scale for the surface.

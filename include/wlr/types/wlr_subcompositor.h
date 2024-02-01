@@ -35,7 +35,7 @@ struct wlr_subsurface {
 
 	struct wlr_subsurface_parent_state current, pending;
 
-	uint32_t cached_seq;
+	struct wlr_surface_cached_lock cached_lock;
 	bool has_cache;
 
 	bool synchronized;
