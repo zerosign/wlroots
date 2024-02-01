@@ -837,6 +837,11 @@ void wlr_scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
 	wlr_scene_buffer_set_buffer_with_damage(scene_buffer, buffer, NULL);
 }
 
+void wlr_scene_buffer_set_texture(struct wlr_scene_buffer *scene_buffer,
+		struct wlr_texture *texture) {
+	scene_buffer_set_buffer_and_texture(scene_buffer, NULL, texture, NULL);
+}
+
 void wlr_scene_buffer_set_opaque_region(struct wlr_scene_buffer *scene_buffer,
 		const pixman_region32_t *region) {
 	if (pixman_region32_equal(&scene_buffer->opaque_region, region)) {
