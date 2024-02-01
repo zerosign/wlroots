@@ -14,12 +14,19 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
 
+enum wlr_subsurface_parent_state_field {
+	WLR_SUBSURFACE_PARENT_STATE_POSITION = 1 << 0,
+	WLR_SUBSURFACE_PARENT_STATE_ORDER = 1 << 1,
+};
+
 /**
  * The sub-surface state describing the sub-surface's relationship with its
  * parent. Contrary to other states, this one is not applied on surface commit.
  * Instead, it's applied on parent surface commit.
  */
 struct wlr_subsurface_parent_state {
+	uint32_t committed; // enum wlr_subsurface_parent_state_field
+
 	int32_t x, y;
 	struct wl_list link;
 
@@ -39,7 +46,6 @@ struct wlr_subsurface {
 	bool has_cache;
 
 	bool synchronized;
-	bool reordered;
 	bool added;
 
 	struct wl_listener surface_client_commit;
