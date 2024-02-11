@@ -539,6 +539,17 @@ static bool commit_layers(struct wlr_wl_output *output,
 	return true;
 }
 
+static void unmap_callback_handle_done(void *data, struct wl_callback *callback,
+		uint32_t cb_data) {
+	struct wlr_wl_output *output = data;
+	output->unmap_callback = NULL;
+	wl_callback_destroy(callback);
+}
+
+static const struct wl_callback_listener unmap_callback_listener = {
+	.done = unmap_callback_handle_done,
+};
+
 static bool output_commit(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_wl_output *output =
@@ -551,6 +562,14 @@ static bool output_commit(struct wlr_output *wlr_output,
 	bool pending_enabled = output_pending_enabled(wlr_output, state);
 
 	if (wlr_output->enabled && !pending_enabled) {
+		if (output->own_surface) {
+			output->unmap_callback = wl_display_sync(output->backend->remote_display);
+			if (output->unmap_callback == NULL) {
+				return false;
+			}
+			wl_callback_add_listener(output->unmap_callback, &unmap_callback_listener, output);
+		}
+
 		wl_surface_attach(output->surface, NULL, 0, 0);
 		wl_surface_commit(output->surface);
 
@@ -710,6 +729,10 @@ static void output_destroy(struct wlr_output *wlr_output) {
 		presentation_feedback_destroy(feedback);
 	}
 
+	if (output->unmap_callback) {
+		wl_callback_destroy(output->unmap_callback);
+	}
+
 	if (output->zxdg_toplevel_decoration_v1) {
 		zxdg_toplevel_decoration_v1_destroy(output->zxdg_toplevel_decoration_v1);
 	}
@@ -766,10 +789,6 @@ static void xdg_surface_handle_configure(void *data,
 	struct wlr_wl_output *output = data;
 	assert(output && output->xdg_surface == xdg_surface);
 
-	output->configured = true;
-	output->has_configure_serial = true;
-	output->configure_serial = serial;
-
 	int32_t req_width = output->wlr_output.width;
 	int32_t req_height = output->wlr_output.height;
 	if (output->requested_width > 0) {
@@ -780,6 +799,14 @@ static void xdg_surface_handle_configure(void *data,
 		req_height = output->requested_height;
 		output->requested_height = 0;
 	}
+
+	if (output->unmap_callback != NULL) {
+		return;
+	}
+
+	output->configured = true;
+	output->has_configure_serial = true;
+	output->configure_serial = serial;
 
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);

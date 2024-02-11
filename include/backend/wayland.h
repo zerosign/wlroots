@@ -101,6 +101,10 @@ struct wlr_wl_output {
 
 	bool initialized;
 
+	// If not NULL, the host compositor hasn't acknowledged the unmapping yet;
+	// ignore all configure events
+	struct wl_callback *unmap_callback;
+
 	uint32_t enter_serial;
 
 	struct {
