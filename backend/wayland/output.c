@@ -588,6 +588,11 @@ static bool output_commit(struct wlr_output *wlr_output,
 				output->surface);
 		}
 
+		if (output->has_configure_serial) {
+			xdg_surface_ack_configure(output->xdg_surface, output->configure_serial);
+			output->has_configure_serial = false;
+		}
+
 		wl_surface_commit(output->surface);
 
 		if (wp_feedback != NULL) {
@@ -742,7 +747,8 @@ static void xdg_surface_handle_configure(void *data,
 	assert(output && output->xdg_surface == xdg_surface);
 
 	output->configured = true;
-	xdg_surface_ack_configure(xdg_surface, serial);
+	output->has_configure_serial = true;
+	output->configure_serial = serial;
 
 	int32_t req_width = output->wlr_output.width;
 	int32_t req_height = output->wlr_output.height;
