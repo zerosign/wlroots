@@ -548,7 +548,9 @@ static bool output_commit(struct wlr_output *wlr_output,
 		return false;
 	}
 
-	if ((state->committed & WLR_OUTPUT_STATE_ENABLED) && !state->enabled) {
+	bool pending_enabled = output_pending_enabled(wlr_output, state);
+
+	if (wlr_output->enabled && !pending_enabled) {
 		wl_surface_attach(output->surface, NULL, 0, 0);
 		wl_surface_commit(output->surface);
 	}
@@ -575,7 +577,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 		return false;
 	}
 
-	if (output_pending_enabled(wlr_output, state)) {
+	if (pending_enabled) {
 		if (output->frame_callback != NULL) {
 			wl_callback_destroy(output->frame_callback);
 		}
