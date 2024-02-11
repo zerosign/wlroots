@@ -92,6 +92,9 @@ struct wlr_wl_output {
 
 	char *title;
 
+	// 0 if not requested
+	int32_t requested_width, requested_height;
+
 	bool configured;
 	uint32_t enter_serial;
 

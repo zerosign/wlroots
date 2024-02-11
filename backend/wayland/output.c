@@ -744,7 +744,22 @@ static void xdg_surface_handle_configure(void *data,
 	output->configured = true;
 	xdg_surface_ack_configure(xdg_surface, serial);
 
-	// nothing else?
+	int32_t req_width = output->wlr_output.width;
+	int32_t req_height = output->wlr_output.height;
+	if (output->requested_width > 0) {
+		req_width = output->requested_width;
+		output->requested_width = 0;
+	}
+	if (output->requested_height > 0) {
+		req_height = output->requested_height;
+		output->requested_height = 0;
+	}
+
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_custom_mode(&state, req_width, req_height, 0);
+	wlr_output_send_request_state(&output->wlr_output, &state);
+	wlr_output_state_finish(&state);
 }
 
 static const struct xdg_surface_listener xdg_surface_listener = {
@@ -757,15 +772,12 @@ static void xdg_toplevel_handle_configure(void *data,
 	struct wlr_wl_output *output = data;
 	assert(output && output->xdg_toplevel == xdg_toplevel);
 
-	if (width == 0 || height == 0) {
-		return;
+	if (width > 0) {
+		output->requested_width = width;
 	}
-
-	struct wlr_output_state state;
-	wlr_output_state_init(&state);
-	wlr_output_state_set_custom_mode(&state, width, height, 0);
-	wlr_output_send_request_state(&output->wlr_output, &state);
-	wlr_output_state_finish(&state);
+	if (height > 0) {
+		output->requested_height = height;
+	}
 }
 
 static void xdg_toplevel_handle_close(void *data,
