@@ -90,6 +90,8 @@ struct wlr_wl_output {
 	struct zxdg_toplevel_decoration_v1 *zxdg_toplevel_decoration_v1;
 	struct wl_list presentation_feedbacks;
 
+	char *title;
+
 	bool configured;
 	uint32_t enter_serial;
 

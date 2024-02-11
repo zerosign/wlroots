@@ -17,7 +17,6 @@
 
 #include "backend/wayland.h"
 #include "render/pixel_format.h"
-#include "render/wlr_renderer.h"
 #include "types/wlr_output.h"
 
 #include "linux-dmabuf-v1-client-protocol.h"
@@ -261,6 +260,25 @@ static struct wlr_wl_buffer *get_or_create_wl_buffer(struct wlr_wl_backend *wl,
 	}
 
 	return create_wl_buffer(wl, wlr_buffer);
+}
+
+static bool update_title(struct wlr_wl_output *output, const char *title) {
+	struct wlr_output *wlr_output = &output->wlr_output;
+
+	char default_title[64];
+	if (title == NULL) {
+		snprintf(default_title, sizeof(default_title), "wlroots - %s", wlr_output->name);
+		title = default_title;
+	}
+
+	char *wl_title = strdup(title);
+	if (wl_title == NULL) {
+		return false;
+	}
+
+	free(output->title);
+	output->title = wl_title;
+	return true;
 }
 
 static bool output_test(struct wlr_output *wlr_output,
@@ -680,6 +698,9 @@ static void output_destroy(struct wlr_output *wlr_output) {
 		wl_surface_destroy(output->surface);
 	}
 	wl_display_flush(output->backend->remote_display);
+
+	free(output->title);
+
 	free(output);
 }
 
@@ -862,14 +883,21 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 			ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 	}
 
-	wlr_wl_output_set_title(&output->wlr_output, NULL);
+	if (!update_title(output, NULL)) {
+		wlr_log_errno(WLR_ERROR, "Could not allocate xdg toplevel title");
+		goto error;
+	}
 
+	xdg_toplevel_set_title(output->xdg_toplevel, output->title);
 	xdg_toplevel_set_app_id(output->xdg_toplevel, "wlroots");
+
 	xdg_surface_add_listener(output->xdg_surface,
 			&xdg_surface_listener, output);
 	xdg_toplevel_add_listener(output->xdg_toplevel,
 			&xdg_toplevel_listener, output);
 	wl_surface_commit(output->surface);
+
+	wl_display_flush(backend->remote_display);
 
 	while (!output->configured) {
 		int ret = wl_event_loop_dispatch(backend->event_loop, -1);
@@ -914,16 +942,10 @@ void wlr_wl_output_set_title(struct wlr_output *output, const char *title) {
 	struct wlr_wl_output *wl_output = get_wl_output_from_output(output);
 	assert(wl_output->xdg_toplevel != NULL);
 
-	char wl_title[32];
-	if (title == NULL) {
-		if (snprintf(wl_title, sizeof(wl_title), "wlroots - %s", output->name) <= 0) {
-			return;
-		}
-		title = wl_title;
+	if (update_title(wl_output, title)) {
+		xdg_toplevel_set_title(wl_output->xdg_toplevel, wl_output->title);
+		wl_display_flush(wl_output->backend->remote_display);
 	}
-
-	xdg_toplevel_set_title(wl_output->xdg_toplevel, title);
-	wl_display_flush(wl_output->backend->remote_display);
 }
 
 struct wl_surface *wlr_wl_output_get_surface(struct wlr_output *output) {
