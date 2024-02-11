@@ -99,6 +99,8 @@ struct wlr_wl_output {
 	bool has_configure_serial;
 	bool configured;
 
+	bool initialized;
+
 	uint32_t enter_serial;
 
 	struct {

@@ -553,6 +553,24 @@ static bool output_commit(struct wlr_output *wlr_output,
 	if (wlr_output->enabled && !pending_enabled) {
 		wl_surface_attach(output->surface, NULL, 0, 0);
 		wl_surface_commit(output->surface);
+
+		output->initialized = false;
+		output->configured = false;
+		output->has_configure_serial = false;
+		output->requested_width = output->requested_height = 0;
+	} else if (output->own_surface && pending_enabled && !output->initialized) {
+		xdg_toplevel_set_title(output->xdg_toplevel, output->title);
+		xdg_toplevel_set_app_id(output->xdg_toplevel, "wlroots");
+		wl_surface_commit(output->surface);
+		output->initialized = true;
+
+		wl_display_flush(output->backend->remote_display);
+		while (!output->configured) {
+			if (wl_event_loop_dispatch(output->backend->event_loop, -1) == -1) {
+				wlr_log(WLR_ERROR, "wl_event_loop_dispatch() failed");
+				return false;
+			}
+		}
 	}
 
 	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
@@ -908,24 +926,12 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 		goto error;
 	}
 
-	xdg_toplevel_set_title(output->xdg_toplevel, output->title);
-	xdg_toplevel_set_app_id(output->xdg_toplevel, "wlroots");
-
 	xdg_surface_add_listener(output->xdg_surface,
 			&xdg_surface_listener, output);
 	xdg_toplevel_add_listener(output->xdg_toplevel,
 			&xdg_toplevel_listener, output);
-	wl_surface_commit(output->surface);
 
 	wl_display_flush(backend->remote_display);
-
-	while (!output->configured) {
-		int ret = wl_event_loop_dispatch(backend->event_loop, -1);
-		if (ret < 0) {
-			wlr_log(WLR_ERROR, "wl_event_loop_dispatch() failed");
-			goto error;
-		}
-	}
 
 	output_start(output);
 
@@ -962,7 +968,7 @@ void wlr_wl_output_set_title(struct wlr_output *output, const char *title) {
 	struct wlr_wl_output *wl_output = get_wl_output_from_output(output);
 	assert(wl_output->xdg_toplevel != NULL);
 
-	if (update_title(wl_output, title)) {
+	if (update_title(wl_output, title) && wl_output->initialized) {
 		xdg_toplevel_set_title(wl_output->xdg_toplevel, wl_output->title);
 		wl_display_flush(wl_output->backend->remote_display);
 	}
