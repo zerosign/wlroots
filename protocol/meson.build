@@ -24,6 +24,7 @@ protocols = {
 	'drm-lease-v1': wl_protocol_dir / 'staging/drm-lease/drm-lease-v1.xml',
 	'ext-foreign-toplevel-list-v1': wl_protocol_dir / 'staging/ext-foreign-toplevel-list/ext-foreign-toplevel-list-v1.xml',
 	'ext-idle-notify-v1': wl_protocol_dir / 'staging/ext-idle-notify/ext-idle-notify-v1.xml',
+	'ext-image-source-v1': wl_protocol_dir / 'staging/ext-image-source/ext-image-source-v1.xml',
 	'ext-session-lock-v1': wl_protocol_dir / 'staging/ext-session-lock/ext-session-lock-v1.xml',
 	'fractional-scale-v1': wl_protocol_dir / 'staging/fractional-scale/fractional-scale-v1.xml',
 	'security-context-v1': wl_protocol_dir / 'staging/security-context/security-context-v1.xml',
