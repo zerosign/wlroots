@@ -219,6 +219,8 @@ static struct wlr_xwayland_surface *xwayland_surface_create(
 	wl_signal_init(&surface->events.set_strut_partial);
 	wl_signal_init(&surface->events.set_override_redirect);
 	wl_signal_init(&surface->events.set_geometry);
+	wl_signal_init(&surface->events.focus_in);
+	wl_signal_init(&surface->events.grab_focus);
 	wl_signal_init(&surface->events.map_request);
 	wl_signal_init(&surface->events.ping_timeout);
 
@@ -1591,13 +1593,23 @@ static bool validate_focus_serial(uint16_t last_focus_seq, uint16_t event_seq) {
 
 static void xwm_handle_focus_in(struct wlr_xwm *xwm,
 		xcb_focus_in_event_t *ev) {
-	// Do not interfere with grabs
-	if (ev->mode == XCB_NOTIFY_MODE_GRAB ||
-			ev->mode == XCB_NOTIFY_MODE_UNGRAB) {
-		return;
-	}
 	// Ignore pointer focus change events
 	if (ev->detail == XCB_NOTIFY_DETAIL_POINTER) {
+		return;
+	}
+
+	// Do not interfere with keyboard grabs, but notify the
+	// compositor. Note that many legitimate X11 applications use
+	// keyboard grabs to "steal" focus for e.g. popup menus.
+	struct wlr_xwayland_surface *xsurface = lookup_surface(xwm, ev->event);
+	if (ev->mode == XCB_NOTIFY_MODE_GRAB) {
+		if (xsurface) {
+			wl_signal_emit_mutable(&xsurface->events.grab_focus, NULL);
+		}
+		return;
+	}
+	if (ev->mode == XCB_NOTIFY_MODE_UNGRAB) {
+		/* Do we need an ungrab_focus event? */
 		return;
 	}
 
@@ -1611,9 +1623,9 @@ static void xwm_handle_focus_in(struct wlr_xwm *xwm,
 	// Allow focus changes between surfaces belonging to the same
 	// application. Steam for example relies on this:
 	// https://github.com/swaywm/sway/issues/1865
-	struct wlr_xwayland_surface *xsurface = lookup_surface(xwm, ev->event);
 	if (xsurface && xwm->focus_surface && xsurface->pid == xwm->focus_surface->pid) {
 		xwm_set_focused_window(xwm, xsurface);
+		wl_signal_emit_mutable(&xsurface->events.focus_in, NULL);
 	} else {
 		// Try to prevent clients from changing focus between
 		// applications, by refocusing the previous surface.
