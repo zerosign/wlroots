@@ -395,12 +395,17 @@ static void xwm_set_focused_window(struct wlr_xwm *xwm,
 		struct wlr_xwayland_surface *xsurface) {
 	struct wlr_xwayland_surface *unfocus_surface = xwm->focus_surface;
 
-	if (xwm->focus_surface == xsurface ||
-			(xsurface && xsurface->override_redirect)) {
+	if (xsurface && xsurface->override_redirect) {
 		return;
 	}
 
 	xwm->focus_surface = xsurface;
+	// cancel any pending focus offer
+	xwm->offered_focus = xsurface;
+
+	if (xsurface == unfocus_surface) {
+		return;
+	}
 
 	if (unfocus_surface) {
 		xsurface_set_net_wm_state(unfocus_surface);
@@ -414,13 +419,34 @@ static void xwm_set_focused_window(struct wlr_xwm *xwm,
 	}
 }
 
+void wlr_xwayland_surface_offer_focus(struct wlr_xwayland_surface *xsurface) {
+	if (!xsurface || xsurface->override_redirect) {
+		return;
+	}
+
+	struct wlr_xwm *xwm = xsurface->xwm;
+	if (!xwm_atoms_contains(xwm, xsurface->protocols,
+			xsurface->protocols_len, WM_TAKE_FOCUS)) {
+		return;
+	}
+
+	xwm->offered_focus = xsurface;
+
+	xcb_client_message_data_t message_data = { 0 };
+	message_data.data32[0] = xwm->atoms[WM_TAKE_FOCUS];
+	message_data.data32[1] = XCB_TIME_CURRENT_TIME;
+	xwm_send_wm_message(xsurface, &message_data, XCB_EVENT_MASK_NO_EVENT);
+
+	xcb_flush(xwm->xcb_conn);
+}
+
 static void xwm_surface_activate(struct wlr_xwm *xwm,
 		struct wlr_xwayland_surface *xsurface) {
 	if (xsurface && xsurface->override_redirect) {
 		return;
 	}
 
-	if (xsurface != xwm->focus_surface) {
+	if (xsurface != xwm->focus_surface && xsurface != xwm->offered_focus) {
 		xwm_focus_window(xwm, xsurface);
 	}
 
@@ -502,6 +528,9 @@ static void xwayland_surface_destroy(struct wlr_xwayland_surface *xsurface) {
 
 	if (xsurface == xsurface->xwm->focus_surface) {
 		xwm_surface_activate(xsurface->xwm, NULL);
+	}
+	if (xsurface == xsurface->xwm->offered_focus) {
+		xsurface->xwm->offered_focus = NULL;
 	}
 
 	wl_list_remove(&xsurface->link);
@@ -1623,7 +1652,8 @@ static void xwm_handle_focus_in(struct wlr_xwm *xwm,
 	// Allow focus changes between surfaces belonging to the same
 	// application. Steam for example relies on this:
 	// https://github.com/swaywm/sway/issues/1865
-	if (xsurface && xwm->focus_surface && xsurface->pid == xwm->focus_surface->pid) {
+	if (xsurface && ((xwm->focus_surface && xsurface->pid == xwm->focus_surface->pid) ||
+			(xwm->offered_focus && xsurface->pid == xwm->offered_focus->pid))) {
 		xwm_set_focused_window(xwm, xsurface);
 		wl_signal_emit_mutable(&xsurface->events.focus_in, NULL);
 	} else {

@@ -278,6 +278,18 @@ void wlr_xwayland_set_seat(struct wlr_xwayland *xwayland,
 struct wlr_xwayland_surface *wlr_xwayland_surface_try_from_wlr_surface(
 	struct wlr_surface *surface);
 
+/**
+ * Offer focus by sending WM_TAKE_FOCUS to a client window supporting it.
+ * The client may accept or ignore the offer. If it accepts, the surface will
+ * emit the focus_in signal notifying the compositor that it has received focus.
+ *
+ * This is a more compatible method of giving focus to windows using the
+ * Globally Active input model (see wlr_xwayland_icccm_input_model()) than
+ * calling wlr_xwayland_surface_activate() unconditionally, since there is no
+ * reliable way to know in advance whether these windows want to be focused.
+ */
+void wlr_xwayland_surface_offer_focus(struct wlr_xwayland_surface *xsurface);
+
 void wlr_xwayland_surface_ping(struct wlr_xwayland_surface *surface);
 
 /** Metric to guess if an OR window should "receive" focus
