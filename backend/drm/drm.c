@@ -1792,11 +1792,9 @@ void scan_drm_leases(struct wlr_drm_backend *drm) {
 
 static void build_current_connector_state(struct wlr_output_state *state,
 		struct wlr_drm_connector *conn) {
-	bool enabled = conn->status != DRM_MODE_DISCONNECTED && conn->output.enabled;
-
 	wlr_output_state_init(state);
-	wlr_output_state_set_enabled(state, enabled);
-	if (!enabled) {
+	wlr_output_state_set_enabled(state, conn->output.enabled);
+	if (!conn->output.enabled) {
 		return;
 	}
 
@@ -1828,6 +1826,12 @@ static bool skip_reset_for_restore(struct wlr_drm_backend *drm) {
 		drmModeFreeConnector(drm_conn);
 
 		if (crtc != NULL && conn->crtc != crtc) {
+			return false;
+		}
+		if (!conn->output.enabled && crtc != NULL) {
+			return false;
+		}
+		if (conn->output.enabled && conn->status == DRM_MODE_DISCONNECTED) {
 			return false;
 		}
 	}
@@ -1881,15 +1885,42 @@ void restore_drm_device(struct wlr_drm_backend *drm) {
 		wlr_log(WLR_ERROR, "Failed to reset state after VT switch");
 	}
 
+	size_t states_cap = wl_list_length(&drm->connectors);
+	struct wlr_output_state *output_states = calloc(states_cap, sizeof(output_states[0]));
+	struct wlr_drm_connector_state *conn_states = calloc(states_cap, sizeof(conn_states[0]));
+	if (output_states == NULL || conn_states == NULL) {
+		goto out_states;
+	}
+
+	size_t states_len = 0;
 	struct wlr_drm_connector *conn;
 	wl_list_for_each(conn, &drm->connectors, link) {
-		struct wlr_output_state state;
-		build_current_connector_state(&state, conn);
-		if (!drm_connector_commit_state(conn, &state)) {
-			wlr_drm_conn_log(conn, WLR_ERROR, "Failed to restore state after VT switch");
+		if (conn->status == DRM_MODE_DISCONNECTED || !conn->output.enabled) {
+			continue; // already disabled above
 		}
-		wlr_output_state_finish(&state);
+
+		build_current_connector_state(&output_states[states_len], conn);
+		drm_connector_state_init(&conn_states[states_len], conn, &output_states[states_len]);
+		states_len++;
 	}
+
+	struct wlr_drm_device_state dev_state = {
+		.modeset = true,
+		.connectors = conn_states,
+		.connectors_len = states_len,
+	};
+	if (!drm_commit(drm, &dev_state, DRM_MODE_PAGE_FLIP_EVENT, false)) {
+		wlr_log(WLR_ERROR, "Failed to restore state after VT switch");
+	}
+
+	for (size_t i = 0; i < states_len; i++) {
+		drm_connector_state_finish(&conn_states[i]);
+		wlr_output_state_finish(&output_states[i]);
+	}
+
+out_states:
+	free(output_states);
+	free(conn_states);
 }
 
 static int mhz_to_nsec(int mhz) {
