@@ -511,6 +511,7 @@ static void drm_connector_state_init(struct wlr_drm_connector_state *state,
 		struct wlr_drm_connector *conn,
 		const struct wlr_output_state *base) {
 	*state = (struct wlr_drm_connector_state){
+		.connector = conn,
 		.base = base,
 		.modeset = base->allow_reconfiguration,
 		.active = (base->committed & WLR_OUTPUT_STATE_ENABLED) ?
