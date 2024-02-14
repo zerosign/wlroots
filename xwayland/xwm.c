@@ -353,18 +353,13 @@ static void xwm_set_net_client_list_stacking(struct wlr_xwm *xwm) {
 
 static void xsurface_set_net_wm_state(struct wlr_xwayland_surface *xsurface);
 
-static void xwm_set_focus_window(struct wlr_xwm *xwm,
+// Gives input (keyboard) focus to a window.
+// Normally followed by xwm_set_focused_window().
+static void xwm_focus_window(struct wlr_xwm *xwm,
 		struct wlr_xwayland_surface *xsurface) {
-	struct wlr_xwayland_surface *unfocus_surface = xwm->focus_surface;
 
 	// We handle cases where focus_surface == xsurface because we
 	// want to be able to deny FocusIn events.
-	xwm->focus_surface = xsurface;
-
-	if (unfocus_surface) {
-		xsurface_set_net_wm_state(unfocus_surface);
-	}
-
 	if (!xsurface) {
 		xcb_set_input_focus_checked(xwm->xcb_conn,
 			XCB_INPUT_FOCUS_POINTER_ROOT,
@@ -391,25 +386,43 @@ static void xwm_set_focus_window(struct wlr_xwm *xwm,
 			XCB_INPUT_FOCUS_POINTER_ROOT, xsurface->window_id, XCB_CURRENT_TIME);
 		xwm->last_focus_seq = cookie.sequence;
 	}
-
-	xsurface_set_net_wm_state(xsurface);
 }
 
-static void xwm_surface_activate(struct wlr_xwm *xwm,
+// Updates _NET_ACTIVE_WINDOW and _NET_WM_STATE when focus changes.
+static void xwm_set_focused_window(struct wlr_xwm *xwm,
 		struct wlr_xwayland_surface *xsurface) {
+	struct wlr_xwayland_surface *unfocus_surface = xwm->focus_surface;
+
 	if (xwm->focus_surface == xsurface ||
 			(xsurface && xsurface->override_redirect)) {
 		return;
 	}
 
+	xwm->focus_surface = xsurface;
+
+	if (unfocus_surface) {
+		xsurface_set_net_wm_state(unfocus_surface);
+	}
+
 	if (xsurface) {
+		xsurface_set_net_wm_state(xsurface);
 		xwm_set_net_active_window(xwm, xsurface->window_id);
 	} else {
 		xwm_set_net_active_window(xwm, XCB_WINDOW_NONE);
 	}
+}
 
-	xwm_set_focus_window(xwm, xsurface);
+static void xwm_surface_activate(struct wlr_xwm *xwm,
+		struct wlr_xwayland_surface *xsurface) {
+	if (xsurface && xsurface->override_redirect) {
+		return;
+	}
 
+	if (xsurface != xwm->focus_surface) {
+		xwm_focus_window(xwm, xsurface);
+	}
+
+	xwm_set_focused_window(xwm, xsurface);
 	xcb_flush(xwm->xcb_conn);
 }
 
@@ -1588,22 +1601,23 @@ static void xwm_handle_focus_in(struct wlr_xwm *xwm,
 		return;
 	}
 
-	// Do not let X clients change the focus behind the compositor's
-	// back. Reset the focus to the old one if it changed.
-	//
-	// Note: Some applications rely on being able to change focus, for ex. Steam:
-	// https://github.com/swaywm/sway/issues/1865
-	// Because of that, we allow changing focus between surfaces belonging to the
-	// same application. We must be careful to ignore requests that are too old
-	// though, because otherwise it may lead to race conditions:
+	// Ignore any out-of-date FocusIn event (older than the last
+	// known WM-initiated focus change) to avoid race conditions.
 	// https://github.com/swaywm/wlroots/issues/2324
-	struct wlr_xwayland_surface *requested_focus = lookup_surface(xwm, ev->event);
-	if (xwm->focus_surface && requested_focus &&
-			requested_focus->pid == xwm->focus_surface->pid &&
-			validate_focus_serial(xwm->last_focus_seq, ev->sequence)) {
-		xwm_set_focus_window(xwm, requested_focus);
+	if (!validate_focus_serial(xwm->last_focus_seq, ev->sequence)) {
+		return;
+	}
+
+	// Allow focus changes between surfaces belonging to the same
+	// application. Steam for example relies on this:
+	// https://github.com/swaywm/sway/issues/1865
+	struct wlr_xwayland_surface *xsurface = lookup_surface(xwm, ev->event);
+	if (xsurface && xwm->focus_surface && xsurface->pid == xwm->focus_surface->pid) {
+		xwm_set_focused_window(xwm, xsurface);
 	} else {
-		xwm_set_focus_window(xwm, xwm->focus_surface);
+		// Try to prevent clients from changing focus between
+		// applications, by refocusing the previous surface.
+		xwm_focus_window(xwm, xwm->focus_surface);
 	}
 }
 
