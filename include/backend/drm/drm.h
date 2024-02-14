@@ -129,6 +129,12 @@ struct wlr_drm_connector_state {
 	bool active;
 	drmModeModeInfo mode;
 	struct wlr_drm_fb *primary_fb;
+
+	// used by atomic
+	uint32_t mode_id;
+	uint32_t gamma_lut;
+	uint32_t fb_damage_clips;
+	bool vrr_enabled;
 };
 
 /**
