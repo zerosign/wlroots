@@ -75,6 +75,27 @@ enum wlr_xwayland_icccm_input_model {
 };
 
 /**
+ * The type of window (_NET_WM_WINDOW_TYPE). See:
+ * https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html
+ */
+enum wlr_net_wm_window_type {
+	WLR_NET_WM_WINDOW_TYPE_DESKTOP = 0,
+	WLR_NET_WM_WINDOW_TYPE_DOCK,
+	WLR_NET_WM_WINDOW_TYPE_TOOLBAR,
+	WLR_NET_WM_WINDOW_TYPE_MENU,
+	WLR_NET_WM_WINDOW_TYPE_UTILITY,
+	WLR_NET_WM_WINDOW_TYPE_SPLASH,
+	WLR_NET_WM_WINDOW_TYPE_DIALOG,
+	WLR_NET_WM_WINDOW_TYPE_DROPDOWN_MENU,
+	WLR_NET_WM_WINDOW_TYPE_POPUP_MENU,
+	WLR_NET_WM_WINDOW_TYPE_TOOLTIP,
+	WLR_NET_WM_WINDOW_TYPE_NOTIFICATION,
+	WLR_NET_WM_WINDOW_TYPE_COMBO,
+	WLR_NET_WM_WINDOW_TYPE_DND,
+	WLR_NET_WM_WINDOW_TYPE_NORMAL,
+};
+
+/**
  * An Xwayland user interface component. It has an absolute position in
  * layout-local coordinates.
  *
@@ -258,6 +279,14 @@ struct wlr_xwayland_surface *wlr_xwayland_surface_try_from_wlr_surface(
 	struct wlr_surface *surface);
 
 void wlr_xwayland_surface_ping(struct wlr_xwayland_surface *surface);
+
+/**
+ * Returns true if the surface has the given window type.
+ * Note: the surface may have multiple window types set.
+ */
+bool wlr_xwayland_surface_has_window_type(
+	const struct wlr_xwayland_surface *xsurface,
+	enum wlr_net_wm_window_type window_type);
 
 /** Metric to guess if an OR window should "receive" focus
  *
