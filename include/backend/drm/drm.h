@@ -121,13 +121,26 @@ struct wlr_drm_mode {
 	drmModeModeInfo drm_mode;
 };
 
-struct wlr_drm_connector_state {
-	const struct wlr_output_state *base;
+struct wlr_drm_device_state {
 	bool modeset;
 	bool nonblock;
+
+	struct wlr_drm_connector_state *connectors;
+	size_t connectors_len;
+};
+
+struct wlr_drm_connector_state {
+	struct wlr_drm_connector *connector;
+	const struct wlr_output_state *base;
 	bool active;
 	drmModeModeInfo mode;
 	struct wlr_drm_fb *primary_fb;
+
+	// used by atomic
+	uint32_t mode_id;
+	uint32_t gamma_lut;
+	uint32_t fb_damage_clips;
+	bool vrr_enabled;
 };
 
 /**
@@ -144,7 +157,13 @@ struct wlr_drm_connector_state {
  */
 struct wlr_drm_page_flip {
 	struct wl_list link; // wlr_drm_connector.page_flips
-	struct wlr_drm_connector *conn;
+	struct wlr_drm_page_flip_connector *connectors;
+	size_t connectors_len;
+};
+
+struct wlr_drm_page_flip_connector {
+	uint32_t crtc_id;
+	struct wlr_drm_connector *connector; // may be NULL
 };
 
 struct wlr_drm_connector {

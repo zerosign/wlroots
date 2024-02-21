@@ -425,82 +425,139 @@ static struct wlr_drm_layer *get_or_create_layer(struct wlr_drm_backend *drm,
 	return layer;
 }
 
-static void drm_connector_set_pending_page_flip(struct wlr_drm_connector *conn,
-		struct wlr_drm_page_flip *page_flip) {
-	if (conn->pending_page_flip != NULL) {
-		conn->pending_page_flip->conn = NULL;
-	}
-	conn->pending_page_flip = page_flip;
-}
-
 void drm_page_flip_destroy(struct wlr_drm_page_flip *page_flip) {
 	if (!page_flip) {
 		return;
 	}
 
 	wl_list_remove(&page_flip->link);
+	free(page_flip->connectors);
 	free(page_flip);
 }
 
-static struct wlr_drm_page_flip *drm_page_flip_create(struct wlr_drm_connector *conn) {
+static struct wlr_drm_page_flip *drm_page_flip_create(struct wlr_drm_backend *drm,
+		const struct wlr_drm_device_state *state) {
 	struct wlr_drm_page_flip *page_flip = calloc(1, sizeof(*page_flip));
 	if (page_flip == NULL) {
 		return NULL;
 	}
-	page_flip->conn = conn;
-	wl_list_insert(&conn->backend->page_flips, &page_flip->link);
+	page_flip->connectors_len = state->connectors_len;
+	page_flip->connectors =
+		calloc(page_flip->connectors_len, sizeof(page_flip->connectors[0]));
+	if (page_flip->connectors == NULL) {
+		free(page_flip);
+		return NULL;
+	}
+	for (size_t i = 0; i < state->connectors_len; i++) {
+		struct wlr_drm_connector *conn = state->connectors[i].connector;
+		page_flip->connectors[0] = (struct wlr_drm_page_flip_connector){
+			.connector = conn,
+			.crtc_id = conn->crtc->id,
+		};
+	}
+	wl_list_insert(&drm->page_flips, &page_flip->link);
 	return page_flip;
 }
 
-static bool drm_crtc_commit(struct wlr_drm_connector *conn,
-		const struct wlr_drm_connector_state *state,
+static struct wlr_drm_connector *drm_page_flip_pop(
+		struct wlr_drm_page_flip *page_flip, uint32_t crtc_id) {
+	bool found = false;
+	size_t i;
+	for (i = 0; i < page_flip->connectors_len; i++) {
+		if (page_flip->connectors[i].crtc_id == crtc_id) {
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		return NULL;
+	}
+
+	struct wlr_drm_connector *conn = page_flip->connectors[i].connector;
+	if (i != page_flip->connectors_len - 1) {
+		page_flip->connectors[i] = page_flip->connectors[page_flip->connectors_len - 1];
+	}
+	page_flip->connectors_len--;
+	return conn;
+}
+
+static void drm_connector_set_pending_page_flip(struct wlr_drm_connector *conn,
+		struct wlr_drm_page_flip *page_flip) {
+	if (conn->pending_page_flip != NULL) {
+		struct wlr_drm_page_flip *page_flip = conn->pending_page_flip;
+		for (size_t i = 0; i < page_flip->connectors_len; i++) {
+			if (page_flip->connectors[i].connector == conn) {
+				page_flip->connectors[i].connector = NULL;
+			}
+		}
+	}
+	conn->pending_page_flip = page_flip;
+}
+
+static void drm_connector_apply_commit(const struct wlr_drm_connector_state *state,
+		struct wlr_drm_page_flip *page_flip) {
+	struct wlr_drm_connector *conn = state->connector;
+	struct wlr_drm_crtc *crtc = conn->crtc;
+
+	drm_fb_clear(&crtc->primary->queued_fb);
+	if (state->primary_fb != NULL) {
+		crtc->primary->queued_fb = drm_fb_lock(state->primary_fb);
+	}
+	if (crtc->cursor != NULL) {
+		drm_fb_move(&crtc->cursor->queued_fb, &conn->cursor_pending_fb);
+	}
+
+	struct wlr_drm_layer *layer;
+	wl_list_for_each(layer, &crtc->layers, link) {
+		drm_fb_move(&layer->queued_fb, &layer->pending_fb);
+	}
+
+	drm_connector_set_pending_page_flip(conn, page_flip);
+
+	if (state->base->committed & WLR_OUTPUT_STATE_MODE) {
+		conn->refresh = calculate_refresh_rate(&state->mode);
+	}
+}
+
+static void drm_connector_rollback_commit(const struct wlr_drm_connector_state *state) {
+	struct wlr_drm_crtc *crtc = state->connector->crtc;
+
+	// The set_cursor() hook is a bit special: it's not really synchronized
+	// to commit() or test(). Once set_cursor() returns true, the new
+	// cursor is effectively committed. So don't roll it back here, or we
+	// risk ending up in a state where we don't have a cursor FB but
+	// wlr_drm_connector.cursor_enabled is true.
+	// TODO: fix our output interface to avoid this issue.
+
+	struct wlr_drm_layer *layer;
+	wl_list_for_each(layer, &crtc->layers, link) {
+		drm_fb_clear(&layer->pending_fb);
+	}
+}
+
+static bool drm_commit(struct wlr_drm_backend *drm,
+		const struct wlr_drm_device_state *state,
 		uint32_t flags, bool test_only) {
 	// Disallow atomic-only flags
 	assert((flags & ~DRM_MODE_PAGE_FLIP_FLAGS) == 0);
 
 	struct wlr_drm_page_flip *page_flip = NULL;
 	if (flags & DRM_MODE_PAGE_FLIP_EVENT) {
-		page_flip = drm_page_flip_create(conn);
+		page_flip = drm_page_flip_create(drm, state);
 		if (page_flip == NULL) {
 			return false;
 		}
 	}
 
-	struct wlr_drm_backend *drm = conn->backend;
-	struct wlr_drm_crtc *crtc = conn->crtc;
-	bool ok = drm->iface->crtc_commit(conn, state, page_flip, flags, test_only);
+	bool ok = drm->iface->commit(drm, state, page_flip, flags, test_only);
 	if (ok && !test_only) {
-		drm_fb_clear(&crtc->primary->queued_fb);
-		if (state->primary_fb != NULL) {
-			crtc->primary->queued_fb = drm_fb_lock(state->primary_fb);
-		}
-		if (crtc->cursor != NULL) {
-			drm_fb_move(&crtc->cursor->queued_fb, &conn->cursor_pending_fb);
-		}
-
-		struct wlr_drm_layer *layer;
-		wl_list_for_each(layer, &crtc->layers, link) {
-			drm_fb_move(&layer->queued_fb, &layer->pending_fb);
-		}
-
-		drm_connector_set_pending_page_flip(conn, page_flip);
-
-		if (state->base->committed & WLR_OUTPUT_STATE_MODE) {
-			conn->refresh = calculate_refresh_rate(&state->mode);
+		for (size_t i = 0; i < state->connectors_len; i++) {
+			drm_connector_apply_commit(&state->connectors[i], page_flip);
 		}
 	} else {
-		// The set_cursor() hook is a bit special: it's not really synchronized
-		// to commit() or test(). Once set_cursor() returns true, the new
-		// cursor is effectively committed. So don't roll it back here, or we
-		// risk ending up in a state where we don't have a cursor FB but
-		// wlr_drm_connector.cursor_enabled is true.
-		// TODO: fix our output interface to avoid this issue.
-
-		struct wlr_drm_layer *layer;
-		wl_list_for_each(layer, &crtc->layers, link) {
-			drm_fb_clear(&layer->pending_fb);
+		for (size_t i = 0; i < state->connectors_len; i++) {
+			drm_connector_rollback_commit(&state->connectors[i]);
 		}
-
 		drm_page_flip_destroy(page_flip);
 	}
 	return ok;
@@ -510,17 +567,10 @@ static void drm_connector_state_init(struct wlr_drm_connector_state *state,
 		struct wlr_drm_connector *conn,
 		const struct wlr_output_state *base) {
 	*state = (struct wlr_drm_connector_state){
+		.connector = conn,
 		.base = base,
-		.modeset = base->allow_reconfiguration,
 		.active = (base->committed & WLR_OUTPUT_STATE_ENABLED) ?
 			base->enabled : conn->output.enabled,
-		// The wlr_output API requires non-modeset commits with a new buffer to
-		// wait for the frame event. However compositors often perform
-		// non-modesets commits without a new buffer without waiting for the
-		// frame event. In that case we need to make the KMS commit blocking,
-		// otherwise the kernel will error out with EBUSY.
-		.nonblock = !base->allow_reconfiguration &&
-			(base->committed & WLR_OUTPUT_STATE_BUFFER),
 	};
 
 	struct wlr_output_mode *mode = conn->output.current_mode;
@@ -558,6 +608,22 @@ static void drm_connector_state_init(struct wlr_drm_connector_state *state,
 			state->primary_fb = drm_fb_lock(primary->current_fb);
 		}
 	}
+}
+
+static void drm_device_state_init_single(struct wlr_drm_device_state *dev_state,
+		struct wlr_drm_connector_state *conn_state) {
+	*dev_state = (struct wlr_drm_device_state){
+		.modeset = conn_state->base->allow_reconfiguration,
+		// The wlr_output API requires non-modeset commits with a new buffer to
+		// wait for the frame event. However compositors often perform
+		// non-modesets commits without a new buffer without waiting for the
+		// frame event. In that case we need to make the KMS commit blocking,
+		// otherwise the kernel will error out with EBUSY.
+		.nonblock = !conn_state->base->allow_reconfiguration &&
+			(conn_state->base->committed & WLR_OUTPUT_STATE_BUFFER),
+		.connectors = conn_state,
+		.connectors_len = 1,
+	};
 }
 
 static void drm_connector_state_finish(struct wlr_drm_connector_state *state) {
@@ -679,6 +745,8 @@ static bool drm_connector_test(struct wlr_output *output,
 	bool ok = false;
 	struct wlr_drm_connector_state pending = {0};
 	drm_connector_state_init(&pending, conn, state);
+	struct wlr_drm_device_state pending_dev = {0};
+	drm_device_state_init_single(&pending_dev, &pending);
 
 	if (pending.active) {
 		if ((state->committed &
@@ -732,7 +800,7 @@ static bool drm_connector_test(struct wlr_output *output,
 		}
 	}
 
-	ok = drm_crtc_commit(conn, &pending, 0, true);
+	ok = drm_commit(conn->backend, &pending_dev, 0, true);
 
 out:
 	drm_connector_state_finish(&pending);
@@ -776,6 +844,8 @@ static bool drm_connector_commit_state(struct wlr_drm_connector *conn,
 	bool ok = false;
 	struct wlr_drm_connector_state pending = {0};
 	drm_connector_state_init(&pending, conn, base);
+	struct wlr_drm_device_state pending_dev = {0};
+	drm_device_state_init_single(&pending_dev, &pending);
 
 	if (!pending.active && conn->crtc == NULL) {
 		// Disabling an already-disabled connector
@@ -802,7 +872,7 @@ static bool drm_connector_commit_state(struct wlr_drm_connector *conn,
 		}
 	}
 
-	if (pending.modeset) {
+	if (pending_dev.modeset) {
 		if (pending.active) {
 			wlr_drm_conn_log(conn, WLR_INFO, "Modesetting with %dx%d @ %.3f Hz",
 				pending.mode.hdisplay, pending.mode.vdisplay,
@@ -816,7 +886,7 @@ static bool drm_connector_commit_state(struct wlr_drm_connector *conn,
 	// page-flip, either a blocking modeset. When performing a blocking modeset
 	// we'll wait for all queued page-flips to complete, so we don't need this
 	// safeguard.
-	if (pending.nonblock && conn->pending_page_flip != NULL) {
+	if (pending_dev.nonblock && conn->pending_page_flip != NULL) {
 		wlr_drm_conn_log(conn, WLR_ERROR, "Failed to page-flip output: "
 			"a page-flip is already pending");
 		goto out;
@@ -830,7 +900,7 @@ static bool drm_connector_commit_state(struct wlr_drm_connector *conn,
 		flags |= DRM_MODE_PAGE_FLIP_ASYNC;
 	}
 
-	ok = drm_crtc_commit(conn, &pending, flags, false);
+	ok = drm_commit(drm, &pending_dev, flags, false);
 	if (!ok) {
 		goto out;
 	}
@@ -1721,11 +1791,9 @@ void scan_drm_leases(struct wlr_drm_backend *drm) {
 
 static void build_current_connector_state(struct wlr_output_state *state,
 		struct wlr_drm_connector *conn) {
-	bool enabled = conn->status != DRM_MODE_DISCONNECTED && conn->output.enabled;
-
 	wlr_output_state_init(state);
-	wlr_output_state_set_enabled(state, enabled);
-	if (!enabled) {
+	wlr_output_state_set_enabled(state, conn->output.enabled);
+	if (!conn->output.enabled) {
 		return;
 	}
 
@@ -1757,6 +1825,12 @@ static bool skip_reset_for_restore(struct wlr_drm_backend *drm) {
 		drmModeFreeConnector(drm_conn);
 
 		if (crtc != NULL && conn->crtc != crtc) {
+			return false;
+		}
+		if (!conn->output.enabled && crtc != NULL) {
+			return false;
+		}
+		if (conn->output.enabled && conn->status == DRM_MODE_DISCONNECTED) {
 			return false;
 		}
 	}
@@ -1810,15 +1884,42 @@ void restore_drm_device(struct wlr_drm_backend *drm) {
 		wlr_log(WLR_ERROR, "Failed to reset state after VT switch");
 	}
 
+	size_t states_cap = wl_list_length(&drm->connectors);
+	struct wlr_output_state *output_states = calloc(states_cap, sizeof(output_states[0]));
+	struct wlr_drm_connector_state *conn_states = calloc(states_cap, sizeof(conn_states[0]));
+	if (output_states == NULL || conn_states == NULL) {
+		goto out_states;
+	}
+
+	size_t states_len = 0;
 	struct wlr_drm_connector *conn;
 	wl_list_for_each(conn, &drm->connectors, link) {
-		struct wlr_output_state state;
-		build_current_connector_state(&state, conn);
-		if (!drm_connector_commit_state(conn, &state)) {
-			wlr_drm_conn_log(conn, WLR_ERROR, "Failed to restore state after VT switch");
+		if (conn->status == DRM_MODE_DISCONNECTED || !conn->output.enabled) {
+			continue; // already disabled above
 		}
-		wlr_output_state_finish(&state);
+
+		build_current_connector_state(&output_states[states_len], conn);
+		drm_connector_state_init(&conn_states[states_len], conn, &output_states[states_len]);
+		states_len++;
 	}
+
+	struct wlr_drm_device_state dev_state = {
+		.modeset = true,
+		.connectors = conn_states,
+		.connectors_len = states_len,
+	};
+	if (!drm_commit(drm, &dev_state, DRM_MODE_PAGE_FLIP_EVENT, false)) {
+		wlr_log(WLR_ERROR, "Failed to restore state after VT switch");
+	}
+
+	for (size_t i = 0; i < states_len; i++) {
+		drm_connector_state_finish(&conn_states[i]);
+		wlr_output_state_finish(&output_states[i]);
+	}
+
+out_states:
+	free(output_states);
+	free(conn_states);
 }
 
 static int mhz_to_nsec(int mhz) {
@@ -1829,11 +1930,13 @@ static void handle_page_flip(int fd, unsigned seq,
 		unsigned tv_sec, unsigned tv_usec, unsigned crtc_id, void *data) {
 	struct wlr_drm_page_flip *page_flip = data;
 
-	struct wlr_drm_connector *conn = page_flip->conn;
+	struct wlr_drm_connector *conn = drm_page_flip_pop(page_flip, crtc_id);
 	if (conn != NULL) {
 		conn->pending_page_flip = NULL;
 	}
-	drm_page_flip_destroy(page_flip);
+	if (page_flip->connectors_len == 0) {
+		drm_page_flip_destroy(page_flip);
+	}
 
 	if (conn == NULL) {
 		return;
