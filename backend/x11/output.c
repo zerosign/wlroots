@@ -133,7 +133,7 @@ static bool output_test(struct wlr_output *wlr_output,
 	// _VARIABLE_REFRESH window property like mesa automatically does. We don't
 	// have any control beyond that, so we set the state to enabled on creating
 	// the output and never allow changing it (just like the Wayland backend).
-	assert(wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED);
+	assert(wlr_output->adaptive_sync_enabled);
 	if (state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
 		if (!state->adaptive_sync_enabled) {
 			wlr_log(WLR_DEBUG, "Disabling adaptive sync is not supported");
@@ -637,7 +637,7 @@ struct wlr_output *wlr_x11_output_create(struct wlr_backend *backend) {
 	xcb_change_property(x11->xcb, XCB_PROP_MODE_REPLACE, output->win,
 		x11->atoms.variable_refresh, XCB_ATOM_CARDINAL, 32, 1,
 		&enabled);
-	wlr_output->adaptive_sync_status = WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
+	wlr_output->adaptive_sync_enabled = true;
 
 	wlr_x11_output_set_title(wlr_output, NULL);
 

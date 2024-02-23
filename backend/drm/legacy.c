@@ -126,9 +126,7 @@ static bool legacy_crtc_commit(struct wlr_drm_connector *conn,
 				"drmModeObjectSetProperty(VRR_ENABLED) failed");
 			return false;
 		}
-		output->adaptive_sync_status = state->base->adaptive_sync_enabled ?
-			WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED :
-			WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
+		output->adaptive_sync_enabled = state->base->adaptive_sync_enabled;
 		wlr_drm_conn_log(conn, WLR_DEBUG, "VRR %s",
 			state->base->adaptive_sync_enabled ? "enabled" : "disabled");
 	}

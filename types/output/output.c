@@ -532,12 +532,9 @@ static uint32_t output_compare_state(struct wlr_output *output,
 			output->transform == state->transform) {
 		fields |= WLR_OUTPUT_STATE_TRANSFORM;
 	}
-	if (state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
-		bool enabled =
-			output->adaptive_sync_status != WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED;
-		if (enabled == state->adaptive_sync_enabled) {
-			fields |= WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
-		}
+	if (state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED &&
+			output->adaptive_sync_enabled != state->adaptive_sync_enabled) {
+		fields |= WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
 	}
 	if ((state->committed & WLR_OUTPUT_STATE_RENDER_FORMAT) &&
 			output->render_format == state->render_format) {
