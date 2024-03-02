@@ -148,7 +148,8 @@ static void rollback_blob(struct wlr_drm_backend *drm,
 }
 
 static bool set_plane_props(struct wlr_drm_plane *plane,
-		struct liftoff_layer *layer, struct wlr_drm_fb *fb, int32_t x, int32_t y, uint64_t zpos) {
+		struct liftoff_layer *layer, struct wlr_drm_fb *fb, int32_t x,
+		int32_t y, uint64_t zpos, uint64_t dst_w, uint64_t dst_h) {
 	if (fb == NULL) {
 		wlr_log(WLR_ERROR, "Failed to acquire FB for plane %"PRIu32, plane->id);
 		return false;
@@ -165,8 +166,8 @@ static bool set_plane_props(struct wlr_drm_plane *plane,
 		liftoff_layer_set_property(layer, "SRC_H", (uint64_t)height << 16) == 0 &&
 		liftoff_layer_set_property(layer, "CRTC_X", (uint64_t)x) == 0 &&
 		liftoff_layer_set_property(layer, "CRTC_Y", (uint64_t)y) == 0 &&
-		liftoff_layer_set_property(layer, "CRTC_W", width) == 0 &&
-		liftoff_layer_set_property(layer, "CRTC_H", height) == 0 &&
+		liftoff_layer_set_property(layer, "CRTC_W", dst_w) == 0 &&
+		liftoff_layer_set_property(layer, "CRTC_H", dst_h) == 0 &&
 		liftoff_layer_set_property(layer, "FB_ID", fb->id) == 0;
 }
 
@@ -401,8 +402,10 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 			ok = ok && add_prop(req, crtc->id, crtc->props.vrr_enabled, vrr_enabled);
 		}
 		ok = ok &&
-			set_plane_props(crtc->primary, crtc->primary->liftoff_layer, state->primary_fb, 0, 0, 0) &&
-			set_plane_props(crtc->primary, crtc->liftoff_composition_layer, state->primary_fb, 0, 0, 0);
+			set_plane_props(crtc->primary, crtc->primary->liftoff_layer, state->primary_fb,
+				0, 0, 0, output->width, output->height) &&
+			set_plane_props(crtc->primary, crtc->liftoff_composition_layer, state->primary_fb,
+				0, 0, 0, output->width, output->height);
 		liftoff_layer_set_property(crtc->primary->liftoff_layer,
 			"FB_DAMAGE_CLIPS", primary_fb_damage_clips);
 		liftoff_layer_set_property(crtc->liftoff_composition_layer,
@@ -418,9 +421,11 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 
 		if (crtc->cursor) {
 			if (drm_connector_is_cursor_visible(conn)) {
+				struct wlr_drm_fb *fb = get_next_cursor_fb(conn);
 				ok = ok && set_plane_props(crtc->cursor, crtc->cursor->liftoff_layer,
-					get_next_cursor_fb(conn), conn->cursor_x, conn->cursor_y,
-					wl_list_length(&crtc->layers) + 1);
+					fb, conn->cursor_x, conn->cursor_y,
+					wl_list_length(&crtc->layers) + 1,
+					fb->wlr_buf->width, fb->wlr_buf->height);
 			} else {
 				ok = ok && disable_plane(crtc->cursor);
 			}

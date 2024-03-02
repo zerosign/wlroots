@@ -552,18 +552,7 @@ static uint32_t output_compare_state(struct wlr_output *output,
 
 static bool output_basic_test(struct wlr_output *output,
 		const struct wlr_output_state *state) {
-	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
-		// If the size doesn't match, reject buffer (scaling is not
-		// supported)
-		int pending_width, pending_height;
-		output_pending_resolution(output, state,
-			&pending_width, &pending_height);
-		if (state->buffer->width != pending_width ||
-				state->buffer->height != pending_height) {
-			wlr_log(WLR_DEBUG, "Primary buffer size mismatch");
-			return false;
-		}
-	} else if (state->tearing_page_flip) {
+	if (!(state->committed & WLR_OUTPUT_STATE_BUFFER) && state->tearing_page_flip) {
 		wlr_log(WLR_ERROR, "Trying to commit a tearing page flip without a buffer?");
 		return false;
 	}
