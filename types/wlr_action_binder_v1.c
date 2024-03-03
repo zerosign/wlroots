@@ -211,7 +211,7 @@ static void action_binder_create_binding(struct wl_client *client,
 		&ext_action_binding_v1_implementation, bind, action_binding_destroy);
 }
 
-static void action_binder_bind_actions(struct wl_client *client, struct wl_resource *resource) {
+static void action_binder_commit(struct wl_client *client, struct wl_resource *resource) {
 	struct wlr_action_binder_v1_state *state = wlr_action_binder_v1_state_from_resource(resource);
 	struct wlr_action_binding_v1 *binding = NULL;
 
@@ -224,12 +224,12 @@ static void action_binder_bind_actions(struct wl_client *client, struct wl_resou
 		}
 	}
 
-	wl_signal_emit(&state->binder->events.bind, NULL);
+	wl_signal_emit_mutable(&state->binder->events.bind, state);
 }
 
 static const struct ext_action_binder_v1_interface ext_action_binder_v1_implementation = {
 	.create_binding = action_binder_create_binding,
-	.bind = action_binder_bind_actions,
+	.commit = action_binder_commit,
 	.destroy = resource_handle_destroy,
 };
 

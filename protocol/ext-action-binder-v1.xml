@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<protocol name="action_binder_v1">
+<protocol name="ext_action_binder_v1">
   <copyright>
-    Copyright © 2015-2017 Quentin “Sardem FF7” Glidic, 2023 Anna "navi" Figueiredo Gomes
+    Copyright © 2015-2017 Quentin “Sardem FF7” Glidic
+    Copyright © 2023-2024 Anna "navi" Figueiredo Gomes
 
     Permission to use, copy, modify, distribute, and sell this
     software and its documentation for any purpose is hereby granted
@@ -25,17 +26,19 @@
     THIS SOFTWARE.
   </copyright>
 
+  <description summary="binds actions">
+    This protocol allows clients to register "actions" as a set of triggers
+    and metadata, and get notified when those actions are triggered by the user.
+
+    Warning! The protocol described in this file is currently in the testing
+    phase. Backward compatible changes may be added together with the
+    corresponding interface version bump. Backward incompatible changes can
+    only be done by creating a new major version of the extension.
+  </description>
+
   <interface name="ext_action_binder_v1" version="1">
     <description summary="action binder">
-      This interface is designed to allow any application to bind
-      an action.
-
-      An action is an arbitrary couple of a namespace and a name describing the
-      wanted behaviour. These two strings are not meant to be user-visible.
-      Some namespaces are well-known and shared by applications while each
-      application can have its own namespaces for internal actions.
-      It is possible to have the same action in several namespaces, e.g. to
-      allow application-specific bindings in addition to global actions.
+      This interface is designed to allow any application to bind an action.
 
       It is left to the compositor to determine which client will get events.
       The choice can be based on policy, heuristic, user configuration, or any
@@ -43,7 +46,7 @@
       Here are some examples of dispatching choice: all applications, last
       focused, user-defined preference order, latest fullscreened application.
 
-      This interface is exposed as global
+      This interface is exposed as global.
     </description>
 
     <request name="destroy" type="destructor">
@@ -53,13 +56,18 @@
     </request>
 
     <request name="create_binding">
-      <description summary="create a binding"/>
+      <description summary="create a binding">
+        Creates a binding.
+
+        After setting the metadata on all bindings created, the client must
+        call ext_action_binder_v1.commit for the binding to take effect.
+      </description>
       <arg name="binding" type="new_id" interface="ext_action_binding_v1" summary="the new binding" />
     </request>
 
-    <request name="bind">
-      <description summary="binds all created bindings">
-        Binds all bindings created from this interface.
+    <request name="commit">
+      <description summary="commits all created bindings">
+        Commits all bindings created from this interface.
         This request may be called again if new bindings are created,
         already bound bindings are unaffected.
 
@@ -76,6 +84,10 @@
   </interface>
 
   <interface name="ext_action_binding_v1" version="1">
+    <description summary="a binding for an action">
+      This interface defines an individual binding, allowing the client to register metadata about
+      the action and receive triggered events.
+    </description>
     <request name="destroy" type="destructor">
       <description summary="unbind the actions">
         The client no longer wants to receive events for this binding.
@@ -84,30 +96,40 @@
 
     <request name="set_name">
       <description summary="sets the namespace:name of a binding">
-        This an action.
-        Sets the namespace:name of the binding.
+        Sets an arbitrary couple of a namespace and a name describing the
+        wanted behaviour. These two strings are not meant to be user-visible.
+        Some namespaces are well-known and shared by applications while each
+        application can have its own namespaces for internal actions.
+        It is possible to have the same action in several namespaces, e.g. to
+        allow application-specific bindings in addition to global actions.
 
-        Attempting to send this request twice raises an already set error
+        A name must be set before attempting to commit a binding.
+
+        Attempting to send this request twice or after the binding was bound raises an already set error.
       </description>
-      <arg name="namespace" type="string" summary="the action namespace" />
+      <arg name="name_space" type="string" summary="the action namespace" />
       <arg name="name" type="string" summary="the action name" />
     </request>
 
     <request name="set_description">
-      <description summary="sets the human-readable description of a binding">
+      <description summary="set the human-readable description of a binding">
         This setting is optional.
         This description may be used by the compositor to render a ui for bindings.
 
-        Attempting to send this request twice raises an already_set error
+        Attempting to send this request twice or after the binding was bound raises an already_set error.
       </description>
       <arg name="description" type="string" summary="a human-readable description of what the binding does" />
     </request>
 
     <request name="set_app_id">
-      <description summary="sets an app_id for this binding">
+      <description summary="set the application ID">
         This setting is optional.
 
-        Attempting to send this request twice raises an already_set error
+        The app ID identifies the general class of applications to which
+        the binding belongs. The compositor can use this to select which
+        client will receive an event.
+
+        Attempting to send this request twice or after the binding was bound raises an already_set error.
       </description>
       <arg name="app_id" type="string" summary="app_id of the application requesting this bind"/>
     </request>
@@ -116,7 +138,7 @@
       <description summary="sets a target seat">
         This setting is optional.
 
-        Attempting to send this request twice raises an already_set error
+        Attempting to send this request twice or after the binding was bound raises an already_set error.
       </description>
       <arg name="seat" type="object" interface="wl_seat" summary="target seat"/>
     </request>
@@ -125,26 +147,26 @@
       <description summary="sets the machine-readable trigger of a binding">
         This setting is optional.
         The trigger is a suggestion to the compositor, and the action should not rely
-        to being set to that specific trigger.
+        on being set to that specific trigger.
 
         The client does not know which trigger was actually set, but when a binding is
-        bound, it recieves from the compositor a human readable string describing the trigger,
+        bound, it receives from the compositor a human readable string describing the trigger,
         if any, so it could show it in a ui.
 
         The trigger format is split into two fields, what kind of device triggers it, and a
         general trigger string.
 
-        as of version 1 of this protocol, the following kinds are defined:
-        "sym": trigger is a combo of XKB key names
+        As of version 1 of this protocol, the following kinds are defined:
+        "sym": trigger is a combo of XKB key names.
         "mouse": trigger is button[1-9], mapped to their x11 values, (1=left, 2=middle, 3=right,
-        4=scroll up, 5=scroll down, 6=scroll left, 7=scroll right, 8=back, 9=forward)
-        "switch": trigger on the format switch:state, where "lid" and "tablet" are valid switches
+        4=scroll up, 5=scroll down, 6=scroll left, 7=scroll right, 8=back, 9=forward).
+        "switch": trigger on the format switch:state, where "lid" and "tablet" are valid switches.
         "gesture": trigger on the format gesture[:fingers][:direction] with the following gestures:
-        hold: 1-5 fingers, no direction
-        swipe: 3-5 fingers, up, down, left or right
-        pinch: 2-5 fingers, all above, inward, outward, clockwise, counterclockwise
+        hold: 1-5 fingers, no direction.
+        swipe: 3-5 fingers, up, down, left or right.
+        pinch: 2-5 fingers, all above, inward, outward, clockwise, counterclockwise.
 
-        Attempting to send this request twice raises an already_set error
+        Attempting to send this request twice or after the binding was bound raises an already_set error.
       </description>
       <arg name="kind" type="string" summary="what category of trigger it fits in"/>
       <arg name="trigger" type="string" summary="a trigger that the client would like to trigger the action"/>
@@ -159,10 +181,10 @@
 
     <event name="rejected">
       <description summary="the compositor rejected the binding">
-        Sent after the event was processed, and got rejected.
+        Sent after the event was processed and got rejected,
         or at any time should the compositor want to remove the binding.
         The compositor will send no further events after this event.
-        The client should destroy the resource at this point.
+        The client should destroy the object at this point.
       </description>
     </event>
 
