@@ -24,6 +24,10 @@ struct wlr_texture {
 	uint32_t width, height;
 
 	struct wlr_renderer *renderer;
+
+	struct {
+		struct wl_signal destroy;
+	} events;
 };
 
 struct wlr_texture_read_pixels_options {
