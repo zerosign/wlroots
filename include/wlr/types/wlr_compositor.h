@@ -119,16 +119,29 @@ struct wlr_surface_output {
 	struct wl_listener destroy;
 };
 
+struct wlr_surface_texture {
+	struct wlr_texture *texture;
+	// The buffer this surface texture was created from. NULL if released.
+	struct wlr_buffer *buffer;
+	// True if the texture won't be mutated by client surface commits.
+	bool locked;
+
+	// private state
+
+	struct wl_listener buffer_release;
+	bool dropped;
+};
+
 struct wlr_surface {
 	struct wl_resource *resource;
 	struct wlr_renderer *renderer; // may be NULL
 	/**
-	 * The surface's buffer, if any. A surface has an attached buffer when it
+	 * The surface's texture, if any. A surface has an attached buffer when it
 	 * commits with a non-null buffer in its pending state. A surface will not
-	 * have a buffer if it has never committed one, has committed a null buffer,
-	 * or something went wrong with uploading the buffer.
+	 * have a texture if it has never committed one, has committed a null
+	 * buffer, or something went wrong with uploading the buffer.
 	 */
-	struct wlr_client_buffer *buffer;
+	struct wlr_surface_texture *texture;
 	/**
 	 * The last commit's buffer damage, in buffer-local coordinates. This
 	 * contains both the damage accumulated by the client via
@@ -256,6 +269,9 @@ struct wlr_compositor {
 
 typedef void (*wlr_surface_iterator_func_t)(struct wlr_surface *surface,
 	int sx, int sy, void *data);
+
+void wlr_surface_texture_lock(struct wlr_surface_texture *surf_tex);
+void wlr_surface_texture_unlock(struct wlr_surface_texture *surf_tex);
 
 /**
  * Set the lifetime role for this surface.

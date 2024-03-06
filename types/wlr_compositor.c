@@ -53,6 +53,76 @@ static void pending_buffer_resource_handle_destroy(struct wl_listener *listener,
 	set_pending_buffer_resource(surface, NULL);
 }
 
+static void surface_texture_handle_buffer_release(struct wl_listener *listener,
+		void *data) {
+	struct wlr_surface_texture *surf_tex = wl_container_of(listener, surf_tex, buffer_release);
+	surf_tex->buffer = NULL;
+	wl_list_remove(&surf_tex->buffer_release.link);
+	wl_list_init(&surf_tex->buffer_release.link);
+}
+
+static struct wlr_surface_texture *surface_texture_create(struct wlr_buffer *buffer,
+		struct wlr_renderer *renderer) {
+	struct wlr_texture *texture = wlr_texture_from_buffer(renderer, buffer);
+	if (texture == NULL) {
+		return NULL;
+	}
+
+	struct wlr_surface_texture *surf_tex = calloc(1, sizeof(*surf_tex));
+	if (surf_tex == NULL) {
+		wlr_texture_destroy(texture);
+		return NULL;
+	}
+
+	surf_tex->buffer = buffer;
+	surf_tex->texture = texture;
+
+	surf_tex->buffer_release.notify = surface_texture_handle_buffer_release;
+	wl_signal_add(&buffer->events.release, &surf_tex->buffer_release);
+
+	return surf_tex;
+}
+
+static void surface_texture_consider_destroy(struct wlr_surface_texture *surf_tex) {
+	if (!surf_tex->dropped || surf_tex->locked) {
+		return;
+	}
+	wl_list_remove(&surf_tex->buffer_release.link);
+	wlr_texture_destroy(surf_tex->texture);
+	free(surf_tex);
+}
+
+static bool surface_texture_apply_damage(struct wlr_surface_texture *surf_tex,
+		struct wlr_buffer *next, const pixman_region32_t *damage) {
+	if (surf_tex->locked) {
+		return false;
+	}
+	return wlr_texture_update_from_buffer(surf_tex->texture, next, damage);
+}
+
+static void surface_texture_drop(struct wlr_surface_texture *surf_tex) {
+	if (surf_tex == NULL) {
+		return;
+	}
+	assert(!surf_tex->dropped);
+	surf_tex->dropped = true;
+	surface_texture_consider_destroy(surf_tex);
+}
+
+void wlr_surface_texture_lock(struct wlr_surface_texture *surf_tex) {
+	assert(!surf_tex->locked);
+	surf_tex->locked = true;
+}
+
+void wlr_surface_texture_unlock(struct wlr_surface_texture *surf_tex) {
+	if (surf_tex == NULL) {
+		return;
+	}
+	assert(surf_tex->locked);
+	surf_tex->locked = false;
+	surface_texture_consider_destroy(surf_tex);
+}
+
 static void surface_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
 	struct wlr_surface *surface = wlr_surface_from_resource(resource);
@@ -407,18 +477,16 @@ static void surface_state_move(struct wlr_surface_state *state,
 static void surface_apply_damage(struct wlr_surface *surface) {
 	if (surface->current.buffer == NULL) {
 		// NULL commit
-		if (surface->buffer != NULL) {
-			wlr_buffer_unlock(&surface->buffer->base);
-		}
-		surface->buffer = NULL;
+		surface_texture_drop(surface->texture);
+		surface->texture = NULL;
 		surface->opaque = false;
 		return;
 	}
 
 	surface->opaque = buffer_is_opaque(surface->current.buffer);
 
-	if (surface->buffer != NULL) {
-		if (wlr_client_buffer_apply_damage(surface->buffer,
+	if (surface->texture != NULL) {
+		if (surface_texture_apply_damage(surface->texture,
 				surface->current.buffer, &surface->buffer_damage)) {
 			wlr_buffer_unlock(surface->current.buffer);
 			surface->current.buffer = NULL;
@@ -430,18 +498,15 @@ static void surface_apply_damage(struct wlr_surface *surface) {
 		return;
 	}
 
-	struct wlr_client_buffer *buffer = wlr_client_buffer_create(
-			surface->current.buffer, surface->renderer);
-
-	if (buffer == NULL) {
+	struct wlr_surface_texture *texture =
+		surface_texture_create(surface->current.buffer, surface->renderer);
+	if (texture == NULL) {
 		wlr_log(WLR_ERROR, "Failed to upload buffer");
 		return;
 	}
 
-	if (surface->buffer != NULL) {
-		wlr_buffer_unlock(&surface->buffer->base);
-	}
-	surface->buffer = buffer;
+	surface_texture_drop(surface->texture);
+	surface->texture = texture;
 }
 
 static void surface_update_opaque_region(struct wlr_surface *surface) {
@@ -746,9 +811,7 @@ static void surface_handle_resource_destroy(struct wl_resource *resource) {
 	pixman_region32_fini(&surface->buffer_damage);
 	pixman_region32_fini(&surface->opaque_region);
 	pixman_region32_fini(&surface->input_region);
-	if (surface->buffer != NULL) {
-		wlr_buffer_unlock(&surface->buffer->base);
-	}
+	surface_texture_drop(surface->texture);
 	free(surface);
 }
 
@@ -814,10 +877,10 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 }
 
 struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface) {
-	if (surface->buffer == NULL) {
+	if (surface->texture == NULL) {
 		return NULL;
 	}
-	return surface->buffer->texture;
+	return surface->texture->texture;
 }
 
 bool wlr_surface_has_buffer(struct wlr_surface *surface) {
