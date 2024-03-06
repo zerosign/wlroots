@@ -184,6 +184,7 @@ struct wlr_scene_buffer {
 
 	uint64_t active_outputs;
 	struct wlr_texture *texture;
+	bool own_texture;
 	struct wlr_linux_dmabuf_feedback_v1_init_options prev_feedback_options;
 
 	bool own_buffer;
@@ -191,6 +192,7 @@ struct wlr_scene_buffer {
 	bool buffer_is_opaque;
 
 	struct wl_listener buffer_release;
+	struct wl_listener texture_destroy;
 };
 
 /** A viewport for an output in the scene-graph */

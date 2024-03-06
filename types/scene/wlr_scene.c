@@ -112,7 +112,9 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
 			}
 		}
 
-		wlr_texture_destroy(scene_buffer->texture);
+		if (scene_buffer->own_texture) {
+			wlr_texture_destroy(scene_buffer->texture);
+		}
 		scene_buffer_set_buffer(scene_buffer, NULL);
 		pixman_region32_fini(&scene_buffer->opaque_region);
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
@@ -635,6 +637,37 @@ static void scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
 	wl_signal_add(&buffer->events.release, &scene_buffer->buffer_release);
 }
 
+static void scene_buffer_set_texture(struct wlr_scene_buffer *scene_buffer,
+	struct wlr_texture *texture, bool own_texture);
+
+static void scene_buffer_handle_texture_destroy(struct wl_listener *listener,
+		void *data) {
+	struct wlr_scene_buffer *scene_buffer =
+		wl_container_of(listener, scene_buffer, texture_destroy);
+	scene_buffer_set_texture(scene_buffer, NULL, false);
+}
+
+static void scene_buffer_set_texture(struct wlr_scene_buffer *scene_buffer,
+		struct wlr_texture *texture, bool own_texture) {
+	wl_list_remove(&scene_buffer->texture_destroy.link);
+	wl_list_init(&scene_buffer->texture_destroy.link);
+	if (scene_buffer->own_texture) {
+		wlr_texture_destroy(scene_buffer->texture);
+	}
+	scene_buffer->texture = NULL;
+	scene_buffer->own_texture = false;
+
+	if (!texture) {
+		return;
+	}
+
+	scene_buffer->own_texture = own_texture;
+	scene_buffer->texture = texture;
+
+	scene_buffer->texture_destroy.notify = scene_buffer_handle_texture_destroy;
+	wl_signal_add(&texture->events.destroy, &scene_buffer->texture_destroy);
+}
+
 struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
 		struct wlr_buffer *buffer) {
 	struct wlr_scene_buffer *scene_buffer = calloc(1, sizeof(*scene_buffer));
@@ -659,20 +692,28 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
 	return scene_buffer;
 }
 
-void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buffer,
-		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
+void scene_buffer_set_buffer_and_texture(struct wlr_scene_buffer *scene_buffer,
+		struct wlr_buffer *buffer, struct wlr_texture *texture,
+		const pixman_region32_t *damage) {
 	// specifying a region for a NULL buffer doesn't make sense. We need to know
 	// about the buffer to scale the buffer local coordinates down to scene
 	// coordinates.
-	assert(buffer || !damage);
+	assert(buffer || texture || !damage);
 
 	int buffer_width = 0, buffer_height = 0;
+	if (buffer != NULL && texture != NULL) {
+		assert(buffer->width == (int)texture->width &&
+			buffer->height == (int)texture->height);
+	}
 	if (buffer != NULL) {
 		buffer_width = buffer->width;
 		buffer_height = buffer->height;
+	} else if (texture != NULL) {
+		buffer_width = texture->width;
+		buffer_height = texture->height;
 	}
 
-	bool mapped = buffer != NULL;
+	bool mapped = buffer != NULL || texture != NULL;
 	bool prev_mapped = scene_buffer->buffer != NULL || scene_buffer->texture != NULL;
 
 	// if this node used to not be mapped or its previous displayed
@@ -684,10 +725,10 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 			scene_buffer->buffer_height != buffer_height;
 	}
 
-	wlr_texture_destroy(scene_buffer->texture);
-	scene_buffer->texture = NULL;
-
 	scene_buffer_set_buffer(scene_buffer, buffer);
+	scene_buffer_set_texture(scene_buffer, texture, false);
+	scene_buffer->buffer_width = buffer_width;
+	scene_buffer->buffer_height = buffer_height;
 
 	if (update) {
 		scene_node_update(&scene_buffer->node, NULL);
@@ -786,6 +827,11 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	pixman_region32_fini(&fallback_damage);
 }
 
+void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buffer,
+		struct wlr_buffer *buffer, const pixman_region32_t *damage) {
+	scene_buffer_set_buffer_and_texture(scene_buffer, buffer, NULL, damage);
+}
+
 void wlr_scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
 		struct wlr_buffer *buffer)  {
 	wlr_scene_buffer_set_buffer_with_damage(scene_buffer, buffer, NULL);
@@ -880,15 +926,10 @@ static struct wlr_texture *scene_buffer_get_texture(
 		return scene_buffer->texture;
 	}
 
-	struct wlr_client_buffer *client_buffer =
-		wlr_client_buffer_get(scene_buffer->buffer);
-	if (client_buffer != NULL) {
-		return client_buffer->texture;
-	}
-
-	scene_buffer->texture =
+	struct wlr_texture *texture =
 		wlr_texture_from_buffer(renderer, scene_buffer->buffer);
-	if (scene_buffer->texture != NULL && scene_buffer->own_buffer) {
+	scene_buffer_set_texture(scene_buffer, texture, true);
+	if (texture != NULL && scene_buffer->own_buffer) {
 		scene_buffer->own_buffer = false;
 		wlr_buffer_unlock(scene_buffer->buffer);
 	}
