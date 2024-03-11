@@ -275,3 +275,53 @@ void handle_tablet_tool_button(struct libinput_event *event,
 	}
 	wl_signal_emit_mutable(&wlr_tablet->events.button, &wlr_event);
 }
+
+void handle_tablet_tool_scroll_continuous(struct libinput_event *event,
+		struct wlr_tablet *wlr_tablet) {
+	struct libinput_event_tablet_tool *tevent =
+		libinput_event_get_tablet_tool_event(event);
+	struct wlr_libinput_input_device *dev = device_from_tablet(wlr_tablet);
+	struct tablet_tool *tool =
+		get_tablet_tool(dev, libinput_event_tablet_tool_get_tool(tevent));
+
+	struct wlr_tablet_tool_axis_scroll_event wlr_event = {
+		.tablet = wlr_tablet,
+		.tool = &tool->wlr_tool,
+		.time_msec = usec_to_msec(libinput_event_tablet_tool_get_time_usec(tevent)),
+	};
+
+	switch (libinput_event_tablet_tool_get_axis_source(tevent)) {
+		case LIBINPUT_TABLET_TOOL_AXIS_SOURCE_CONTINUOUS:
+			wlr_event.source = WL_POINTER_AXIS_SOURCE_CONTINUOUS;
+			break;
+		default:
+			// FIXME
+			return;
+	}
+
+	const enum libinput_pointer_axis axes[] = {
+		LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL,
+		LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL,
+	};
+	for (size_t i = 0; i < sizeof(axes) / sizeof(axes[0]); ++i) {
+		if (!libinput_event_tablet_tool_has_axis(tevent, axes[i])) {
+			continue;
+		}
+
+		switch (axes[i]) {
+		case LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL:
+			wlr_event.orientation = WL_POINTER_AXIS_VERTICAL_SCROLL;
+			break;
+		case LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL:
+			wlr_event.orientation = WL_POINTER_AXIS_HORIZONTAL_SCROLL;
+			break;
+		}
+		wlr_event.delta =
+			libinput_event_tablet_tool_get_scroll_value(tevent, axes[i]);
+		wlr_event.relative_direction = WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL;
+		if (libinput_device_config_scroll_get_natural_scroll_enabled(libinput_event_get_device(event))) {
+			wlr_event.relative_direction = WL_POINTER_AXIS_RELATIVE_DIRECTION_INVERTED;
+		}
+		wl_signal_emit_mutable(&wlr_tablet->events.axis_scroll, &wlr_event);
+	}
+}

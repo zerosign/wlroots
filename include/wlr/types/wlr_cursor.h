@@ -73,6 +73,7 @@ struct wlr_cursor {
 		struct wl_signal tablet_tool_proximity;
 		struct wl_signal tablet_tool_tip;
 		struct wl_signal tablet_tool_button;
+		struct wl_signal tablet_tool_axis_scroll;
 	} events;
 
 	void *data;

@@ -218,6 +218,9 @@ void handle_libinput_event(struct wlr_libinput_backend *backend,
 	case LIBINPUT_EVENT_TABLET_TOOL_BUTTON:
 		handle_tablet_tool_button(event, &dev->tablet);
 		break;
+	case LIBINPUT_EVENT_TABLET_TOOL_SCROLL_CONTINUOUS:
+		handle_tablet_tool_scroll_continuous(event, &dev->tablet);
+		break;
 	case LIBINPUT_EVENT_TABLET_PAD_BUTTON:
 		handle_tablet_pad_button(event, &dev->tablet_pad);
 		break;

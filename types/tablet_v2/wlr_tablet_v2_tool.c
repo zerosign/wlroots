@@ -490,6 +490,17 @@ void wlr_send_tablet_v2_tablet_tool_button(
 	}
 }
 
+void wlr_send_tablet_v2_tablet_tool_axis_scroll(
+		struct wlr_tablet_v2_tablet_tool *tool, uint32_t time_msec,
+		enum wl_pointer_axis orientation, double value,
+		enum wl_pointer_axis_source source,
+		enum wl_pointer_axis_relative_direction relative_direction) {
+	if (tool->current_client) {
+		zwp_tablet_tool_v2_send_axis_scroll(tool->current_client->resource, time_msec, orientation, value);
+		queue_tool_frame(tool->current_client);
+	}
+}
+
 void wlr_send_tablet_v2_tablet_tool_wheel(
 	struct wlr_tablet_v2_tablet_tool *tool, double degrees, int32_t clicks) {
 	if (tool->current_client) {
@@ -616,6 +627,16 @@ void wlr_tablet_v2_tablet_tool_notify_button(
 	}
 }
 
+void wlr_tablet_v2_tablet_tool_notify_scroll(
+		struct wlr_tablet_v2_tablet_tool *tool, uint32_t time_msec,
+		enum wl_pointer_axis orientation, double value,
+		enum wl_pointer_axis_source source,
+		enum wl_pointer_axis_relative_direction relative_direction) {
+	if (tool->grab->interface->axis_scroll) {
+		tool->grab->interface->axis_scroll(tool->grab, time_msec, orientation, value, source, relative_direction);
+	}
+}
+
 void wlr_tablet_tool_v2_start_grab(struct wlr_tablet_v2_tablet_tool *tool,
 		struct wlr_tablet_tool_v2_grab *grab) {
 	wlr_tablet_tool_v2_end_grab(tool);
@@ -689,6 +710,14 @@ static void default_tool_button(
 	wlr_send_tablet_v2_tablet_tool_button(grab->tool, button, state);
 }
 
+static void default_tool_axis_scroll(struct wlr_tablet_tool_v2_grab *grab,
+		uint32_t time_msec,
+		enum wl_pointer_axis orientation, double value,
+		enum wl_pointer_axis_source source,
+		enum wl_pointer_axis_relative_direction relative_direction) {
+	wlr_send_tablet_v2_tablet_tool_axis_scroll(grab->tool, time_msec, orientation, value, source, relative_direction);
+}
+
 static void default_tool_cancel(struct wlr_tablet_tool_v2_grab *grab) {
 	/* Do nothing. Default grab can't be canceled */
 }
@@ -707,6 +736,7 @@ static const struct wlr_tablet_tool_v2_grab_interface
 	.wheel = default_tool_wheel,
 	.proximity_out = default_tool_proximity_out,
 	.button = default_tool_button,
+	.axis_scroll = default_tool_axis_scroll,
 	.cancel = default_tool_cancel,
 };
 

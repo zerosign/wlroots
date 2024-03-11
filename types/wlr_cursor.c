@@ -50,6 +50,7 @@ struct wlr_cursor_device {
 	struct wl_listener tablet_tool_proximity;
 	struct wl_listener tablet_tool_tip;
 	struct wl_listener tablet_tool_button;
+	struct wl_listener tablet_tool_axis_scroll;
 
 	struct wl_listener destroy;
 };
@@ -142,6 +143,7 @@ struct wlr_cursor *wlr_cursor_create(void) {
 	wl_signal_init(&cur->events.tablet_tool_tip);
 	wl_signal_init(&cur->events.tablet_tool_axis);
 	wl_signal_init(&cur->events.tablet_tool_button);
+	wl_signal_init(&cur->events.tablet_tool_axis_scroll);
 	wl_signal_init(&cur->events.tablet_tool_proximity);
 
 	wl_list_init(&cur->state->surface_destroy.link);
@@ -212,6 +214,7 @@ static void cursor_device_destroy(struct wlr_cursor_device *c_device) {
 		wl_list_remove(&c_device->tablet_tool_proximity.link);
 		wl_list_remove(&c_device->tablet_tool_tip.link);
 		wl_list_remove(&c_device->tablet_tool_button.link);
+		wl_list_remove(&c_device->tablet_tool_axis_scroll.link);
 		break;
 	default:
 		abort(); // unreachable
@@ -921,6 +924,15 @@ static void handle_tablet_tool_button(struct wl_listener *listener,
 	wl_signal_emit_mutable(&device->cursor->events.tablet_tool_button, event);
 }
 
+static void handle_tablet_tool_axis_scroll(struct wl_listener *listener,
+		void *data) {
+	struct wlr_tablet_tool_axis_scroll_event *event = data;
+	struct wlr_cursor_device *device;
+	device = wl_container_of(listener, device, tablet_tool_axis_scroll);
+
+	wl_signal_emit_mutable(&device->cursor->events.tablet_tool_axis_scroll, event);
+}
+
 static void handle_tablet_tool_proximity(struct wl_listener *listener,
 		void *data) {
 	struct wlr_tablet_tool_proximity_event *event = data;
@@ -1035,6 +1047,10 @@ static struct wlr_cursor_device *cursor_device_create(
 
 		wl_signal_add(&tablet->events.button, &c_device->tablet_tool_button);
 		c_device->tablet_tool_button.notify = handle_tablet_tool_button;
+
+		wl_signal_add(&tablet->events.axis_scroll,
+			&c_device->tablet_tool_axis_scroll);
+		c_device->tablet_tool_axis_scroll.notify = handle_tablet_tool_axis_scroll;
 
 		break;
 

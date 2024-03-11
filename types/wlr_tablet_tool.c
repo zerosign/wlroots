@@ -24,6 +24,7 @@ void wlr_tablet_init(struct wlr_tablet *tablet,
 	wl_signal_init(&tablet->events.proximity);
 	wl_signal_init(&tablet->events.tip);
 	wl_signal_init(&tablet->events.button);
+	wl_signal_init(&tablet->events.axis_scroll);
 	wl_array_init(&tablet->paths);
 }
 
