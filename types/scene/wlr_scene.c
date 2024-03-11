@@ -666,6 +666,12 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	// coordinates.
 	assert(buffer || !damage);
 
+	int buffer_width = 0, buffer_height = 0;
+	if (buffer != NULL) {
+		buffer_width = buffer->width;
+		buffer_height = buffer->height;
+	}
+
 	bool mapped = buffer != NULL;
 	bool prev_mapped = scene_buffer->buffer != NULL || scene_buffer->texture != NULL;
 
@@ -673,9 +679,9 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	// buffer region will be different from what the new buffer would
 	// produce we need to update the node.
 	bool update = mapped != prev_mapped;
-	if (buffer != NULL && scene_buffer->dst_width == 0 && scene_buffer->dst_height == 0) {
-		update = update || scene_buffer->buffer_width != buffer->width ||
-			scene_buffer->buffer_height != buffer->height;
+	if (scene_buffer->dst_width == 0 && scene_buffer->dst_height == 0) {
+		update = update || scene_buffer->buffer_width != buffer_width ||
+			scene_buffer->buffer_height != buffer_height;
 	}
 
 	wlr_texture_destroy(scene_buffer->texture);
@@ -696,7 +702,7 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	}
 
 	pixman_region32_t fallback_damage;
-	pixman_region32_init_rect(&fallback_damage, 0, 0, buffer->width, buffer->height);
+	pixman_region32_init_rect(&fallback_damage, 0, 0, buffer_width, buffer_height);
 	if (!damage) {
 		damage = &fallback_damage;
 	}
@@ -705,26 +711,26 @@ void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buff
 	if (wlr_fbox_empty(&box)) {
 		box.x = 0;
 		box.y = 0;
-		box.width = buffer->width;
-		box.height = buffer->height;
+		box.width = buffer_width;
+		box.height = buffer_height;
 	}
 
 	wlr_fbox_transform(&box, &box, scene_buffer->transform,
-		buffer->width, buffer->height);
+		buffer_width, buffer_height);
 
 	float scale_x, scale_y;
 	if (scene_buffer->dst_width || scene_buffer->dst_height) {
 		scale_x = scene_buffer->dst_width / box.width;
 		scale_y = scene_buffer->dst_height / box.height;
 	} else {
-		scale_x = buffer->width / box.width;
-		scale_y = buffer->height / box.height;
+		scale_x = buffer_width / box.width;
+		scale_y = buffer_height / box.height;
 	}
 
 	pixman_region32_t trans_damage;
 	pixman_region32_init(&trans_damage);
 	wlr_region_transform(&trans_damage, damage,
-		scene_buffer->transform, buffer->width, buffer->height);
+		scene_buffer->transform, buffer_width, buffer_height);
 	pixman_region32_intersect_rect(&trans_damage, &trans_damage,
 		box.x, box.y, box.width, box.height);
 	pixman_region32_translate(&trans_damage, -box.x, -box.y);
