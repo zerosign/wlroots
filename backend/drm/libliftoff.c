@@ -310,6 +310,14 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 	bool modeset = state->modeset;
 	bool active = state->active;
 
+	// TODO: support sync timelines
+	if (state->base->committed & (WLR_OUTPUT_STATE_WAIT_TIMELINE |
+			WLR_OUTPUT_STATE_SIGNAL_TIMELINE)) {
+		wlr_drm_conn_log(conn, WLR_DEBUG,
+			"Sync timelines are unsupported with libliftoff KMS interface");
+		return false;
+	}
+
 	if (modeset && !register_planes_for_crtc(drm, crtc)) {
 		return false;
 	}
