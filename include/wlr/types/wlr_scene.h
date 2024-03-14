@@ -184,6 +184,7 @@ struct wlr_scene_buffer {
 
 	uint64_t active_outputs;
 	struct wlr_texture *texture;
+	bool own_texture;
 	struct wlr_linux_dmabuf_feedback_v1_init_options prev_feedback_options;
 
 	bool own_buffer;
@@ -191,6 +192,7 @@ struct wlr_scene_buffer {
 	bool buffer_is_opaque;
 
 	struct wl_listener buffer_release;
+	struct wl_listener texture_destroy;
 };
 
 /** A viewport for an output in the scene-graph */
@@ -398,6 +400,12 @@ void wlr_scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
  */
 void wlr_scene_buffer_set_buffer_with_damage(struct wlr_scene_buffer *scene_buffer,
 	struct wlr_buffer *buffer, const pixman_region32_t *region);
+
+/**
+ * Sets the buffer's backing texture.
+ */
+void wlr_scene_buffer_set_texture(struct wlr_scene_buffer *scene_buffer,
+	struct wlr_texture *texture);
 
 /**
  * Sets the buffer's opaque region. This is an optimization hint used to

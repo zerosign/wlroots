@@ -18,9 +18,12 @@ void wlr_texture_init(struct wlr_texture *texture, struct wlr_renderer *renderer
 		.width = width,
 		.height = height,
 	};
+
+	wl_signal_init(&texture->events.destroy);
 }
 
 void wlr_texture_destroy(struct wlr_texture *texture) {
+	wl_signal_emit_mutable(&texture->events.destroy, NULL);
 	if (texture && texture->impl && texture->impl->destroy) {
 		texture->impl->destroy(texture);
 	} else {

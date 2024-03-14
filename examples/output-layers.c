@@ -110,12 +110,8 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 		output_surface->layer_accepted = layers[i].accepted;
 		i++;
 
-		if (wlr_surface->buffer == NULL || output_surface->layer_accepted) {
-			continue;
-		}
-
 		struct wlr_texture *texture = wlr_surface_get_texture(wlr_surface);
-		if (texture == NULL) {
+		if (texture == NULL || output_surface->layer_accepted) {
 			continue;
 		}
 
@@ -136,7 +132,7 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 	wl_list_for_each(output_surface, &output->surfaces, link) {
 		wlr_surface_send_frame_done(output_surface->wlr_surface, &now);
 
-		if (output_surface->wlr_surface->buffer == NULL) {
+		if (wlr_surface_get_texture(output_surface->wlr_surface) == NULL) {
 			continue;
 		}
 
@@ -203,10 +199,11 @@ static void output_surface_handle_commit(struct wl_listener *listener,
 		void *data) {
 	struct output_surface *output_surface =
 		wl_container_of(listener, output_surface, commit);
+	struct wlr_surface *surface = output_surface->wlr_surface;
 
 	struct wlr_buffer *buffer = NULL;
-	if (output_surface->wlr_surface->buffer != NULL) {
-		buffer = wlr_buffer_lock(&output_surface->wlr_surface->buffer->base);
+	if (surface->current.buffer != NULL) {
+		buffer = wlr_buffer_lock(surface->current.buffer);
 	}
 
 	wlr_buffer_unlock(output_surface->buffer);

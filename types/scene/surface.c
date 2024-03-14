@@ -72,28 +72,6 @@ static void scene_surface_handle_surface_destroy(
 	wlr_scene_node_destroy(&surface->buffer->node);
 }
 
-// This is used for wlr_scene where it unconditionally locks buffers preventing
-// reuse of the existing texture for shm clients. With the usage pattern of
-// wlr_scene surface handling, we can mark its locked buffer as safe
-// for mutation.
-static void client_buffer_mark_next_can_damage(struct wlr_client_buffer *buffer) {
-	buffer->n_ignore_locks++;
-}
-
-static void scene_buffer_unmark_client_buffer(struct wlr_scene_buffer *scene_buffer) {
-	if (!scene_buffer->buffer) {
-		return;
-	}
-
-	struct wlr_client_buffer *buffer = wlr_client_buffer_get(scene_buffer->buffer);
-	if (!buffer) {
-		return;
-	}
-
-	assert(buffer->n_ignore_locks > 0);
-	buffer->n_ignore_locks--;
-}
-
 static int min(int a, int b) {
 	return a < b ? a : b;
 }
@@ -148,13 +126,10 @@ static void surface_reconfigure(struct wlr_scene_surface *scene_surface) {
 	wlr_scene_buffer_set_dest_size(scene_buffer, width, height);
 	wlr_scene_buffer_set_transform(scene_buffer, state->transform);
 
-	scene_buffer_unmark_client_buffer(scene_buffer);
-
-	if (surface->buffer) {
-		client_buffer_mark_next_can_damage(surface->buffer);
-
-		wlr_scene_buffer_set_buffer_with_damage(scene_buffer,
-			&surface->buffer->base, &surface->buffer_damage);
+	if (surface->texture) {
+		scene_buffer_set_buffer_and_texture(scene_buffer,
+			surface->texture->buffer, surface->texture->texture,
+			&surface->buffer_damage);
 	} else {
 		wlr_scene_buffer_set_buffer(scene_buffer, NULL);
 	}
@@ -198,7 +173,7 @@ static bool scene_buffer_point_accepts_input(struct wlr_scene_buffer *scene_buff
 static void surface_addon_destroy(struct wlr_addon *addon) {
 	struct wlr_scene_surface *surface = wl_container_of(addon, surface, addon);
 
-	scene_buffer_unmark_client_buffer(surface->buffer);
+	wlr_scene_buffer_set_buffer(surface->buffer, NULL);
 
 	wlr_addon_finish(&surface->addon);
 
