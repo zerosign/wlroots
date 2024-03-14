@@ -3,6 +3,7 @@
 #include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/util/log.h>
+#include "backend/backend.h"
 #include "backend/drm/drm.h"
 #include "backend/drm/fb.h"
 #include "backend/drm/renderer.h"
@@ -74,7 +75,7 @@ bool init_drm_surface(struct wlr_drm_surface *surf,
 }
 
 struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
-		struct wlr_buffer *buffer) {
+		struct wlr_drm_renderer *parent_renderer, struct wlr_buffer *buffer) {
 	struct wlr_renderer *renderer = surf->renderer->wlr_rend;
 
 	if (surf->swapchain->width != buffer->width ||
@@ -83,10 +84,22 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		return NULL;
 	}
 
-	struct wlr_texture *tex = wlr_texture_from_buffer(renderer, buffer);
-	if (tex == NULL) {
-		wlr_log(WLR_ERROR, "Failed to import source buffer into multi-GPU renderer");
+	struct wlr_texture_set *set = wlr_texture_set_create(renderer, NULL);
+	if (set == NULL) {
+		wlr_log(WLR_ERROR, "Failed to import source buffer multi-GPU texture set");
 		return NULL;
+	}
+	/* Add the parent renderer so the texture set can use it for copies */
+	wlr_texture_set_add_renderer(set, parent_renderer->wlr_rend, parent_renderer->allocator);
+	if (!wlr_texture_set_import_buffer(set, buffer)) {
+		wlr_log(WLR_ERROR, "Failed to import source buffer multi-GPU texture set");
+		goto error_tex;
+	}
+
+	struct wlr_texture *tex = wlr_texture_set_get_tex_for_renderer(set, renderer);
+	if (tex == NULL) {
+		wlr_log(WLR_ERROR, "Failed to export source buffer for multi-GPU renderer");
+		goto error_tex;
 	}
 
 	struct wlr_buffer *dst = wlr_swapchain_acquire(surf->swapchain, NULL);
@@ -110,14 +123,14 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		goto error_dst;
 	}
 
-	wlr_texture_destroy(tex);
+	wlr_texture_set_destroy(set);
 
 	return dst;
 
 error_dst:
 	wlr_buffer_unlock(dst);
 error_tex:
-	wlr_texture_destroy(tex);
+	wlr_texture_set_destroy(set);
 	return NULL;
 }
 

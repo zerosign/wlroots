@@ -211,16 +211,39 @@ static bool check_import_dmabuf(struct wlr_dmabuf_attributes *attribs, void *dat
 		return true;
 	}
 
-	// TODO: check number of planes
-	for (int i = 0; i < attribs->n_planes; i++) {
-		uint32_t handle = 0;
-		if (drmPrimeFDToHandle(linux_dmabuf->main_device_fd, attribs->fd[i], &handle) != 0) {
-			wlr_log_errno(WLR_DEBUG, "Failed to import DMA-BUF FD");
+	/*
+	 * Some compositors will be using this linux dmabuf manager with custom renderers,
+	 * while others will use a wlroots-managed wlr_renderer. When checking if a dmabuf
+	 * is valid for import we should treat these differently. In the first case we just
+	 * need to check if the dmabuf is importable into the DRM device, in the wlroots-managed
+	 * renderer case we should check if this dmabuf can be imported into the renderer.
+	 *
+	 * In the case where we have a wlr_renderer we need to check if a texture set can
+	 * be created in order to handle multi-gpu systems. The texture set will handle ensuring
+	 * that the dmabuf is importable on one GPU in the system, instead of only checking
+	 * the main device.
+	 */
+	if (linux_dmabuf->main_renderer) {
+		struct wlr_texture_set *set=
+			wlr_texture_set_from_dmabuf(linux_dmabuf->main_renderer, attribs);
+		if (!set) {
 			return false;
 		}
-		if (drmCloseBufferHandle(linux_dmabuf->main_device_fd, handle) != 0) {
-			wlr_log_errno(WLR_ERROR, "Failed to close buffer handle");
-			return false;
+		// We can import the image, good. No need to keep it since wlr_surface will
+		// import it again on commit.
+		wlr_texture_set_destroy(set);
+	} else {
+		// TODO: check number of planes
+		for (int i = 0; i < attribs->n_planes; i++) {
+			uint32_t handle = 0;
+			if (drmPrimeFDToHandle(linux_dmabuf->main_device_fd, attribs->fd[i], &handle) != 0) {
+				wlr_log_errno(WLR_DEBUG, "Failed to import DMA-BUF FD");
+				return false;
+			}
+			if (drmCloseBufferHandle(linux_dmabuf->main_device_fd, handle) != 0) {
+				wlr_log_errno(WLR_ERROR, "Failed to close buffer handle");
+				return false;
+			}
 		}
 	}
 	return true;
@@ -1001,6 +1024,9 @@ struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create_with_renderer(struct wl_d
 	struct wlr_linux_dmabuf_v1 *linux_dmabuf =
 		wlr_linux_dmabuf_v1_create(display, version, &feedback);
 	wlr_linux_dmabuf_feedback_v1_finish(&feedback);
+
+	linux_dmabuf->main_renderer = renderer;
+
 	return linux_dmabuf;
 }
 
@@ -1070,15 +1096,6 @@ static bool devid_from_fd(int fd, dev_t *devid) {
 	return true;
 }
 
-static bool is_secondary_drm_backend(struct wlr_backend *backend) {
-#if WLR_HAS_DRM_BACKEND
-	return wlr_backend_is_drm(backend) &&
-		wlr_drm_backend_get_parent(backend) != NULL;
-#else
-	return false;
-#endif
-}
-
 bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feedback_v1 *feedback,
 		const struct wlr_linux_dmabuf_feedback_v1_init_options *options) {
 	assert(options->main_renderer != NULL);
@@ -1121,8 +1138,7 @@ bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feed
 			wlr_log(WLR_ERROR, "Failed to intersect renderer and scanout formats");
 			goto error;
 		}
-	} else if (options->scanout_primary_output != NULL &&
-			!is_secondary_drm_backend(options->scanout_primary_output->backend)) {
+	} else if (options->scanout_primary_output != NULL) {
 		int backend_drm_fd = wlr_backend_get_drm_fd(options->scanout_primary_output->backend);
 		if (backend_drm_fd < 0) {
 			wlr_log(WLR_ERROR, "Failed to get backend DRM FD");
@@ -1148,8 +1164,9 @@ bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feed
 
 		tranche->target_device = backend_dev;
 		tranche->flags = ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT;
-		if (!wlr_drm_format_set_intersect(&tranche->formats, scanout_formats, renderer_formats)) {
-			wlr_log(WLR_ERROR, "Failed to intersect renderer and scanout formats");
+		// Copy our scanout formats to the scanout tranche
+		if (!wlr_drm_format_set_copy(&tranche->formats, scanout_formats)) {
+			wlr_log(WLR_ERROR, "Failed to copy scanout formats");
 			goto error;
 		}
 	}

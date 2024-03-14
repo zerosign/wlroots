@@ -14,13 +14,10 @@
 #include <wlr/render/pass.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/util/box.h>
+#include <wlr/backend/multi.h>
 
-struct wlr_backend;
 struct wlr_renderer_impl;
-struct wlr_drm_format_set;
 struct wlr_buffer;
-struct wlr_box;
-struct wlr_fbox;
 
 /**
  * A renderer for basic 2D operations.
@@ -39,6 +36,9 @@ struct wlr_renderer {
 	// private state
 
 	const struct wlr_renderer_impl *impl;
+
+	/* The GPU list we are a part of, may be null if not created from multi backend */
+	struct wlr_multi_gpu *multi_gpu;
 };
 
 /**

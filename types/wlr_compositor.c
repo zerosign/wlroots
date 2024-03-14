@@ -445,7 +445,11 @@ static void surface_apply_damage(struct wlr_surface *surface) {
 }
 
 static void surface_update_opaque_region(struct wlr_surface *surface) {
-	if (!wlr_surface_has_buffer(surface)) {
+	/*
+	 * The surface's client_buffer may not have a texture imported yet,
+	 * but if it has a texture set it is tracking a valid buffer.
+	 */
+	if (!wlr_surface_has_buffer(surface) || !surface->buffer->texture_set) {
 		pixman_region32_clear(&surface->opaque_region);
 		return;
 	}
@@ -802,7 +806,8 @@ struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface) {
 	if (surface->buffer == NULL) {
 		return NULL;
 	}
-	return surface->buffer->texture;
+	return wlr_texture_set_get_tex_for_renderer(surface->buffer->texture_set,
+			surface->renderer);
 }
 
 bool wlr_surface_has_buffer(struct wlr_surface *surface) {
