@@ -124,6 +124,8 @@ void handle_tablet_tool_tip(struct libinput_event *event,
 	struct wlr_tablet *tablet);
 void handle_tablet_tool_button(struct libinput_event *event,
 	struct wlr_tablet *tablet);
+void handle_tablet_tool_scroll_continuous(struct libinput_event *event,
+	struct wlr_tablet *tablet);
 
 void init_device_tablet_pad(struct wlr_libinput_input_device *dev);
 void finish_device_tablet_pad(struct wlr_libinput_input_device *dev);

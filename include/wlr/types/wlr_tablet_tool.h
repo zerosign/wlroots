@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_seat.h>
 
 /*
  * Copy+Paste from libinput, but this should neither use libinput, nor
@@ -72,6 +73,7 @@ struct wlr_tablet {
 		struct wl_signal proximity;
 		struct wl_signal tip;
 		struct wl_signal button;
+		struct wl_signal axis_scroll;
 	} events;
 
 	struct wl_array paths; // char *
@@ -143,6 +145,16 @@ struct wlr_tablet_tool_button_event {
 	uint32_t time_msec;
 	uint32_t button;
 	enum wlr_button_state state;
+};
+
+struct wlr_tablet_tool_axis_scroll_event {
+	struct wlr_tablet *tablet;
+	struct wlr_tablet_tool *tool;
+	uint32_t time_msec;
+	enum wl_pointer_axis_source source;
+	enum wl_pointer_axis orientation;
+	enum wl_pointer_axis_relative_direction relative_direction;
+	double delta;
 };
 
 /**

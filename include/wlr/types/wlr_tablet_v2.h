@@ -179,6 +179,11 @@ void wlr_send_tablet_v2_tablet_tool_button(
 	struct wlr_tablet_v2_tablet_tool *tool, uint32_t button,
 	enum zwp_tablet_pad_v2_button_state state);
 
+void wlr_send_tablet_v2_tablet_tool_axis_scroll(
+	struct wlr_tablet_v2_tablet_tool *tool, uint32_t time_msec,
+	enum wl_pointer_axis orientation, double value,
+	enum wl_pointer_axis_source source,
+	enum wl_pointer_axis_relative_direction relative_direction);
 
 
 void wlr_tablet_v2_tablet_tool_notify_proximity_in(
@@ -217,6 +222,12 @@ void wlr_tablet_v2_tablet_tool_notify_button(
 	struct wlr_tablet_v2_tablet_tool *tool, uint32_t button,
 	enum zwp_tablet_pad_v2_button_state state);
 
+void wlr_tablet_v2_tablet_tool_notify_scroll(
+	struct wlr_tablet_v2_tablet_tool *tool, uint32_t time_msec,
+	enum wl_pointer_axis orientation, double value,
+	enum wl_pointer_axis_source source,
+	enum wl_pointer_axis_relative_direction relative_direction);
+
 
 struct wlr_tablet_tool_v2_grab_interface {
 	void (*proximity_in)(
@@ -246,6 +257,13 @@ struct wlr_tablet_tool_v2_grab_interface {
 	void (*button)(
 		struct wlr_tablet_tool_v2_grab *grab, uint32_t button,
 		enum zwp_tablet_pad_v2_button_state state);
+
+	void (*axis_scroll)(
+		struct wlr_tablet_tool_v2_grab *grab, uint32_t time_msec,
+		enum wl_pointer_axis orientation, double value,
+		enum wl_pointer_axis_source source,
+		enum wl_pointer_axis_relative_direction relative_direction);
+
 	void (*cancel)(struct wlr_tablet_tool_v2_grab *grab);
 };
 
