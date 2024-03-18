@@ -1,11 +1,13 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/types/wlr_output_layer.h>
 #include <wlr/util/log.h>
 #include "backend/headless.h"
 #include "types/wlr_output.h"
+#include "util/time.h"
 
 static const uint32_t SUPPORTED_OUTPUT_STATE =
 	WLR_OUTPUT_STATE_BACKEND_OPTIONAL |
@@ -55,6 +57,30 @@ static bool output_test(struct wlr_output *wlr_output,
 	return true;
 }
 
+static void headless_output_defer_present(struct wlr_headless_output *output,
+		struct wlr_output_event_present event) {
+	if (!output->vblank_phase) {
+		output_defer_present(&output->wlr_output, event);
+	}
+	else {
+		output->present_event = event;
+
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		uint64_t now_nsec = timespec_to_nsec(&now);
+		uint64_t refresh_nsec = output->refresh;
+
+		/* calculate next vblank in nsec based on refresh cycle phase and period */
+		uint64_t next_vblank_nsec = now_nsec;
+		next_vblank_nsec -= output->vblank_phase;
+		next_vblank_nsec = ((next_vblank_nsec+(refresh_nsec-1))/refresh_nsec)*refresh_nsec;
+		next_vblank_nsec += output->vblank_phase;
+
+		uint64_t present_delay = (next_vblank_nsec - now_nsec)/1000000; // msec
+		wl_event_source_timer_update(output->present_timer, present_delay);
+	}
+}
+
 static bool output_commit(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_headless_output *output =
@@ -74,7 +100,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 			.presented = true,
 			.refresh = output->refresh
 		};
-		output_defer_present(wlr_output, present_event);
+		headless_output_defer_present(output, present_event);
 
 		wl_event_source_timer_update(output->frame_timer, output->frame_delay);
 	}
@@ -113,6 +139,12 @@ void wlr_headless_output_set_vblank_phase(struct wlr_backend *wlr_backend,
 
 bool wlr_output_is_headless(struct wlr_output *wlr_output) {
 	return wlr_output->impl == &output_impl;
+}
+
+static int send_present(void *data) {
+	struct wlr_headless_output *output = data;
+	wlr_output_send_present(&output->wlr_output, &output->present_event);
+	return 0;
 }
 
 static int signal_frame(void *data) {
@@ -154,6 +186,7 @@ struct wlr_output *wlr_headless_add_output(struct wlr_backend *wlr_backend,
 	wlr_output_set_description(wlr_output, description);
 
 	output->frame_timer = wl_event_loop_add_timer(backend->event_loop, signal_frame, output);
+	output->present_timer = wl_event_loop_add_timer(backend->event_loop, send_present, output);
 
 	wl_list_insert(&backend->outputs, &output->link);
 

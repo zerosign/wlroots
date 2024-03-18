@@ -23,6 +23,9 @@ struct wlr_headless_output {
 	struct wl_event_source *frame_timer;
 	int frame_delay; // ms
 
+	struct wlr_output_event_present present_event;
+	struct wl_event_source *present_timer;
+	int present_delay; // ms
 	uint64_t vblank_phase; // ns
 	uint64_t refresh; // ns
 };
