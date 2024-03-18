@@ -13,6 +13,16 @@
 #include <wlr/types/wlr_output.h>
 
 /**
+ * Set phase of the vblank refresh cycle.
+ *
+ * The phase is calculated as (vblank_nsec%vblank_period), where vblank_period
+ * is the refresh time in nanoseconds set in the wlr_output's mode.
+ * This is used to calculate when to send the wlr_output's 'present' event signals.
+ */
+void wlr_headless_output_set_vblank_phase(struct wlr_backend *wlr_backend,
+	struct wlr_output *wlr_output, uint64_t vblank_nsec);
+
+/**
  * Creates a headless backend. A headless backend has no outputs or inputs by
  * default.
  */

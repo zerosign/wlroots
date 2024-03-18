@@ -95,6 +95,22 @@ static const struct wlr_output_impl output_impl = {
 	.commit = output_commit,
 };
 
+void wlr_headless_output_set_vblank_phase(struct wlr_backend *wlr_backend,
+		struct wlr_output *wlr_output, uint64_t vblank_nsec) {
+	struct wlr_headless_backend *backend =
+		headless_backend_from_backend(wlr_backend);
+	struct wlr_headless_output *output;
+	wl_list_for_each(output, &backend->outputs, link) {
+		if (&output->wlr_output == wlr_output)
+			break;
+	}
+
+	if (&output->wlr_output != wlr_output)
+		return;
+
+	output->vblank_phase = vblank_nsec % (output->refresh);
+}
+
 bool wlr_output_is_headless(struct wlr_output *wlr_output) {
 	return wlr_output->impl == &output_impl;
 }
