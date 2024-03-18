@@ -22,12 +22,14 @@ static struct wlr_headless_output *headless_output_from_output(
 	return output;
 }
 
+#define NANOS_IN_SEC 1000000000
 static void output_update_refresh(struct wlr_headless_output *output,
 		int32_t refresh) {
 	if (refresh <= 0) {
 		refresh = HEADLESS_DEFAULT_REFRESH;
 	}
 
+	output->refresh = NANOS_IN_SEC/(refresh/1000);
 	output->frame_delay = 1000000 / refresh;
 }
 
@@ -70,6 +72,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 		struct wlr_output_event_present present_event = {
 			.commit_seq = wlr_output->commit_seq + 1,
 			.presented = true,
+			.refresh = output->refresh
 		};
 		output_defer_present(wlr_output, present_event);
 
