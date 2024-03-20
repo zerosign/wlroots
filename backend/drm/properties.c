@@ -56,6 +56,7 @@ static const struct prop_info plane_info[] = {
 	{ "HOTSPOT_X", INDEX(hotspot_x) },
 	{ "HOTSPOT_Y", INDEX(hotspot_y) },
 	{ "IN_FORMATS", INDEX(in_formats) },
+	{ "SIZE_HINTS", INDEX(size_hints) },
 	{ "SRC_H", INDEX(src_h) },
 	{ "SRC_W", INDEX(src_w) },
 	{ "SRC_X", INDEX(src_x) },

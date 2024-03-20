@@ -25,6 +25,10 @@
 	WLR_OUTPUT_STATE_SUBPIXEL | \
 	WLR_OUTPUT_STATE_LAYERS)
 
+struct wlr_output_cursor_size {
+	int width, height;
+};
+
 /**
  * A backend implementation of struct wlr_output.
  *
@@ -82,10 +86,11 @@ struct wlr_output_impl {
 	const struct wlr_drm_format_set *(*get_cursor_formats)(
 		struct wlr_output *output, uint32_t buffer_caps);
 	/**
-	 * Get the size suitable for the cursor buffer. Attempts to use a different
-	 * size for the cursor may fail.
+	 * Get the list of sizes suitable for the cursor buffer. Attempts to use a
+	 * different size for the cursor may fail.
 	 */
-	void (*get_cursor_size)(struct wlr_output *output, int *width, int *height);
+	const struct wlr_output_cursor_size *(*get_cursor_sizes)(struct wlr_output *output,
+		size_t *len);
 	/**
 	 * Get the list of DRM formats suitable for the primary buffer,
 	 * assuming a buffer with the specified capabilities.

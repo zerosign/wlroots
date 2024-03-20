@@ -44,6 +44,7 @@ struct wlr_drm_plane_props {
 	uint32_t type;
 	uint32_t rotation; // Not guaranteed to exist
 	uint32_t in_formats; // Not guaranteed to exist
+	uint32_t size_hints; // Not guaranteed to exist
 
 	// atomic-modesetting only
 
