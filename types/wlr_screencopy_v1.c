@@ -274,8 +274,7 @@ static void frame_handle_output_commit(struct wl_listener *listener,
 		wl_container_of(listener, frame, output_commit);
 	struct wlr_output_event_commit *event = data;
 	struct wlr_output *output = frame->output;
-	struct wlr_renderer *renderer = output->renderer;
-	assert(renderer);
+	assert(output->renderer);
 
 	if (!(event->state->committed & WLR_OUTPUT_STATE_BUFFER)) {
 		return;
