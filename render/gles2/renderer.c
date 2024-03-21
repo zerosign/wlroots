@@ -194,10 +194,6 @@ static int gles2_get_drm_fd(struct wlr_renderer *wlr_renderer) {
 	return renderer->drm_fd;
 }
 
-static uint32_t gles2_get_render_buffer_caps(struct wlr_renderer *wlr_renderer) {
-	return WLR_BUFFER_CAP_DMABUF;
-}
-
 struct wlr_egl *wlr_gles2_renderer_get_egl(struct wlr_renderer *wlr_renderer) {
 	struct wlr_gles2_renderer *renderer =
 		gles2_get_renderer(wlr_renderer);
@@ -361,7 +357,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.get_texture_formats = gles2_get_texture_formats,
 	.get_render_formats = gles2_get_render_formats,
 	.get_drm_fd = gles2_get_drm_fd,
-	.get_render_buffer_caps = gles2_get_render_buffer_caps,
 	.texture_from_buffer = gles2_texture_from_buffer,
 	.begin_buffer_pass = gles2_begin_buffer_pass,
 	.render_timer_create = gles2_render_timer_create,
@@ -530,7 +525,7 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	if (renderer == NULL) {
 		return NULL;
 	}
-	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl);
+	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl, WLR_BUFFER_CAP_DMABUF);
 
 	wl_list_init(&renderer->buffers);
 	wl_list_init(&renderer->textures);

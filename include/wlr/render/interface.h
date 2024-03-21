@@ -26,7 +26,6 @@ struct wlr_renderer_impl {
 		struct wlr_renderer *renderer);
 	void (*destroy)(struct wlr_renderer *renderer);
 	int (*get_drm_fd)(struct wlr_renderer *renderer);
-	uint32_t (*get_render_buffer_caps)(struct wlr_renderer *renderer);
 	struct wlr_texture *(*texture_from_buffer)(struct wlr_renderer *renderer,
 		struct wlr_buffer *buffer);
 	struct wlr_render_pass *(*begin_buffer_pass)(struct wlr_renderer *renderer,
@@ -35,7 +34,7 @@ struct wlr_renderer_impl {
 };
 
 void wlr_renderer_init(struct wlr_renderer *renderer,
-	const struct wlr_renderer_impl *impl);
+	const struct wlr_renderer_impl *impl, uint32_t render_buffer_caps);
 
 struct wlr_texture_impl {
 	bool (*update_from_buffer)(struct wlr_texture *texture,

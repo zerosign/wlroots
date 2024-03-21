@@ -30,13 +30,14 @@
 #include "util/env.h"
 
 void wlr_renderer_init(struct wlr_renderer *renderer,
-		const struct wlr_renderer_impl *impl) {
+		const struct wlr_renderer_impl *impl, uint32_t render_buffer_caps) {
 	assert(impl->begin_buffer_pass);
 	assert(impl->get_texture_formats);
-	assert(impl->get_render_buffer_caps);
+	assert(render_buffer_caps != 0);
 
 	*renderer = (struct wlr_renderer){
 		.impl = impl,
+		.render_buffer_caps = render_buffer_caps,
 	};
 
 	wl_signal_init(&renderer->events.destroy);
@@ -68,10 +69,6 @@ const struct wlr_drm_format_set *wlr_renderer_get_render_formats(
 		return NULL;
 	}
 	return r->impl->get_render_formats(r);
-}
-
-uint32_t renderer_get_render_buffer_caps(struct wlr_renderer *r) {
-	return r->impl->get_render_buffer_caps(r);
 }
 
 bool wlr_renderer_init_wl_shm(struct wlr_renderer *r,

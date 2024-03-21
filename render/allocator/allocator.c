@@ -94,7 +94,7 @@ static int reopen_drm_node(int drm_fd, bool allow_render_node) {
 struct wlr_allocator *allocator_autocreate_with_drm_fd(
 		uint32_t backend_caps, struct wlr_renderer *renderer,
 		int drm_fd) {
-	uint32_t renderer_caps = renderer_get_render_buffer_caps(renderer);
+	uint32_t renderer_caps = renderer->render_buffer_caps;
 
 	struct wlr_allocator *alloc = NULL;
 

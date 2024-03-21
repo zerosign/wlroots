@@ -292,10 +292,6 @@ static void pixman_destroy(struct wlr_renderer *wlr_renderer) {
 	free(renderer);
 }
 
-static uint32_t pixman_get_render_buffer_caps(struct wlr_renderer *renderer) {
-	return WLR_BUFFER_CAP_DATA_PTR;
-}
-
 static struct wlr_render_pass *pixman_begin_buffer_pass(struct wlr_renderer *wlr_renderer,
 		struct wlr_buffer *wlr_buffer, const struct wlr_buffer_pass_options *options) {
 	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
@@ -320,7 +316,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.get_render_formats = pixman_get_render_formats,
 	.texture_from_buffer = pixman_texture_from_buffer,
 	.destroy = pixman_destroy,
-	.get_render_buffer_caps = pixman_get_render_buffer_caps,
 	.begin_buffer_pass = pixman_begin_buffer_pass,
 };
 
@@ -331,7 +326,7 @@ struct wlr_renderer *wlr_pixman_renderer_create(void) {
 	}
 
 	wlr_log(WLR_INFO, "Creating pixman renderer");
-	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl);
+	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl, WLR_BUFFER_CAP_DATA_PTR);
 	wl_list_init(&renderer->buffers);
 	wl_list_init(&renderer->textures);
 

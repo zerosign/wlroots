@@ -18,7 +18,7 @@ bool wlr_output_init_render(struct wlr_output *output,
 	assert(allocator != NULL && renderer != NULL);
 
 	uint32_t backend_caps = backend_get_buffer_caps(output->backend);
-	uint32_t renderer_caps = renderer_get_render_buffer_caps(renderer);
+	uint32_t renderer_caps = renderer->render_buffer_caps;
 
 	if (!(backend_caps & allocator->buffer_caps)) {
 		wlr_log(WLR_ERROR, "output backend and allocator buffer capabilities "

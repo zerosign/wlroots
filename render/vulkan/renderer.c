@@ -1299,10 +1299,6 @@ static int vulkan_get_drm_fd(struct wlr_renderer *wlr_renderer) {
 	return renderer->dev->drm_fd;
 }
 
-static uint32_t vulkan_get_render_buffer_caps(struct wlr_renderer *wlr_renderer) {
-	return WLR_BUFFER_CAP_DMABUF;
-}
-
 static struct wlr_render_pass *vulkan_begin_buffer_pass(struct wlr_renderer *wlr_renderer,
 		struct wlr_buffer *buffer, const struct wlr_buffer_pass_options *options) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
@@ -1327,7 +1323,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.get_render_formats = vulkan_get_render_formats,
 	.destroy = vulkan_destroy,
 	.get_drm_fd = vulkan_get_drm_fd,
-	.get_render_buffer_caps = vulkan_get_render_buffer_caps,
 	.texture_from_buffer = vulkan_texture_from_buffer,
 	.begin_buffer_pass = vulkan_begin_buffer_pass,
 };
@@ -2151,7 +2146,7 @@ struct wlr_renderer *vulkan_renderer_create_for_device(struct wlr_vk_device *dev
 	}
 
 	renderer->dev = dev;
-	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl);
+	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl, WLR_BUFFER_CAP_DMABUF);
 	wl_list_init(&renderer->stage.buffers);
 	wl_list_init(&renderer->foreign_textures);
 	wl_list_init(&renderer->textures);
