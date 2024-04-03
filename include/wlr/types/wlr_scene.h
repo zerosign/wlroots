@@ -227,6 +227,9 @@ struct wlr_scene_output {
 	struct wl_list damage_highlight_regions;
 
 	struct wl_array render_list;
+
+	struct wlr_drm_syncobj_timeline *in_timeline;
+	uint64_t in_point;
 };
 
 struct wlr_scene_timer {

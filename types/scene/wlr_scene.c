@@ -1422,6 +1422,14 @@ struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 		prev_output_link = &current_output->link;
 	}
 
+	int drm_fd = wlr_backend_get_drm_fd(output->backend);
+	if (drm_fd >= 0 && output->timeline && output->renderer != NULL && output->renderer->features.timeline) {
+		scene_output->in_timeline = wlr_drm_syncobj_timeline_create(drm_fd);
+		if (scene_output->in_timeline == NULL) {
+			return NULL;
+		}
+	}
+
 	scene_output->index = prev_output_index + 1;
 	assert(scene_output->index < 64);
 	wl_list_insert(prev_output_link, &scene_output->link);
@@ -1470,7 +1478,7 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 	wl_list_remove(&scene_output->output_commit.link);
 	wl_list_remove(&scene_output->output_damage.link);
 	wl_list_remove(&scene_output->output_needs_frame.link);
-
+	wlr_drm_syncobj_timeline_unref(scene_output->in_timeline);
 	wl_array_release(&scene_output->render_list);
 	free(scene_output);
 }
@@ -1898,10 +1906,13 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		timer->pre_render_duration = timespec_to_nsec(&duration);
 	}
 
+	scene_output->in_point++;
 	struct wlr_render_pass *render_pass = wlr_renderer_begin_buffer_pass(output->renderer, buffer,
 			&(struct wlr_buffer_pass_options){
 		.timer = timer ? timer->render_timer : NULL,
 		.color_transform = options->color_transform,
+		.signal_timeline = scene_output->in_timeline,
+		.signal_point = scene_output->in_point,
 	});
 	if (render_pass == NULL) {
 		wlr_buffer_unlock(buffer);
@@ -2007,6 +2018,11 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	wlr_output_state_set_buffer(state, buffer);
 	wlr_buffer_unlock(buffer);
+
+	if (scene_output->in_timeline != NULL) {
+		wlr_output_state_set_wait_timeline(state, scene_output->in_timeline,
+			scene_output->in_point);
+	}
 
 	return true;
 }
