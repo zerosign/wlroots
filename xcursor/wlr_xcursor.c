@@ -187,7 +187,7 @@ static void load_callback(struct xcursor_images *images, void *data) {
 			theme->cursor_count * sizeof(theme->cursors[0]));
 		if (cursors == NULL) {
 			theme->cursor_count--;
-			free(cursor);
+			xcursor_destroy(cursor);
 		} else {
 			theme->cursors = cursors;
 			theme->cursors[theme->cursor_count - 1] = cursor;
