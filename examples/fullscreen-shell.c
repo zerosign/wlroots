@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -154,6 +155,7 @@ static void server_handle_new_output(struct wl_listener *listener, void *data) {
 	wlr_output_init_render(wlr_output, server->allocator, server->renderer);
 
 	struct fullscreen_output *output = calloc(1, sizeof(*output));
+	assert(output);
 	output->wlr_output = wlr_output;
 	output->server = server;
 	output->frame.notify = output_handle_frame;
