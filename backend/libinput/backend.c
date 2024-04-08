@@ -227,6 +227,8 @@ struct libinput_device *wlr_libinput_get_device_handle(
 		dev = device_from_tablet_pad(wlr_tablet_pad_from_input_device(wlr_dev));
 		break;
 	}
+
+	assert(dev);
 	return dev->handle;
 }
 
