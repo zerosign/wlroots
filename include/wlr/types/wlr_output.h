@@ -325,6 +325,13 @@ void wlr_output_effective_resolution(struct wlr_output *output,
 bool wlr_output_test_state(struct wlr_output *output,
 	const struct wlr_output_state *state);
 /**
+ * Test whether this output state uses features not supported by the backend.
+ * If this function returns false, wlr_output_commit_state() will always fail
+ * as the features used do not match current output capabilities.
+ */
+bool wlr_output_test_capabilities(struct wlr_output *output,
+	const struct wlr_output_state *state);
+/**
  * Attempts to apply the state to this output. This function may fail for any
  * reason and return false. If failed, none of the state would have been applied,
  * this function is atomic. If the commit succeeded, true is returned.

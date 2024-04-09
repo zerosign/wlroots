@@ -663,6 +663,42 @@ bool wlr_output_test_state(struct wlr_output *output,
 	return success;
 }
 
+bool wlr_output_test_capabilities(struct wlr_output *output,
+		const struct wlr_output_state *state) {
+	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
+		// If the size doesn't match, reject buffer (scaling is not
+		// supported)
+		int pending_width, pending_height;
+		output_pending_resolution(output, state,
+			&pending_width, &pending_height);
+		if (state->buffer->width != pending_width ||
+				state->buffer->height != pending_height) {
+			wlr_log(WLR_DEBUG, "Primary buffer size mismatch");
+			return false;
+		}
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_RENDER_FORMAT) {
+		struct wlr_allocator *allocator = output->allocator;
+		assert(allocator != NULL);
+
+		const struct wlr_drm_format_set *display_formats =
+			wlr_output_get_primary_formats(output, allocator->buffer_caps);
+		struct wlr_drm_format format = {0};
+		if (!output_pick_format(output, display_formats, &format, state->render_format)) {
+			wlr_log(WLR_ERROR, "Failed to pick primary buffer format for output");
+			return false;
+		}
+
+		wlr_drm_format_finish(&format);
+	}
+	if (!output->impl->test_capabilities) {
+		return true;
+	}
+	bool success = output->impl->test_capabilities;
+	return success;
+}
+
 bool output_prepare_commit(struct wlr_output *output, const struct wlr_output_state *state) {
 	if (!output_basic_test(output, state)) {
 		wlr_log(WLR_ERROR, "Basic output test failed for %s", output->name);

@@ -1176,6 +1176,47 @@ static const struct wlr_drm_format_set *drm_connector_get_primary_formats(
 	return &conn->crtc->primary->formats;
 }
 
+static bool drm_connector_test_capabilities(struct wlr_output *output,
+		const struct wlr_output_state *state) {
+	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
+
+	uint32_t unsupported = state->committed & ~SUPPORTED_OUTPUT_STATE;
+	if (unsupported != 0) {
+		return false;
+	}
+
+	if ((state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) &&
+			state->adaptive_sync_enabled &&
+			!drm_connector_supports_vrr(conn)) {
+		return false;
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_GAMMA_LUT &&
+			state->gamma_lut_size != drm_connector_get_gamma_size(output)) {
+		return false;
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_RENDER_FORMAT) {
+		const struct wlr_drm_format_set *formats =
+			drm_connector_get_primary_formats(output, WLR_BUFFER_CAP_DMABUF);
+		if (formats != NULL) {
+			bool supported = false;
+			for (size_t idx = 0; idx < formats->len; idx++) {
+				const struct wlr_drm_format *format = &formats->formats[idx];
+				if (format->format == state->render_format) {
+					supported = true;
+					break;
+				}
+			}
+			if (!supported) {
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
 static const struct wlr_output_impl output_impl = {
 	.set_cursor = drm_connector_set_cursor,
 	.move_cursor = drm_connector_move_cursor,
@@ -1186,6 +1227,7 @@ static const struct wlr_output_impl output_impl = {
 	.get_cursor_formats = drm_connector_get_cursor_formats,
 	.get_cursor_size = drm_connector_get_cursor_size,
 	.get_primary_formats = drm_connector_get_primary_formats,
+	.test_capabilities = drm_connector_test_capabilities,
 };
 
 bool wlr_output_is_drm(struct wlr_output *output) {

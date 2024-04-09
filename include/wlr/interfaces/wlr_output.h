@@ -95,6 +95,15 @@ struct wlr_output_impl {
 	 */
 	const struct wlr_drm_format_set *(*get_primary_formats)(
 		struct wlr_output *output, uint32_t buffer_caps);
+	/**
+	 * Test if the supplied state matches aligns with current output
+	 * capabilities, without testing whether the configuration can be applied.
+	 *
+	 * If this function returns false, a test or commit with the same state
+	 * will always fail.
+	 */
+	bool (*test_capabilities)(struct wlr_output *output,
+		const struct wlr_output_state *state);
 };
 
 /**
