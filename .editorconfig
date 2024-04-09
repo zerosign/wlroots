@@ -9,6 +9,9 @@ indent_style = tab
 indent_size = 4
 max_line_length = 100
 
+[/.git/**]
+max_line_length = unset
+
 [*.xml]
 indent_style = space
 indent_size = 2
