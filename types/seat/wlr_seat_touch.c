@@ -313,7 +313,11 @@ void wlr_seat_touch_point_clear_focus(struct wlr_seat *seat, uint32_t time,
 		return;
 	}
 
-	touch_point_clear_focus(point);
+	if (point->focus_surface != NULL) {
+		touch_point_clear_focus(point);
+		struct wlr_seat_touch_grab *grab = seat->touch_state.grab;
+		grab->interface->enter(grab, time, point);
+	}
 }
 
 uint32_t wlr_seat_touch_send_down(struct wlr_seat *seat,
