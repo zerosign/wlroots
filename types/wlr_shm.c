@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <wayland-server-protocol.h>
 #include <wlr/interfaces/wlr_buffer.h>
+#include <wlr/render/drm_format_set.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_shm.h>
 #include <wlr/util/log.h>
@@ -540,16 +541,27 @@ struct wlr_shm *wlr_shm_create(struct wl_display *display, uint32_t version,
 
 struct wlr_shm *wlr_shm_create_with_renderer(struct wl_display *display,
 		uint32_t version, struct wlr_renderer *renderer) {
-	size_t formats_len;
-	const uint32_t *formats =
-		wlr_renderer_get_shm_texture_formats(renderer, &formats_len);
-	if (formats == NULL) {
+	const struct wlr_drm_format_set *format_set =
+		wlr_renderer_get_texture_formats(renderer, WLR_BUFFER_CAP_DATA_PTR);
+	if (format_set == NULL || format_set->len == 0) {
 		wlr_log(WLR_ERROR, "Failed to initialize wl_shm: "
 			"cannot get renderer formats");
 		return NULL;
 	}
 
-	return wlr_shm_create(display, version, formats, formats_len);
+	size_t formats_len = format_set->len;
+	uint32_t *formats = calloc(formats_len, sizeof(formats[0]));
+	if (formats == NULL) {
+		return NULL;
+	}
+
+	for (size_t i = 0; i < format_set->len; i++) {
+		formats[i] = format_set->formats[i].format;
+	}
+
+	struct wlr_shm *shm = wlr_shm_create(display, version, formats, formats_len);
+	free(formats);
+	return shm;
 }
 
 static bool shm_has_format(struct wlr_shm *shm, uint32_t shm_format) {

@@ -32,7 +32,7 @@
 void wlr_renderer_init(struct wlr_renderer *renderer,
 		const struct wlr_renderer_impl *impl) {
 	assert(impl->begin_buffer_pass);
-	assert(impl->get_shm_texture_formats);
+	assert(impl->get_texture_formats);
 	assert(impl->get_render_buffer_caps);
 
 	*renderer = (struct wlr_renderer){
@@ -57,17 +57,14 @@ void wlr_renderer_destroy(struct wlr_renderer *r) {
 	}
 }
 
-const uint32_t *wlr_renderer_get_shm_texture_formats(struct wlr_renderer *r,
-		size_t *len) {
-	return r->impl->get_shm_texture_formats(r, len);
+const struct wlr_drm_format_set *wlr_renderer_get_texture_formats(
+		struct wlr_renderer *r, uint32_t buffer_caps) {
+	return r->impl->get_texture_formats(r, buffer_caps);
 }
 
 const struct wlr_drm_format_set *wlr_renderer_get_dmabuf_texture_formats(
 		struct wlr_renderer *r) {
-	if (!r->impl->get_dmabuf_texture_formats) {
-		return NULL;
-	}
-	return r->impl->get_dmabuf_texture_formats(r);
+	return wlr_renderer_get_texture_formats(r, WLR_BUFFER_CAP_DMABUF);
 }
 
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(

@@ -50,11 +50,15 @@ struct wlr_renderer {
 struct wlr_renderer *wlr_renderer_autocreate(struct wlr_backend *backend);
 
 /**
- * Get the shared-memory formats supporting import usage. Buffers allocated
- * with a format from this list may be imported via wlr_texture_from_pixels().
+ * Get the formats supporting sampling usage.
+ *
+ * The buffer capabilities must be passed in.
+ *
+ * Buffers allocated with a format from this list may be passed to
+ * wlr_texture_from_buffer().
  */
-const uint32_t *wlr_renderer_get_shm_texture_formats(
-	struct wlr_renderer *r, size_t *len);
+const struct wlr_drm_format_set *wlr_renderer_get_texture_formats(
+	struct wlr_renderer *r, uint32_t buffer_caps);
 /**
  * Get the DMA-BUF formats supporting sampling usage. Buffers allocated with
  * a format from this list may be imported via wlr_texture_from_dmabuf().

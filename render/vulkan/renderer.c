@@ -956,17 +956,16 @@ bool vulkan_sync_render_buffer(struct wlr_vk_renderer *renderer,
 	return true;
 }
 
-static const uint32_t *vulkan_get_shm_texture_formats(
-		struct wlr_renderer *wlr_renderer, size_t *len) {
+static const struct wlr_drm_format_set *vulkan_get_texture_formats(
+		struct wlr_renderer *wlr_renderer, uint32_t buffer_caps) {
 	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
-	*len = renderer->dev->shm_format_count;
-	return renderer->dev->shm_formats;
-}
-
-static const struct wlr_drm_format_set *vulkan_get_dmabuf_texture_formats(
-		struct wlr_renderer *wlr_renderer) {
-	struct wlr_vk_renderer *renderer = vulkan_get_renderer(wlr_renderer);
-	return &renderer->dev->dmabuf_texture_formats;
+	if (buffer_caps & WLR_BUFFER_CAP_DMABUF) {
+		return &renderer->dev->dmabuf_texture_formats;
+	} else if (buffer_caps & WLR_BUFFER_CAP_DATA_PTR) {
+		return &renderer->dev->shm_texture_formats;
+	} else {
+		return NULL;
+	}
 }
 
 static const struct wlr_drm_format_set *vulkan_get_render_formats(
@@ -1324,8 +1323,7 @@ static struct wlr_render_pass *vulkan_begin_buffer_pass(struct wlr_renderer *wlr
 }
 
 static const struct wlr_renderer_impl renderer_impl = {
-	.get_shm_texture_formats = vulkan_get_shm_texture_formats,
-	.get_dmabuf_texture_formats = vulkan_get_dmabuf_texture_formats,
+	.get_texture_formats = vulkan_get_texture_formats,
 	.get_render_formats = vulkan_get_render_formats,
 	.destroy = vulkan_destroy,
 	.get_drm_fd = vulkan_get_drm_fd,

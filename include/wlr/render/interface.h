@@ -20,10 +20,8 @@ struct wlr_box;
 struct wlr_fbox;
 
 struct wlr_renderer_impl {
-	const uint32_t *(*get_shm_texture_formats)(
-		struct wlr_renderer *renderer, size_t *len);
-	const struct wlr_drm_format_set *(*get_dmabuf_texture_formats)(
-		struct wlr_renderer *renderer);
+	const struct wlr_drm_format_set *(*get_texture_formats)(
+		struct wlr_renderer *renderer, uint32_t buffer_caps);
 	const struct wlr_drm_format_set *(*get_render_formats)(
 		struct wlr_renderer *renderer);
 	void (*destroy)(struct wlr_renderer *renderer);

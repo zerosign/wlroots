@@ -165,16 +165,16 @@ error_buffer:
 	return NULL;
 }
 
-static const uint32_t *gles2_get_shm_texture_formats(
-		struct wlr_renderer *wlr_renderer, size_t *len) {
+static const struct wlr_drm_format_set *gles2_get_texture_formats(
+		struct wlr_renderer *wlr_renderer, uint32_t buffer_caps) {
 	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
-	return get_gles2_shm_formats(renderer, len);
-}
-
-static const struct wlr_drm_format_set *gles2_get_dmabuf_texture_formats(
-		struct wlr_renderer *wlr_renderer) {
-	struct wlr_gles2_renderer *renderer = gles2_get_renderer(wlr_renderer);
-	return wlr_egl_get_dmabuf_texture_formats(renderer->egl);
+	if (buffer_caps & WLR_BUFFER_CAP_DMABUF) {
+		return wlr_egl_get_dmabuf_texture_formats(renderer->egl);
+	} else if (buffer_caps & WLR_BUFFER_CAP_DATA_PTR) {
+		return &renderer->shm_texture_formats;
+	} else {
+		return NULL;
+	}
 }
 
 static const struct wlr_drm_format_set *gles2_get_render_formats(
@@ -233,6 +233,8 @@ static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
 
 	wlr_egl_unset_current(renderer->egl);
 	wlr_egl_destroy(renderer->egl);
+
+	wlr_drm_format_set_finish(&renderer->shm_texture_formats);
 
 	if (renderer->drm_fd >= 0) {
 		close(renderer->drm_fd);
@@ -356,8 +358,7 @@ static void gles2_render_timer_destroy(struct wlr_render_timer *wlr_timer) {
 
 static const struct wlr_renderer_impl renderer_impl = {
 	.destroy = gles2_destroy,
-	.get_shm_texture_formats = gles2_get_shm_texture_formats,
-	.get_dmabuf_texture_formats = gles2_get_dmabuf_texture_formats,
+	.get_texture_formats = gles2_get_texture_formats,
 	.get_render_formats = gles2_get_render_formats,
 	.get_drm_fd = gles2_get_drm_fd,
 	.get_render_buffer_caps = gles2_get_render_buffer_caps,
@@ -683,6 +684,8 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 	pop_gles2_debug(renderer);
 
 	wlr_egl_unset_current(renderer->egl);
+
+	get_gles2_shm_formats(renderer, &renderer->shm_texture_formats);
 
 	return &renderer->wlr_renderer;
 

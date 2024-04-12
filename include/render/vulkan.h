@@ -60,11 +60,7 @@ struct wlr_vk_device {
 	struct wlr_vk_format_props *format_props;
 	struct wlr_drm_format_set dmabuf_render_formats;
 	struct wlr_drm_format_set dmabuf_texture_formats;
-
-	// supported formats for textures (contains only those formats
-	// that support everything we need for textures)
-	uint32_t shm_format_count;
-	uint32_t *shm_formats; // to implement vulkan_get_shm_texture_formats
+	struct wlr_drm_format_set shm_texture_formats;
 };
 
 // Tries to find the VkPhysicalDevice for the given drm fd.

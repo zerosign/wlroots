@@ -536,8 +536,8 @@ void vulkan_format_props_query(struct wlr_vk_device *dev,
 			props.shm.features = fmtp.formatProperties.optimalTilingFeatures;
 			props.shm.has_mutable_srgb = has_mutable_srgb;
 
-			dev->shm_formats[dev->shm_format_count] = format->drm;
-			++dev->shm_format_count;
+			wlr_drm_format_set_add(&dev->shm_texture_formats,
+				format->drm, DRM_FORMAT_MOD_LINEAR);
 
 			add_fmt_props = true;
 		}

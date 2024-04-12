@@ -193,9 +193,14 @@ error_buffer:
 	return NULL;
 }
 
-static const uint32_t *pixman_get_shm_texture_formats(
-		struct wlr_renderer *wlr_renderer, size_t *len) {
-	return get_pixman_drm_formats(len);
+static const struct wlr_drm_format_set *pixman_get_texture_formats(
+		struct wlr_renderer *wlr_renderer, uint32_t buffer_caps) {
+	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
+	if (buffer_caps & WLR_BUFFER_CAP_DATA_PTR) {
+		return &renderer->drm_formats;
+	} else {
+		return NULL;
+	}
 }
 
 static const struct wlr_drm_format_set *pixman_get_render_formats(
@@ -311,7 +316,7 @@ static struct wlr_render_pass *pixman_begin_buffer_pass(struct wlr_renderer *wlr
 }
 
 static const struct wlr_renderer_impl renderer_impl = {
-	.get_shm_texture_formats = pixman_get_shm_texture_formats,
+	.get_texture_formats = pixman_get_texture_formats,
 	.get_render_formats = pixman_get_render_formats,
 	.texture_from_buffer = pixman_texture_from_buffer,
 	.destroy = pixman_destroy,
