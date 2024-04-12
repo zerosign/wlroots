@@ -26,7 +26,7 @@
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
-#include "tablet-unstable-v2-client-protocol.h"
+#include "tablet-v2-client-protocol.h"
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 
