@@ -259,7 +259,7 @@ void wlr_xwayland_surface_set_minimized(struct wlr_xwayland_surface *surface,
 	bool minimized);
 
 void wlr_xwayland_surface_set_maximized(struct wlr_xwayland_surface *surface,
-	bool maximized);
+	bool maximized_horz, bool maximized_vert);
 
 void wlr_xwayland_surface_set_fullscreen(struct wlr_xwayland_surface *surface,
 	bool fullscreen);
