@@ -526,6 +526,7 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 		return NULL;
 	}
 	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl, WLR_BUFFER_CAP_DMABUF);
+	renderer->wlr_renderer.features.output_color_transform = false;
 
 	wl_list_init(&renderer->buffers);
 	wl_list_init(&renderer->textures);

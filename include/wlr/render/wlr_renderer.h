@@ -40,6 +40,13 @@ struct wlr_renderer {
 		struct wl_signal lost;
 	} events;
 
+	struct {
+		/**
+		 * Does the renderer support color transforms on its output?
+		 */
+		bool output_color_transform;
+	} features;
+
 	// private state
 
 	const struct wlr_renderer_impl *impl;

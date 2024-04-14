@@ -327,6 +327,7 @@ struct wlr_renderer *wlr_pixman_renderer_create(void) {
 
 	wlr_log(WLR_INFO, "Creating pixman renderer");
 	wlr_renderer_init(&renderer->wlr_renderer, &renderer_impl, WLR_BUFFER_CAP_DATA_PTR);
+	renderer->wlr_renderer.features.output_color_transform = false;
 	wl_list_init(&renderer->buffers);
 	wl_list_init(&renderer->textures);
 
