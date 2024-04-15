@@ -35,6 +35,7 @@ struct wlr_xdg_surface;
 struct wlr_layer_surface_v1;
 struct wlr_drag_icon;
 struct wlr_surface;
+struct wlr_raster;
 
 struct wlr_scene_node;
 struct wlr_scene_buffer;
@@ -153,6 +154,7 @@ struct wlr_scene_buffer {
 
 	// May be NULL
 	struct wlr_buffer *buffer;
+	struct wlr_raster *raster;
 
 	struct {
 		struct wl_signal outputs_update; // struct wlr_scene_outputs_update_event
@@ -187,8 +189,6 @@ struct wlr_scene_buffer {
 	struct wlr_linux_dmabuf_feedback_v1_init_options prev_feedback_options;
 
 	bool own_buffer;
-	int buffer_width, buffer_height;
-	bool buffer_is_opaque;
 
 	struct wl_listener buffer_release;
 	struct wl_listener renderer_destroy;
@@ -384,7 +384,7 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
 	struct wlr_buffer *buffer);
 
 /**
- * Sets the buffer's backing buffer.
+ * Sets the buffer's backing raster.
  *
  * If the buffer is NULL, the buffer node will not be displayed.
  */
@@ -392,7 +392,7 @@ void wlr_scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
 	struct wlr_buffer *buffer);
 
 /**
- * Sets the buffer's backing buffer with a custom damage region.
+ * Sets the buffer's backing raster with a custom damage region.
  *
  * The damage region is in buffer-local coordinates. If the region is NULL,
  * the whole buffer node will be damaged.
