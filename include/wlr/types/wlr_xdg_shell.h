@@ -366,6 +366,12 @@ struct wlr_xdg_positioner *wlr_xdg_positioner_from_resource(
 void wlr_xdg_surface_ping(struct wlr_xdg_surface *surface);
 
 /**
+ * Configure the toplevel. Returns the associated configure serial.
+ */
+uint32_t wlr_xdg_toplevel_configure(struct wlr_xdg_toplevel *toplevel,
+		const struct wlr_xdg_toplevel_configure *configure);
+
+/**
  * Request that this toplevel surface be the given size. Returns the associated
  * configure serial.
  */
