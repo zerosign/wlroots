@@ -126,7 +126,7 @@ struct wlr_seat_touch_grab;
 struct wlr_touch_grab_interface {
 	uint32_t (*down)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
 			struct wlr_touch_point *point);
-	void (*up)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
+	uint32_t (*up)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
 			struct wlr_touch_point *point);
 	void (*motion)(struct wlr_seat_touch_grab *grab, uint32_t time_msec,
 			struct wlr_touch_point *point);
@@ -618,7 +618,7 @@ uint32_t wlr_seat_touch_send_down(struct wlr_seat *seat,
  * event. This will remove the touch point. This function does not respect touch
  * grabs: you probably want wlr_seat_touch_notify_up() instead.
  */
-void wlr_seat_touch_send_up(struct wlr_seat *seat, uint32_t time_msec,
+uint32_t wlr_seat_touch_send_up(struct wlr_seat *seat, uint32_t time_msec,
 		int32_t touch_id);
 
 /**
@@ -653,7 +653,7 @@ uint32_t wlr_seat_touch_notify_down(struct wlr_seat *seat,
  * Notify the seat that the touch point given by `touch_id` is up. Defers to any
  * grab of the touch device.
  */
-void wlr_seat_touch_notify_up(struct wlr_seat *seat, uint32_t time_msec,
+uint32_t wlr_seat_touch_notify_up(struct wlr_seat *seat, uint32_t time_msec,
 		int32_t touch_id);
 
 /**
