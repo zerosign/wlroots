@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <string.h>
-#include <wayland-server.h>
+#include <wayland-server-protocol.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/util/log.h>
 #include "types/wlr_buffer.h"

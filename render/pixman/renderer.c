@@ -2,7 +2,7 @@
 #include <drm_fourcc.h>
 #include <pixman.h>
 #include <stdlib.h>
-#include <wayland-server.h>
+#include <wayland-util.h>
 #include <wlr/render/interface.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>

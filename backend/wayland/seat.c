@@ -1,4 +1,3 @@
-
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -6,7 +5,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <wayland-client.h>
+#include <wayland-client-protocol.h>
 
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_output.h>

@@ -1,7 +1,8 @@
 #ifndef WLR_BACKEND_WAYLAND_H
 #define WLR_BACKEND_WAYLAND_H
+
 #include <stdbool.h>
-#include <wayland-client.h>
+#include <wayland-client-protocol.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/types/wlr_output.h>

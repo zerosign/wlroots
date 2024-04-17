@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wayland-client.h>
+#include <wayland-client-protocol.h>
 #include <wayland-egl.h>
-#include <wayland-server.h>
+#include <wayland-server-core.h>
 #include <wlr/backend/wayland.h>
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_compositor.h>

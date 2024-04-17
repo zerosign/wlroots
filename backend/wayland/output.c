@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 #include <drm_fourcc.h>
-#include <wayland-client.h>
+#include <wayland-client-protocol.h>
 
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>

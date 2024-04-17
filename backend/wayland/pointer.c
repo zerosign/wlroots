@@ -1,7 +1,6 @@
-
 #include <assert.h>
 #include <stdlib.h>
-#include <wayland-client.h>
+#include <wayland-client-protocol.h>
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/util/log.h>
 

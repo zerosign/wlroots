@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include <wayland-client.h>
+#include <wayland-client-protocol.h>
 #include <wayland-server-core.h>
 
 #include <wlr/backend/wayland.h>
