@@ -40,6 +40,7 @@ static void add_pad_group_from_libinput(struct wlr_tablet_pad *pad,
 	size_t ring = 0;
 	for (size_t i = 0; i < pad->ring_count; ++i) {
 		if (libinput_tablet_pad_mode_group_has_ring(li_group, i)) {
+			assert(ring < group->ring_count);
 			group->rings[ring++] = i;
 		}
 	}
@@ -53,9 +54,11 @@ static void add_pad_group_from_libinput(struct wlr_tablet_pad *pad,
 	if (group->strips == NULL) {
 		goto group_fail;
 	}
+
 	size_t strip = 0;
 	for (size_t i = 0; i < pad->strip_count; ++i) {
 		if (libinput_tablet_pad_mode_group_has_strip(li_group, i)) {
+			assert(strip < group->strip_count);
 			group->strips[strip++] = i;
 		}
 	}
@@ -69,9 +72,11 @@ static void add_pad_group_from_libinput(struct wlr_tablet_pad *pad,
 	if (group->buttons == NULL) {
 		goto group_fail;
 	}
+
 	size_t button = 0;
 	for (size_t i = 0; i < pad->button_count; ++i) {
 		if (libinput_tablet_pad_mode_group_has_button(li_group, i)) {
+			assert(button < group->button_count);
 			group->buttons[button++] = i;
 		}
 	}
