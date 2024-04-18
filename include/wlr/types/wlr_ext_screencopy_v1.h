@@ -41,6 +41,8 @@ struct wlr_ext_screencopy_manager_v1 *wlr_ext_screencopy_manager_v1_create(
 
 void wlr_ext_screencopy_frame_v1_ready(struct wlr_ext_screencopy_frame_v1 *frame,
 	enum wl_output_transform transform, const struct timespec *presentation_time);
+bool wlr_ext_screencopy_frame_v1_copy_buffer(struct wlr_ext_screencopy_frame_v1 *frame,
+	struct wlr_buffer *src, struct wlr_renderer *renderer);
 void wlr_ext_screencopy_frame_v1_fail(struct wlr_ext_screencopy_frame_v1 *frame,
 	enum ext_screencopy_frame_v1_failure_reason reason);
 
