@@ -1100,7 +1100,7 @@ bool wlr_linux_dmabuf_feedback_v1_init_with_options(struct wlr_linux_dmabuf_feed
 	feedback->main_device = renderer_dev;
 
 	const struct wlr_drm_format_set *renderer_formats =
-		wlr_renderer_get_dmabuf_texture_formats(options->main_renderer);
+		wlr_renderer_get_texture_formats(options->main_renderer, WLR_BUFFER_CAP_DMABUF);
 	if (renderer_formats == NULL) {
 		wlr_log(WLR_ERROR, "Failed to get renderer DMA-BUF texture formats");
 		goto error;

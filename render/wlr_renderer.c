@@ -62,11 +62,6 @@ const struct wlr_drm_format_set *wlr_renderer_get_texture_formats(
 	return r->impl->get_texture_formats(r, buffer_caps);
 }
 
-const struct wlr_drm_format_set *wlr_renderer_get_dmabuf_texture_formats(
-		struct wlr_renderer *r) {
-	return wlr_renderer_get_texture_formats(r, WLR_BUFFER_CAP_DMABUF);
-}
-
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(
 		struct wlr_renderer *r) {
 	if (!r->impl->get_render_formats) {
@@ -90,7 +85,7 @@ bool wlr_renderer_init_wl_display(struct wlr_renderer *r,
 		return false;
 	}
 
-	if (wlr_renderer_get_dmabuf_texture_formats(r) != NULL &&
+	if (wlr_renderer_get_texture_formats(r, WLR_BUFFER_CAP_DMABUF) != NULL &&
 			wlr_renderer_get_drm_fd(r) >= 0 &&
 			wlr_linux_dmabuf_v1_create_with_renderer(wl_display, 4, r) == NULL) {
 		return false;

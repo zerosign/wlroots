@@ -236,7 +236,8 @@ struct wlr_drm *wlr_drm_create(struct wl_display *display,
 	drm->node_name = node_name;
 	wl_signal_init(&drm->events.destroy);
 
-	const struct wlr_drm_format_set *formats = wlr_renderer_get_dmabuf_texture_formats(renderer);
+	const struct wlr_drm_format_set *formats =
+		wlr_renderer_get_texture_formats(renderer, WLR_BUFFER_CAP_DMABUF);
 	if (formats == NULL) {
 		goto error;
 	}

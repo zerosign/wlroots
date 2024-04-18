@@ -59,12 +59,6 @@ struct wlr_renderer *wlr_renderer_autocreate(struct wlr_backend *backend);
  */
 const struct wlr_drm_format_set *wlr_renderer_get_texture_formats(
 	struct wlr_renderer *r, uint32_t buffer_caps);
-/**
- * Get the DMA-BUF formats supporting sampling usage. Buffers allocated with
- * a format from this list may be imported via wlr_texture_from_dmabuf().
- */
-const struct wlr_drm_format_set *wlr_renderer_get_dmabuf_texture_formats(
-	struct wlr_renderer *renderer);
 
 /**
  * Initializes wl_shm, linux-dmabuf and other buffer factory protocols.
