@@ -184,7 +184,7 @@ static void handle_tablet_pad_group_buttons(void *data,
 	struct tablet_pad_group *group = data;
 
 	free(group->group.buttons);
-	group->group.buttons = calloc(1, buttons->size);
+	group->group.buttons = malloc(buttons->size);
 	if (!group->group.buttons) {
 		// FIXME: Add actual error handling
 		return;
