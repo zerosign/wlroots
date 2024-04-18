@@ -1,6 +1,12 @@
 #include <assert.h>
+#include <drm_fourcc.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <wlr/interfaces/wlr_ext_image_source_v1.h>
+#include <wlr/render/allocator.h>
+#include <wlr/render/swapchain.h>
+#include <wlr/render/wlr_renderer.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_ext_image_source_v1.h>
 #include "ext-image-source-v1-protocol.h"
 
@@ -64,6 +70,63 @@ bool wlr_ext_image_source_v1_create_resource(struct wlr_ext_image_source_v1 *sou
 		wl_list_init(wl_resource_get_link(resource));
 	}
 	return true;
+}
+
+static uint32_t get_swapchain_shm_format(struct wlr_swapchain *swapchain,
+		struct wlr_renderer *renderer) {
+	struct wlr_buffer *buffer = wlr_swapchain_acquire(swapchain, NULL);
+	if (buffer == NULL) {
+		return DRM_FORMAT_INVALID;
+	}
+
+	struct wlr_texture *texture = wlr_texture_from_buffer(renderer, buffer);
+	wlr_buffer_unlock(buffer);
+	if (texture == NULL) {
+		return DRM_FORMAT_INVALID;
+	}
+
+	uint32_t format = wlr_texture_preferred_read_format(texture);
+	wlr_texture_destroy(texture);
+
+	return format;
+}
+
+void wlr_ext_image_source_v1_set_constraints_from_swapchain(struct wlr_ext_image_source_v1 *source,
+		struct wlr_swapchain *swapchain, struct wlr_renderer *renderer) {
+	source->width = swapchain->width;
+	source->height = swapchain->height;
+
+	uint32_t shm_format = get_swapchain_shm_format(swapchain, renderer);
+	if (shm_format != DRM_FORMAT_INVALID) {
+		uint32_t *shm_formats = calloc(1, sizeof(shm_formats[0]));
+		if (shm_formats == NULL) {
+			return;
+		}
+		shm_formats[0] = shm_format;
+
+		source->shm_formats_len = 1;
+		free(source->shm_formats);
+		source->shm_formats = shm_formats;
+	}
+
+	int drm_fd = wlr_renderer_get_drm_fd(renderer);
+	if (swapchain->allocator != NULL &&
+			(swapchain->allocator->buffer_caps & WLR_BUFFER_CAP_DMABUF) &&
+			drm_fd >= 0) {
+		struct stat dev_stat;
+		if (fstat(drm_fd, &dev_stat) != 0) {
+			return;
+		}
+
+		source->dmabuf_device = dev_stat.st_rdev;
+		source->dmabuf_formats.len = 0;
+		for (size_t i = 0; i < swapchain->format.len; i++) {
+			wlr_drm_format_set_add(&source->dmabuf_formats,
+				swapchain->format.format, swapchain->format.modifiers[i]);
+		}
+	}
+
+	wl_signal_emit_mutable(&source->events.constraints_update, NULL);
 }
 
 void wlr_ext_image_source_v1_cursor_init(struct wlr_ext_image_source_v1_cursor *source_cursor,
