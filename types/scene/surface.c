@@ -188,6 +188,7 @@ static bool scene_buffer_point_accepts_input(struct wlr_scene_buffer *scene_buff
 		double *sx, double *sy) {
 	struct wlr_scene_surface *scene_surface =
 		wlr_scene_surface_try_from_buffer(scene_buffer);
+	assert(scene_surface);
 
 	*sx += scene_surface->clip.x;
 	*sy += scene_surface->clip.y;
