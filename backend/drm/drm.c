@@ -1586,6 +1586,12 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 		}
 	}
 
+	uint64_t vrr_capable = 0;
+	if (wlr_conn->props.vrr_capable != 0) {
+		get_drm_prop(drm->fd, wlr_conn->id, wlr_conn->props.vrr_capable, &vrr_capable);
+	}
+	output->adaptive_sync_supported = vrr_capable;
+
 	size_t edid_len = 0;
 	uint8_t *edid = get_drm_prop_blob(drm->fd,
 		wlr_conn->id, wlr_conn->props.edid, &edid_len);
