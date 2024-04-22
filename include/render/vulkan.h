@@ -175,17 +175,28 @@ struct wlr_vk_pipeline {
 	struct wl_list link; // struct wlr_vk_render_format_setup
 };
 
+struct wlr_vk_framebuffer {
+	int width, height;
+
+	VkFramebuffer vk;
+	struct wlr_vk_render_format_setup *setup;
+	struct wl_list link; // struct wlr_vk_render_format_setup
+};
+
 // For each format we want to render, we need a separate renderpass
 // and therefore also separate pipelines.
 struct wlr_vk_render_format_setup {
 	struct wl_list link; // wlr_vk_renderer.render_format_setups
 	const struct wlr_vk_format *render_format; // used in renderpass
+	bool has_blending_buffer;
+	bool clear_on_load;
 	VkRenderPass render_pass;
 
 	VkPipeline output_pipe;
 
 	struct wlr_vk_renderer *renderer;
 	struct wl_list pipelines; // struct wlr_vk_pipeline.link
+	struct wl_list framebuffers; // struct wlr_vk_framebuffer.link
 };
 
 // Renderer-internal represenation of an wlr_buffer imported for rendering.
@@ -193,12 +204,12 @@ struct wlr_vk_render_buffer {
 	struct wlr_buffer *wlr_buffer;
 	struct wlr_addon addon;
 	struct wlr_vk_renderer *renderer;
-	struct wlr_vk_render_format_setup *render_setup;
 	struct wl_list link; // wlr_vk_renderer.buffers
+
+	const struct wlr_vk_format *fmt;
 
 	VkImage image;
 	VkImageView image_view;
-	VkFramebuffer framebuffer;
 	uint32_t mem_count;
 	VkDeviceMemory memories[WLR_DMABUF_MAX_PLANES];
 	bool transitioned;
@@ -295,12 +306,18 @@ struct wlr_vk_texture_view {
 	struct wlr_vk_descriptor_pool *ds_pool;
 };
 
+struct wlr_vk_render_format_setup *find_or_create_render_setup(
+	struct wlr_vk_renderer *renderer, const struct wlr_vk_format *format,
+	bool has_blending_buffer, bool clear_on_load);
 struct wlr_vk_pipeline *setup_get_or_create_pipeline(
 	struct wlr_vk_render_format_setup *setup,
 	const struct wlr_vk_pipeline_key *key);
 struct wlr_vk_pipeline_layout *get_or_create_pipeline_layout(
 	struct wlr_vk_renderer *renderer,
 	const struct wlr_vk_pipeline_layout_key *key);
+struct wlr_vk_framebuffer *get_or_create_framebuffer(
+	struct wlr_vk_render_format_setup *setup,
+	int width, int height);
 struct wlr_vk_texture_view *vulkan_texture_get_or_create_view(
 	struct wlr_vk_texture *texture,
 	const struct wlr_vk_pipeline_layout *layout);
@@ -321,6 +338,7 @@ struct wlr_vk_render_pass {
 	struct wlr_render_pass base;
 	struct wlr_vk_renderer *renderer;
 	struct wlr_vk_render_buffer *render_buffer;
+	struct wlr_vk_render_format_setup *render_setup;
 	struct wlr_vk_command_buffer *command_buffer;
 	struct rect_union updated_region;
 	VkPipeline bound_pipeline;
@@ -329,7 +347,7 @@ struct wlr_vk_render_pass {
 };
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
-	struct wlr_vk_render_buffer *buffer);
+	struct wlr_vk_render_buffer *buffer, const struct wlr_render_color *clear_color);
 
 // Suballocates a buffer span with the given size that can be mapped
 // and used as staging buffer. The allocation is implicitly released when the

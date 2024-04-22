@@ -27,9 +27,23 @@ struct wlr_render_pass;
  */
 struct wlr_render_timer;
 
+/**
+ * A color value.
+ *
+ * Each channel has values between 0 and 1 inclusive. The R, G, B
+ * channels need to be pre-multiplied by A.
+ */
+struct wlr_render_color {
+	float r, g, b, a;
+};
+
 struct wlr_buffer_pass_options {
 	/* Timer to measure the duration of the render pass */
 	struct wlr_render_timer *timer;
+	/* Clear the buffer before rendering into it */
+	bool clear_buffer;
+	/* If clearing the buffer, what color to clear it with */
+	struct wlr_render_color clear_color;
 };
 
 /**
@@ -92,16 +106,6 @@ struct wlr_render_texture_options {
  */
 void wlr_render_pass_add_texture(struct wlr_render_pass *render_pass,
 	const struct wlr_render_texture_options *options);
-
-/**
- * A color value.
- *
- * Each channel has values between 0 and 1 inclusive. The R, G, B
- * channels need to be pre-multiplied by A.
- */
-struct wlr_render_color {
-	float r, g, b, a;
-};
 
 struct wlr_render_rect_options {
 	/* Rectangle coordinates */

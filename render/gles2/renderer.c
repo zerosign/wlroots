@@ -258,12 +258,17 @@ static struct wlr_render_pass *gles2_begin_buffer_pass(struct wlr_renderer *wlr_
 		clock_gettime(CLOCK_MONOTONIC, &timer->cpu_start);
 	}
 
+	const struct wlr_render_color *clear_color = NULL;
+	if (options->clear_buffer) {
+		clear_color = &options->clear_color;
+	}
+
 	struct wlr_gles2_buffer *buffer = gles2_buffer_get_or_create(renderer, wlr_buffer);
 	if (!buffer) {
 		return NULL;
 	}
 
-	struct wlr_gles2_render_pass *pass = begin_gles2_buffer_pass(buffer, &prev_ctx, timer);
+	struct wlr_gles2_render_pass *pass = begin_gles2_buffer_pass(buffer, &prev_ctx, timer, clear_color);
 	if (!pass) {
 		return NULL;
 	}

@@ -114,11 +114,10 @@ static void output_frame_notify(struct wl_listener *listener, void *data) {
 
 	struct wlr_output_state output_state;
 	wlr_output_state_init(&output_state);
-	struct wlr_render_pass *pass = wlr_output_begin_render_pass(wlr_output, &output_state, NULL, NULL);
-
-	wlr_render_pass_add_rect(pass, &(struct wlr_render_rect_options){
-		.box = { .width = wlr_output->width, .height = wlr_output->height },
-		.color = { 0.25, 0.25, 0.25, 1 },
+	struct wlr_render_pass *pass = wlr_output_begin_render_pass(wlr_output, &output_state, NULL,
+		&(struct wlr_buffer_pass_options){
+			.clear_buffer = true,
+			.clear_color = { 0.25, 0.25, 0.25, 1 },
 	});
 
 	animate_cat(sample, output->output);

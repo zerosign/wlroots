@@ -61,16 +61,13 @@ static struct wlr_buffer *output_acquire_empty_buffer(struct wlr_output *output,
 	}
 
 	struct wlr_render_pass *pass =
-		wlr_renderer_begin_buffer_pass(output->renderer, buffer, NULL);
+		wlr_renderer_begin_buffer_pass(output->renderer, buffer, &(struct wlr_buffer_pass_options){
+		.clear_buffer = true,
+	});
 	if (pass == NULL) {
 		wlr_buffer_unlock(buffer);
 		return NULL;
 	}
-
-	wlr_render_pass_add_rect(pass, &(struct wlr_render_rect_options){
-		.color = { 0, 0, 0, 0 },
-		.blend_mode = WLR_RENDER_BLEND_MODE_NONE,
-	});
 
 	if (!wlr_render_pass_submit(pass)) {
 		wlr_buffer_unlock(buffer);

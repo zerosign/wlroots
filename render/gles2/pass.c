@@ -247,7 +247,8 @@ static const char *reset_status_str(GLenum status) {
 }
 
 struct wlr_gles2_render_pass *begin_gles2_buffer_pass(struct wlr_gles2_buffer *buffer,
-		struct wlr_egl_context *prev_ctx, struct wlr_gles2_render_timer *timer) {
+		struct wlr_egl_context *prev_ctx, struct wlr_gles2_render_timer *timer,
+		const struct wlr_render_color *clear_color) {
 	struct wlr_gles2_renderer *renderer = buffer->renderer;
 	struct wlr_buffer *wlr_buffer = buffer->buffer;
 
@@ -285,6 +286,10 @@ struct wlr_gles2_render_pass *begin_gles2_buffer_pass(struct wlr_gles2_buffer *b
 	glViewport(0, 0, wlr_buffer->width, wlr_buffer->height);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	glDisable(GL_SCISSOR_TEST);
+	if (clear_color) {
+		glClearColor(clear_color->r, clear_color->g, clear_color->b, clear_color->a);
+		glClear(GL_COLOR_BUFFER_BIT);
+	}
 	pop_gles2_debug(renderer);
 
 	return pass;

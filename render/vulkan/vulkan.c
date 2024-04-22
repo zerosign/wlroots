@@ -464,6 +464,7 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 	extensions[extensions_len++] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
 	extensions[extensions_len++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
 	extensions[extensions_len++] = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME; // or vulkan 1.2
+	extensions[extensions_len++] = VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME; // or vulkan 1.2
 	extensions[extensions_len++] = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME;
 	extensions[extensions_len++] = VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME;
 	extensions[extensions_len++] = VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME;
@@ -569,8 +570,13 @@ struct wlr_vk_device *vulkan_device_create(struct wlr_vk_instance *ini,
 			"falling back to regular queue priority");
 	}
 
+	VkPhysicalDeviceImagelessFramebufferFeatures imageless_framebuffer_features = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES,
+		.imagelessFramebuffer = VK_TRUE,
+	};
 	VkPhysicalDeviceSamplerYcbcrConversionFeatures sampler_ycbcr_features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES,
+		.pNext = &imageless_framebuffer_features,
 		.samplerYcbcrConversion = dev->sampler_ycbcr_conversion,
 	};
 	VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = {

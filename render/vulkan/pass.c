@@ -105,7 +105,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 		};
 		mat3_to_mat4(final_matrix, vert_pcr_data.mat4);
 
-		bind_pipeline(pass, render_buffer->render_setup->output_pipe);
+		bind_pipeline(pass, pass->render_setup->output_pipe);
 		vkCmdPushConstants(render_cb->vk, renderer->output_pipe_layout,
 			VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(vert_pcr_data), &vert_pcr_data);
 		vkCmdBindDescriptorSets(render_cb->vk,
@@ -484,7 +484,7 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 		wlr_matrix_multiply(matrix, pass->projection, matrix);
 
 		struct wlr_vk_pipeline *pipe = setup_get_or_create_pipeline(
-			pass->render_buffer->render_setup,
+			pass->render_setup,
 			&(struct wlr_vk_pipeline_key) {
 				.source = WLR_VK_SHADER_SOURCE_SINGLE_COLOR,
 				.layout = { .ycbcr_format = NULL },
@@ -548,7 +548,6 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		const struct wlr_render_texture_options *options) {
 	struct wlr_vk_render_pass *pass = get_render_pass(wlr_pass);
 	struct wlr_vk_renderer *renderer = pass->renderer;
-	struct wlr_vk_render_buffer *render_buffer = pass->render_buffer;
 	VkCommandBuffer cb = pass->command_buffer->vk;
 
 	struct wlr_vk_texture *texture = vulkan_get_texture(options->texture);
@@ -594,7 +593,7 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	mat3_to_mat4(matrix, vert_pcr_data.mat4);
 
 	struct wlr_vk_pipeline *pipe = setup_get_or_create_pipeline(
-		render_buffer->render_setup,
+		pass->render_setup,
 		&(struct wlr_vk_pipeline_key) {
 			.source = WLR_VK_SHADER_SOURCE_TEXTURE,
 			.layout = {
@@ -659,7 +658,7 @@ static const struct wlr_render_pass_impl render_pass_impl = {
 };
 
 struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *renderer,
-		struct wlr_vk_render_buffer *buffer) {
+		struct wlr_vk_render_buffer *buffer, const struct wlr_render_color *clear_color) {
 	struct wlr_vk_render_pass *pass = calloc(1, sizeof(*pass));
 	if (pass == NULL) {
 		return NULL;
@@ -668,6 +667,21 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 	pass->renderer = renderer;
 
 	rect_union_init(&pass->updated_region);
+
+	bool has_blending_buffer = buffer->blend_image != VK_NULL_HANDLE;
+	struct wlr_vk_render_format_setup *render_setup = find_or_create_render_setup(
+		renderer, buffer->fmt, has_blending_buffer, clear_color != NULL);
+	if (render_setup == NULL) {
+		free(pass);
+		return NULL;
+	}
+
+	struct wlr_vk_framebuffer *framebuffer = get_or_create_framebuffer(
+		render_setup, buffer->wlr_buffer->width, buffer->wlr_buffer->height);
+	if (framebuffer == NULL) {
+		free(pass);
+		return NULL;
+	}
 
 	struct wlr_vk_command_buffer *cb = vulkan_acquire_command_buffer(renderer);
 	if (cb == NULL) {
@@ -689,13 +703,38 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 	int width = buffer->wlr_buffer->width;
 	int height = buffer->wlr_buffer->height;
 	VkRect2D rect = { .extent = { width, height } };
+	VkImageView attachments[2] = {0};
+	uint32_t attachment_count = 0;
+	VkClearValue clear_values[2] = { 0 };
+	if (clear_color) {
+		clear_values[0] = clear_values[1] = (VkClearValue){
+			.color.float32 = {
+				color_to_linear(clear_color->r),
+				color_to_linear(clear_color->g),
+				color_to_linear(clear_color->b),
+				clear_color->a,
+			}
+		};
+	}
 
+	if (buffer->blend_image_view != VK_NULL_HANDLE) {
+		attachments[attachment_count++] = buffer->blend_image_view;
+	}
+	attachments[attachment_count++] = buffer->image_view;
+
+	VkRenderPassAttachmentBeginInfo attachment_info = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO,
+		.attachmentCount = attachment_count,
+		.pAttachments = attachments,
+	};
 	VkRenderPassBeginInfo rp_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.pNext = &attachment_info,
 		.renderArea = rect,
-		.renderPass = buffer->render_setup->render_pass,
-		.framebuffer = buffer->framebuffer,
-		.clearValueCount = 0,
+		.renderPass = render_setup->render_pass,
+		.framebuffer = framebuffer->vk,
+		.clearValueCount = clear_color ? attachment_count : 0,
+		.pClearValues = clear_values,
 	};
 	vkCmdBeginRenderPass(cb->vk, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -711,6 +750,7 @@ struct wlr_vk_render_pass *vulkan_begin_render_pass(struct wlr_vk_renderer *rend
 
 	wlr_buffer_lock(buffer->wlr_buffer);
 	pass->render_buffer = buffer;
+	pass->render_setup = render_setup;
 	pass->command_buffer = cb;
 	return pass;
 }
