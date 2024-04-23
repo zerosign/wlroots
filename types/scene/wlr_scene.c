@@ -1342,6 +1342,11 @@ static void scene_output_handle_commit(struct wl_listener *listener, void *data)
 				&scene_output->pending_commit_damage, &state->damage);
 		}
 	}
+
+	if (scene_output->scene->debug_damage_option == WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT &&
+			!wl_list_empty(&scene_output->damage_highlight_regions)) {
+		wlr_output_schedule_frame(scene_output->output);
+	}
 }
 
 static void scene_output_handle_damage(struct wl_listener *listener, void *data) {
@@ -1961,11 +1966,6 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	wlr_output_state_set_buffer(state, buffer);
 	wlr_buffer_unlock(buffer);
-
-	if (debug_damage == WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT &&
-			!wl_list_empty(&scene_output->damage_highlight_regions)) {
-		wlr_output_schedule_frame(scene_output->output);
-	}
 
 	return true;
 }
