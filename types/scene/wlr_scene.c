@@ -608,7 +608,10 @@ static void scene_buffer_handle_buffer_release(struct wl_listener *listener,
 		void *data) {
 	struct wlr_scene_buffer *scene_buffer =
 		wl_container_of(listener, scene_buffer, buffer_release);
-	scene_buffer_set_buffer(scene_buffer, NULL);
+
+	scene_buffer->buffer = NULL;
+	wl_list_remove(&scene_buffer->buffer_release.link);
+	wl_list_init(&scene_buffer->buffer_release.link);
 }
 
 static void scene_buffer_set_buffer(struct wlr_scene_buffer *scene_buffer,
