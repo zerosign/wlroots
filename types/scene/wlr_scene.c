@@ -1587,13 +1587,6 @@ static bool scene_entry_try_direct_scanout(struct render_list_entry *entry,
 		return false;
 	}
 
-	if (scene_output->scene->debug_damage_option ==
-			WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT) {
-		// We don't want to enter direct scan out if we have highlight regions
-		// enabled. Otherwise, we won't be able to render the damage regions.
-		return false;
-	}
-
 	if (node->type != WLR_SCENE_NODE_BUFFER) {
 		return false;
 	}
@@ -1772,27 +1765,6 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		wlr_damage_ring_add_whole(&scene_output->damage_ring);
 	}
 
-	output_state_apply_damage(&render_data, state);
-
-	bool scanout = list_len == 1 &&
-		scene_entry_try_direct_scanout(&list_data[0], state, &render_data);
-
-	if (scene_output->prev_scanout != scanout) {
-		scene_output->prev_scanout = scanout;
-		wlr_log(WLR_DEBUG, "Direct scan-out %s",
-			scanout ? "enabled" : "disabled");
-	}
-
-	if (scanout) {
-		if (timer) {
-			struct timespec end_time, duration;
-			clock_gettime(CLOCK_MONOTONIC, &end_time);
-			timespec_sub(&duration, &end_time, &start_time);
-			timer->pre_render_duration = timespec_to_nsec(&duration);
-		}
-		return true;
-	}
-
 	struct timespec now;
 	if (debug_damage == WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT) {
 		struct wl_list *regions = &scene_output->damage_highlight_regions;
@@ -1829,6 +1801,28 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 		wlr_damage_ring_add(&scene_output->damage_ring, &acc_damage);
 		pixman_region32_fini(&acc_damage);
+	}
+
+	output_state_apply_damage(&render_data, state);
+
+	// don't enter direct scanout if we're using the highlight debug option
+	bool scanout = list_len == 1 && debug_damage != WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT &&
+		scene_entry_try_direct_scanout(&list_data[0], state, &render_data);
+
+	if (scene_output->prev_scanout != scanout) {
+		scene_output->prev_scanout = scanout;
+		wlr_log(WLR_DEBUG, "Direct scan-out %s",
+			scanout ? "enabled" : "disabled");
+	}
+
+	if (scanout) {
+		if (timer) {
+			struct timespec end_time, duration;
+			clock_gettime(CLOCK_MONOTONIC, &end_time);
+			timespec_sub(&duration, &end_time, &start_time);
+			timer->pre_render_duration = timespec_to_nsec(&duration);
+		}
+		return true;
 	}
 
 	wlr_damage_ring_set_bounds(&scene_output->damage_ring,
