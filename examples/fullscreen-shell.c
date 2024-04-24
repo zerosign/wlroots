@@ -9,6 +9,7 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_frame_scheduler.h>
 #include <wlr/types/wlr_fullscreen_shell_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
@@ -38,6 +39,7 @@ struct fullscreen_output {
 	struct wl_list link;
 	struct fullscreen_server *server;
 	struct wlr_output *wlr_output;
+	struct wlr_frame_scheduler *frame_scheduler;
 	struct wlr_surface *surface;
 	struct wl_listener surface_destroy;
 
@@ -113,6 +115,8 @@ static void output_handle_frame(struct wl_listener *listener, void *data) {
 	wlr_render_pass_submit(pass);
 	wlr_output_commit_state(output->wlr_output, &state);
 	wlr_output_state_finish(&state);
+
+	wlr_frame_scheduler_schedule_frame(output->frame_scheduler);
 }
 
 static void output_set_surface(struct fullscreen_output *output,
@@ -156,9 +160,11 @@ static void server_handle_new_output(struct wl_listener *listener, void *data) {
 	struct fullscreen_output *output = calloc(1, sizeof(*output));
 	output->wlr_output = wlr_output;
 	output->server = server;
-	output->frame.notify = output_handle_frame;
-	wl_signal_add(&wlr_output->events.frame, &output->frame);
 	wl_list_insert(&server->outputs, &output->link);
+
+	output->frame_scheduler = wlr_frame_scheduler_autocreate(wlr_output);
+	output->frame.notify = output_handle_frame;
+	wl_signal_add(&output->frame_scheduler->events.frame, &output->frame);
 
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
 	wlr_output_create_global(wlr_output, server->wl_display);
@@ -172,6 +178,8 @@ static void server_handle_new_output(struct wl_listener *listener, void *data) {
 	}
 	wlr_output_commit_state(wlr_output, &state);
 	wlr_output_state_finish(&state);
+
+	wlr_frame_scheduler_schedule_frame(output->frame_scheduler);
 }
 
 static void server_handle_present_surface(struct wl_listener *listener,

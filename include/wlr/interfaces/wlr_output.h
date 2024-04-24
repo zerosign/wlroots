@@ -109,12 +109,6 @@ void wlr_output_init(struct wlr_output *output, struct wlr_backend *backend,
  */
 void wlr_output_update_needs_frame(struct wlr_output *output);
 /**
- * Send a frame event.
- *
- * See wlr_output.events.frame.
- */
-void wlr_output_send_frame(struct wlr_output *output);
-/**
  * Send a present event.
  *
  * See wlr_output.events.present.
