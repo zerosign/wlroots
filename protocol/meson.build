@@ -19,6 +19,7 @@ protocols = {
 	'xdg-shell': wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
 
 	# Staging upstream protocols
+	'color-representation-v1': wl_protocol_dir / 'staging/color-representation/color-representation-v1.xml',
 	'content-type-v1': wl_protocol_dir / 'staging/content-type/content-type-v1.xml',
 	'cursor-shape-v1': wl_protocol_dir / 'staging/cursor-shape/cursor-shape-v1.xml',
 	'drm-lease-v1': wl_protocol_dir / 'staging/drm-lease/drm-lease-v1.xml',
