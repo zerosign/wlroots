@@ -63,16 +63,33 @@ static bool check_socket_dir(void) {
 	return true;
 }
 
-static int open_socket(int display) {
-	if (mkdir(socket_dir, 0755) == 0) {
-		wlr_log(WLR_INFO, "Created %s ourselves -- other users will "
-			"be unable to create X11 UNIX sockets of their own",
-			socket_dir);
-	} else if (errno != EEXIST) {
+static bool setup_socket_dir(void) {
+	mode_t dir_mode = 01777;
+
+	if (mkdir(socket_dir, dir_mode) != 0) {
+		if (errno == EEXIST) {
+			return check_socket_dir();
+		}
 		wlr_log_errno(WLR_ERROR, "Unable to mkdir %s", socket_dir);
 		return false;
-	} else if (!check_socket_dir()) {
+	}
+
+	wlr_log(WLR_INFO, "Created %s ourselves -- other users will "
+		"be unable to create X11 UNIX sockets of their own",
+		socket_dir);
+
+	// The mode passed to mkdir() is affected by umask, so set it again
+	if (chmod(socket_dir, dir_mode) != 0) {
+		wlr_log_errno(WLR_ERROR, "Failed to chmod %s", socket_dir);
 		return false;
+	}
+
+	return true;
+}
+
+static int open_socket(int display) {
+	if (!setup_socket_dir()) {
+		return -1;
 	}
 
 	struct sockaddr_un addr = { .sun_family = AF_UNIX };
