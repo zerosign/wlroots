@@ -70,6 +70,7 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		});
 	}
 
+	// Rotate the final destination size into source coordinates
 	struct wlr_box orig_box;
 	wlr_box_transform(&orig_box, &dst_box, options->transform,
 		buffer->buffer->width, buffer->buffer->height);
@@ -87,64 +88,74 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		case WL_OUTPUT_TRANSFORM_FLIPPED_90:
 			tr_cos = 0;
 			tr_sin = 1;
-			tr_x = buffer->buffer->height;
+			tr_y = src_box.width;
 			break;
 		case WL_OUTPUT_TRANSFORM_180:
 		case WL_OUTPUT_TRANSFORM_FLIPPED_180:
 			tr_cos = -1;
 			tr_sin = 0;
-			tr_x = buffer->buffer->width;
-			tr_y = buffer->buffer->height;
+			tr_x = src_box.width;
+			tr_y = src_box.height;
 			break;
 		case WL_OUTPUT_TRANSFORM_270:
 		case WL_OUTPUT_TRANSFORM_FLIPPED_270:
 			tr_cos = 0;
 			tr_sin = -1;
-			tr_y = buffer->buffer->width;
+			tr_x = src_box.height;
 			break;
 		}
 
-		switch (options->transform) {
-		case WL_OUTPUT_TRANSFORM_FLIPPED:
-		case WL_OUTPUT_TRANSFORM_FLIPPED_180:
-			tr_x = buffer->buffer->width - tr_x;
-			break;
-		case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-		case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-			tr_x = buffer->buffer->height - tr_x;
-			break;
-		case WL_OUTPUT_TRANSFORM_NORMAL:
-		case WL_OUTPUT_TRANSFORM_90:
-		case WL_OUTPUT_TRANSFORM_180:
-		case WL_OUTPUT_TRANSFORM_270:
-			break;
-		}
+		// Pixman transforms are generally the opposite of what you expect because they
+		// apply to the coordinate system rather than the image.  The comments here
+		// refer to what happens to the image, so all the code between
+		// pixman_transform_init_identity() and pixman_image_set_transform() is probably
+		// best read backwards.  Also this means translations are in the opposite
+		// direction, imagine them as moving the origin around rather than moving the
+		// image.
+		//
+		// Beware that this doesn't work quite the same as wp_viewporter: We apply crop
+		// before transform and scale, whereas it defines crop in post-transform-scale
+		// coordinates.  But this only applies to internal wlroots code - the viewporter
+		// extension code makes sure that to clients everything works as it should.
 
 		struct pixman_transform transform;
 		pixman_transform_init_identity(&transform);
-		pixman_transform_rotate(&transform, NULL,
-			pixman_int_to_fixed(tr_cos), pixman_int_to_fixed(tr_sin));
-		if (options->transform >= WL_OUTPUT_TRANSFORM_FLIPPED) {
-			pixman_transform_scale(&transform, NULL,
-				pixman_int_to_fixed(-1), pixman_int_to_fixed(1));
-		}
 
-		// pixman rotates about the origin, translate the result so that its new top-left
-		// corner is back at the origin.
-		pixman_transform_translate(&transform, NULL,
-			pixman_int_to_fixed(tr_x), pixman_int_to_fixed(tr_y));
-
-		pixman_transform_translate(&transform, NULL,
-			-pixman_int_to_fixed(orig_box.x), -pixman_int_to_fixed(orig_box.y));
+		// Apply scaling to get to the dst_box size.  Because the scaling is applied last
+		// it depends on the whether the rotation swapped width and height, which is why
+		// we use orig_box instead of dst_box.
 		pixman_transform_scale(&transform, NULL,
 			pixman_double_to_fixed(src_box.width / (double)orig_box.width),
 			pixman_double_to_fixed(src_box.height / (double)orig_box.height));
+
+		// pixman rotates about the origin which again leaves everything outside of the
+		// viewport.  Translate the result so that its new top-left corner is back at the
+		// origin.
+		pixman_transform_translate(&transform, NULL,
+			-pixman_int_to_fixed(tr_x), -pixman_int_to_fixed(tr_y));
+
+		// Apply the rotation
+		pixman_transform_rotate(&transform, NULL,
+			pixman_int_to_fixed(tr_cos), pixman_int_to_fixed(tr_sin));
+
+		// Apply flip before rotation
+		if (options->transform >= WL_OUTPUT_TRANSFORM_FLIPPED) {
+			// The flip leaves everything left of the Y axis which is outside the
+			// viewport. So translate everything back into the viewport.
+			pixman_transform_translate(&transform, NULL,
+				-pixman_int_to_fixed(src_box.width), pixman_int_to_fixed(0));
+			// Flip by applying a scale of -1 to the X axis
+			pixman_transform_scale(&transform, NULL,
+				pixman_int_to_fixed(-1), pixman_int_to_fixed(1));
+		}
 
 		// Apply the translation for source crop so the origin is now at the top-left of
 		// the region we're actually using.  Do this last so all the other transforms
 		// apply on top of this.
 		pixman_transform_translate(&transform, NULL,
 			pixman_int_to_fixed(src_box.x), pixman_int_to_fixed(src_box.y));
+
+		pixman_image_set_transform(texture->image, &transform);
 
 		switch (options->filter_mode) {
 		case WLR_SCALE_FILTER_BILINEAR:
@@ -155,12 +166,17 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 			break;
 		}
 
-		pixman_image_set_transform(texture->image, &transform);
-
-		// We've already applied the transforms for source crop and scaling so just
-		// composite over the whole output and let the transform deal with everything.
+		// Now composite the result onto the pass buffer.  We specify a source origin of 0,0
+		// because the x,y part of source crop is already done using the transform. The
+		// width,height part of source crop is done here by the width and height we pass:
+		// because of the scaling, cropping at the end by dst_box.{width,height} is
+		// equivalent to if we cropped at the start by src_box.{width,height}.
 		pixman_image_composite32(op, texture->image, mask, buffer->image,
-			0, 0, 0, 0, 0, 0, buffer->buffer->width, buffer->buffer->height);
+			0, 0, // source x,y
+			0, 0, // mask x,y
+			dst_box.x, dst_box.y, // dest x,y
+			dst_box.width, dst_box.height // composite width,height
+		);
 
 		pixman_image_set_transform(texture->image, NULL);
 	} else {
