@@ -1394,29 +1394,14 @@ static void xwm_handle_net_wm_state_message(struct wlr_xwm *xwm,
 	// all other values are set to 0
 
 	if (fullscreen != xsurface->fullscreen) {
-		if (xsurface->fullscreen) {
-			xsurface->saved_width = xsurface->width;
-			xsurface->saved_height = xsurface->height;
-		}
-
 		wl_signal_emit_mutable(&xsurface->events.request_fullscreen, NULL);
 	}
 
 	if (maximized != xsurface_is_maximized(xsurface)) {
-		if (xsurface_is_maximized(xsurface)) {
-			xsurface->saved_width = xsurface->width;
-			xsurface->saved_height = xsurface->height;
-		}
-
 		wl_signal_emit_mutable(&xsurface->events.request_maximize, NULL);
 	}
 
 	if (minimized != xsurface->minimized) {
-		if (xsurface->minimized) {
-			xsurface->saved_width = xsurface->width;
-			xsurface->saved_height = xsurface->height;
-		}
-
 		struct wlr_xwayland_minimize_event minimize_event = {
 			.surface = xsurface,
 			.minimize = xsurface->minimized,
