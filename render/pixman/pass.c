@@ -155,6 +155,13 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		pixman_transform_translate(&transform, NULL,
 			pixman_int_to_fixed(src_box.x), pixman_int_to_fixed(src_box.y));
 
+		// GPUs have a half pixel shift compared to pixman because GPU coordinates refer
+		// to the centre of each pixel rather than its top-left.  This makes no difference
+		// when there's no transforms as we still copy the correct pixel across.  But when
+		// we do scaling it does make a visible difference, so account for it here.
+		pixman_transform_translate(&transform, NULL,
+			-pixman_double_to_fixed(0.5), -pixman_double_to_fixed(0.5));
+
 		pixman_image_set_transform(texture->image, &transform);
 
 		switch (options->filter_mode) {
