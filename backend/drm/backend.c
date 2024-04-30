@@ -171,7 +171,17 @@ struct wlr_backend *wlr_drm_backend_create(struct wlr_session *session,
 	assert(!parent || wlr_backend_is_drm(parent));
 
 	char *name = drmGetDeviceNameFromFd2(dev->fd);
+	if (name == NULL) {
+		wlr_log_errno(WLR_ERROR, "drmGetDeviceNameFromFd2() failed");
+		return NULL;
+	}
+
 	drmVersion *version = drmGetVersion(dev->fd);
+	if (version == NULL) {
+		wlr_log_errno(WLR_ERROR, "drmGetVersion() failed");
+		free(name);
+		return NULL;
+	}
 	wlr_log(WLR_INFO, "Initializing DRM backend for %s (%s)", name, version->name);
 	drmFreeVersion(version);
 
