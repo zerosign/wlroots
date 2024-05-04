@@ -58,6 +58,10 @@ wlroots reads these environment variables
 * *WLR_SCENE_DISABLE_VISIBILITY*: If set to 1, the visibility of all scene nodes
   will be considered to be the full node. Intelligent visibility canculations will
   be disabled.
+* *WLR_SCENE_HIGHLIGHT_TRANSPARENT_REGION*: Highlights regions of scene buffers
+  that are advertised as transparent through wlr_scene_buffer_set_opaque_region().
+  This can be used to debug issues with clients advertizing bogus opaque regions
+  with scene based compositors.
 
 # Generic
 

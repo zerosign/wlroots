@@ -172,6 +172,7 @@ struct wlr_scene *wlr_scene_create(void) {
 	scene->debug_damage_option = env_parse_switch("WLR_SCENE_DEBUG_DAMAGE", debug_damage_options);
 	scene->direct_scanout = !env_parse_bool("WLR_SCENE_DISABLE_DIRECT_SCANOUT");
 	scene->calculate_visibility = !env_parse_bool("WLR_SCENE_DISABLE_VISIBILITY");
+	scene->highlight_transparent_region = env_parse_bool("WLR_SCENE_HIGHLIGHT_TRANSPARENT_REGION");
 
 	return scene;
 }
@@ -1164,6 +1165,7 @@ struct wlr_scene_node *wlr_scene_node_at(struct wlr_scene_node *node,
 struct render_list_entry {
 	struct wlr_scene_node *node;
 	bool sent_dmabuf_feedback;
+	bool highlight_transparent_region;
 	int x, y;
 };
 
@@ -1249,6 +1251,15 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 			.direct_scanout = false,
 		};
 		wl_signal_emit_mutable(&scene_buffer->events.output_sample, &sample_event);
+
+		if (entry->highlight_transparent_region) {
+			wlr_render_pass_add_rect(data->render_pass, &(struct wlr_render_rect_options){
+				.box = dst_box,
+				.color = { .r = 0, .g = 0.3, .b = 0, .a = 0.3 },
+				.clip = &opaque,
+			});
+		}
+
 		break;
 	}
 
@@ -1492,6 +1503,7 @@ struct render_list_constructor_data {
 	struct wlr_box box;
 	struct wl_array *render_list;
 	bool calculate_visibility;
+	bool highlight_transparent_region;
 };
 
 static bool construct_render_list_iterator(struct wlr_scene_node *node,
@@ -1535,6 +1547,7 @@ static bool construct_render_list_iterator(struct wlr_scene_node *node,
 		.node = node,
 		.x = lx,
 		.y = ly,
+		.highlight_transparent_region = data->highlight_transparent_region,
 	};
 
 	return false;
@@ -1759,6 +1772,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		.box = render_data.logical,
 		.render_list = &scene_output->render_list,
 		.calculate_visibility = scene_output->scene->calculate_visibility,
+		.highlight_transparent_region = scene_output->scene->highlight_transparent_region,
 	};
 
 	list_con.render_list->size = 0;
