@@ -213,6 +213,7 @@ struct wlr_surface {
 	// private state
 
 	struct wl_listener role_resource_destroy;
+	struct wl_listener current_buffer_release;
 
 	struct {
 		int32_t scale;
@@ -224,6 +225,7 @@ struct wlr_surface {
 	bool unmap_commit;
 
 	bool opaque;
+	bool consumed;
 
 	bool handling_commit;
 	bool pending_rejected;
