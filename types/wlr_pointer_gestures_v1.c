@@ -420,6 +420,8 @@ struct wlr_pointer_gestures_v1 *wlr_pointer_gestures_v1_create(
 		return NULL;
 	}
 
+	wl_signal_init(&gestures->events.destroy);
+
 	gestures->display_destroy.notify = handle_display_destroy;
 	wl_display_add_destroy_listener(display, &gestures->display_destroy);
 
