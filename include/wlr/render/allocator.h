@@ -25,6 +25,16 @@ struct wlr_allocator_interface {
 void wlr_allocator_init(struct wlr_allocator *alloc,
 	const struct wlr_allocator_interface *impl, uint32_t buffer_caps);
 
+/**
+ * An allocator is responsible for allocating memory for pixel buffers.
+ *
+ * Each allocator may return buffers with different capabilities (shared
+ * memory, DMA-BUF, memory mapping, etc), placement (main memory, VRAM on a
+ * GPU, etc) and properties (possible usage, access performance, etc). See
+ * struct wlr_buffer.
+ *
+ * An allocator can be passed to a struct wlr_swapchain for multiple buffering.
+ */
 struct wlr_allocator {
 	const struct wlr_allocator_interface *impl;
 
