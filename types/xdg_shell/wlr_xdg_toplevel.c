@@ -311,6 +311,7 @@ static void xdg_toplevel_handle_resize(struct wl_client *client,
 		wlr_seat_client_from_resource(seat_resource);
 
 	switch (edges) {
+	case XDG_TOPLEVEL_RESIZE_EDGE_NONE:
 	case XDG_TOPLEVEL_RESIZE_EDGE_TOP:
 	case XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM:
 	case XDG_TOPLEVEL_RESIZE_EDGE_LEFT:
