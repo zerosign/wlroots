@@ -1119,10 +1119,6 @@ static void vulkan_destroy(struct wlr_renderer *wlr_renderer) {
 		free(pipeline_layout);
 	}
 
-	if (renderer->output_ds_lut3d_dummy_pool) {
-		vulkan_free_ds(renderer, renderer->output_ds_lut3d_dummy_pool,
-			renderer->output_ds_lut3d_dummy);
-	}
 	vkDestroyImageView(dev->dev, renderer->dummy3d_image_view, NULL);
 	vkDestroyImage(dev->dev, renderer->dummy3d_image, NULL);
 	vkFreeMemory(dev->dev, renderer->dummy3d_mem, NULL);
