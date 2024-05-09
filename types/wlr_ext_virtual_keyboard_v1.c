@@ -113,6 +113,18 @@ static void ext_virtual_keyboard_modifiers(struct wl_client *client,
 		mods_depressed, mods_latched, mods_locked, group);
 }
 
+static void ext_virtual_keyboard_repeat_info(struct wl_client* client,
+		struct wl_resource *resource, int32_t rate, int32_t delay)
+{
+	struct wlr_ext_virtual_keyboard_v1 *keyboard =
+		ext_virtual_keyboard_from_resource(resource);
+	if (keyboard == NULL) {
+		return;
+	}
+
+	wlr_keyboard_set_repeat_info(&keyboard->keyboard, rate, delay);
+}
+
 static void ext_virtual_keyboard_destroy_resource(struct wl_resource *resource) {
 	struct wlr_ext_virtual_keyboard_v1 *keyboard =
 		ext_virtual_keyboard_from_resource(resource);
@@ -136,6 +148,7 @@ static const struct ext_virtual_keyboard_v1_interface ext_virtual_keyboard_impl 
 	.keymap = ext_virtual_keyboard_keymap,
 	.key = ext_virtual_keyboard_key,
 	.modifiers = ext_virtual_keyboard_modifiers,
+	.repeat_info = ext_virtual_keyboard_repeat_info,
 	.destroy = ext_virtual_keyboard_destroy,
 };
 

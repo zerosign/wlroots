@@ -135,6 +135,17 @@
       <arg name="group" type="uint" summary="keyboard layout"/>
     </request>
 
+    <request name="repeat_info">
+      <description summary="set repeat info">
+        Sets the repeat info for associated wl_keyboard objects.
+
+        This request should be passed by the compositor to clients via the
+        wl_keyboard.repeat_info event.
+      </description>
+      <arg name="rate" type="int" summary="the rate of repeating keys in characters per second"/>
+      <arg name="delay" type="int" summary="delay in milliseconds since key down until repeating starts"/>
+    </request>
+
     <request name="destroy" type="destructor">
       <description summary="destroy the virtual keyboard">
         Destroy the virtual keyboard.
