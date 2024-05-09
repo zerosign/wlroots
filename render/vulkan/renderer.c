@@ -165,6 +165,8 @@ static void destroy_render_format_setup(struct wlr_vk_renderer *renderer,
 		vkDestroyPipeline(dev, pipeline->vk, NULL);
 		free(pipeline);
 	}
+
+	free(setup);
 }
 
 static void shared_buffer_destroy(struct wlr_vk_renderer *r,
