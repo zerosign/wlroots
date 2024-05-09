@@ -1114,6 +1114,7 @@ static void vulkan_destroy(struct wlr_renderer *wlr_renderer) {
 		vkDestroyDescriptorSetLayout(dev->dev, pipeline_layout->ds, NULL);
 		vkDestroySampler(dev->dev, pipeline_layout->sampler, NULL);
 		vkDestroySamplerYcbcrConversion(dev->dev, pipeline_layout->ycbcr.conversion, NULL);
+		free(pipeline_layout);
 	}
 
 	if (renderer->output_ds_lut3d_dummy_pool) {
