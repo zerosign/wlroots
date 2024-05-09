@@ -619,9 +619,6 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	wlr_render_texture_options_get_dst_box(options, &dst_box);
 	float alpha = wlr_render_texture_options_get_alpha(options);
 
-	pixman_region32_t clip;
-	get_clip_region(pass, options->clip, &clip);
-
 	float proj[9], matrix[9];
 	wlr_matrix_identity(proj);
 	wlr_matrix_project_box(matrix, &dst_box, options->transform, 0, proj);
@@ -677,6 +674,9 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(vert_pcr_data), sizeof(float),
 		&alpha);
 
+	pixman_region32_t clip;
+	get_clip_region(pass, options->clip, &clip);
+
 	int clip_rects_len;
 	const pixman_box32_t *clip_rects = pixman_region32_rectangles(&clip, &clip_rects_len);
 	for (int i = 0; i < clip_rects_len; i++) {
@@ -699,6 +699,8 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	}
 
 	texture->last_used_cb = pass->command_buffer;
+
+	pixman_region32_fini(&clip);
 }
 
 static const struct wlr_render_pass_impl render_pass_impl = {
