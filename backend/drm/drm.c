@@ -1408,7 +1408,7 @@ static struct wlr_drm_connector *create_drm_connector(struct wlr_drm_backend *dr
 
 	if (!get_drm_connector_props(drm->fd, wlr_conn->id, &wlr_conn->props)) {
 		free(wlr_conn);
-		return false;
+		return NULL;
 	}
 
 	const char *conn_name =
