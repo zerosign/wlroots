@@ -14,29 +14,21 @@ void wlr_box_closest_point(const struct wlr_box *box, double x, double y,
 	}
 
 	// Note: the width and height of the box are exclusive; that is,
-	// for a 100x100 box at (0,0), the point (99,99) is inside it
+	// for a 100x100 box at (0,0), the point (99.9,99.9) is inside it
 	// while the point (100,100) is outside it.
 	//
-	// Mathematically, there exists no single closest point to the
-	// bottom-right corner of the box while remaining inside it. You
-	// can construct an infinite series approaching the limit, such
-	// as {(99,99), (99.9,99.9), (99.99,99.99)...}, but since the
-	// intervals are half-open, there is no "last" point.
-	//
-	// This function must therefore define an arbitrary "closest"
-	// point. For simplicity and consistency, this is defined to be
-	// (box.x + width - 1, box.y + height - 1).
-	//
-	// (The previous implementation was non-linear: with the example
-	// 100x100 box, it would return an input point of (99.9,99.9)
-	// unchanged, but for an input point (100.1,100.1) the returned
-	// point would jump back to (99.0,99.0). This is now fixed.)
+	// In order to be consistent with e.g. wlr_box_contains_point(),
+	// this function returns a point inside the bottom and right edges
+	// of the box by at least 1/65536 of a unit (pixel). 1/65536 is
+	// small enough to avoid a "dead zone" with high-resolution mice
+	// but large enough to avoid rounding to zero (due to loss of
+	// significant digits) in simple floating-point calculations.
 
 	// find the closest x point
 	if (x < box->x) {
 		*dest_x = box->x;
-	} else if (x > box->x + box->width - 1) {
-		*dest_x = box->x + box->width - 1;
+	} else if (x > box->x + box->width - 1/65536.0) {
+		*dest_x = box->x + box->width - 1/65536.0;
 	} else {
 		*dest_x = x;
 	}
@@ -44,8 +36,8 @@ void wlr_box_closest_point(const struct wlr_box *box, double x, double y,
 	// find closest y point
 	if (y < box->y) {
 		*dest_y = box->y;
-	} else if (y > box->y + box->height - 1) {
-		*dest_y = box->y + box->height - 1;
+	} else if (y > box->y + box->height - 1/65536.0) {
+		*dest_y = box->y + box->height - 1/65536.0;
 	} else {
 		*dest_y = y;
 	}
