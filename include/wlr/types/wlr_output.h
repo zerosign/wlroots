@@ -45,6 +45,8 @@ struct wlr_output_cursor {
 	int32_t hotspot_x, hotspot_y;
 	struct wlr_texture *texture;
 	bool own_texture;
+	struct wlr_drm_syncobj_timeline *wait_timeline;
+	uint64_t wait_point;
 	struct wl_listener renderer_destroy;
 	struct wl_list link;
 };

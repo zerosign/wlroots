@@ -7,6 +7,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_pointer.h>
@@ -534,7 +535,7 @@ static void cursor_output_cursor_update(struct wlr_cursor_output_cursor *output_
 
 		output_cursor_set_texture(output_cursor->output_cursor, texture, true,
 			&src_box, dst_width, dst_height, WL_OUTPUT_TRANSFORM_NORMAL,
-			hotspot_x, hotspot_y);
+			hotspot_x, hotspot_y, NULL, 0);
 	} else if (cur->state->surface != NULL) {
 		struct wlr_surface *surface = cur->state->surface;
 
@@ -547,9 +548,24 @@ static void cursor_output_cursor_update(struct wlr_cursor_output_cursor *output_
 		int dst_width = surface->current.width;
 		int dst_height = surface->current.height;
 
+		struct wlr_linux_drm_syncobj_surface_v1_state *syncobj_surface_state =
+			wlr_linux_drm_syncobj_v1_get_surface_state(surface);
+		struct wlr_drm_syncobj_timeline *wait_timeline = NULL;
+		uint64_t wait_point = 0;
+		if (syncobj_surface_state != NULL) {
+			wait_timeline = syncobj_surface_state->acquire_timeline;
+			wait_point = syncobj_surface_state->acquire_point;
+		}
+
 		output_cursor_set_texture(output_cursor->output_cursor, texture, false,
 			&src_box, dst_width, dst_height, surface->current.transform,
-			hotspot_x, hotspot_y);
+			hotspot_x, hotspot_y, wait_timeline, wait_point);
+
+		if (syncobj_surface_state != NULL && surface->buffer != NULL &&
+				(surface->current.committed & WLR_SURFACE_STATE_BUFFER)) {
+			wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer(syncobj_surface_state,
+				&surface->buffer->base);
+		}
 
 		if (output_cursor->output_cursor->visible) {
 			wlr_surface_send_enter(surface, output);
