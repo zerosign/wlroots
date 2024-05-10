@@ -412,7 +412,7 @@ static struct wlr_drm_layer *get_or_create_layer(struct wlr_drm_backend *drm,
 	abort(); // unreachable
 #endif
 
-	layer->candidate_planes = calloc(sizeof(bool), drm->num_planes);
+	layer->candidate_planes = calloc(drm->num_planes, sizeof(layer->candidate_planes[0]));
 	if (layer->candidate_planes == NULL) {
 #if HAVE_LIBLIFTOFF
 		liftoff_layer_destroy(layer->liftoff);
