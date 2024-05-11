@@ -57,7 +57,9 @@ wlroots reads these environment variables
 * *WLR_SCENE_DISABLE_DIRECT_SCANOUT*: disables direct scan-out for debugging.
 * *WLR_SCENE_DISABLE_VISIBILITY*: If set to 1, the visibility of all scene nodes
   will be considered to be the full node. Intelligent visibility canculations will
-  be disabled.
+  be disabled. Note that direct scanout will not work for most cases when this
+  option is set as surfaces that don't contribute to the rendered output will now
+  bail direct scanout (desktop background / black rect underneath).
 * *WLR_SCENE_HIGHLIGHT_TRANSPARENT_REGION*: Highlights regions of scene buffers
   that are advertised as transparent through wlr_scene_buffer_set_opaque_region().
   This can be used to debug issues with clients advertizing bogus opaque regions
