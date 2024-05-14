@@ -187,9 +187,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 	size_t idx = 0;
 	uint32_t render_wait_len = 0;
 	wl_list_for_each_safe(texture, tmp_tex, &renderer->foreign_textures, foreign_link) {
-		VkImageLayout src_layout = VK_IMAGE_LAYOUT_GENERAL;
 		if (!texture->transitioned) {
-			src_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 			texture->transitioned = true;
 		}
 
@@ -199,7 +197,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT,
 			.dstQueueFamilyIndex = renderer->dev->queue_family,
 			.image = texture->image,
-			.oldLayout = src_layout,
+			.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			.srcAccessMask = 0, // ignored anyways
 			.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
