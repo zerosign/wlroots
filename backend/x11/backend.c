@@ -613,7 +613,8 @@ struct wlr_backend *wlr_x11_backend_create(struct wl_event_loop *loop,
 		x11->drm_fd = query_dri3_drm_fd(x11);
 		if (x11->drm_fd < 0) {
 			wlr_log(WLR_ERROR, "Failed to query DRI3 DRM FD");
-			goto error_event;
+			wlr_log(WLR_INFO, "Disabling DMA-BUF support");
+			x11->have_dri3 = false;
 		}
 	}
 
