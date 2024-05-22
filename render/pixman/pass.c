@@ -70,14 +70,14 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		});
 	}
 
-	// Rotate the final destination size into source coordinates
-	struct wlr_box orig_box;
-	wlr_box_transform(&orig_box, &dst_box, options->transform,
+	// Rotate the source size into destination coordinates
+	struct wlr_box src_box_transformed;
+	wlr_box_transform(&src_box_transformed, &src_box, options->transform,
 		buffer->buffer->width, buffer->buffer->height);
 
 	if (options->transform != WL_OUTPUT_TRANSFORM_NORMAL ||
-			orig_box.width != src_box.width ||
-			orig_box.height != src_box.height) {
+			src_box_transformed.width != dst_box.width ||
+			src_box_transformed.height != dst_box.height) {
 		// Cosinus/sinus values are extact integers for enum wl_output_transform entries
 		int tr_cos = 1, tr_sin = 0, tr_x = 0, tr_y = 0;
 		switch (options->transform) {
@@ -123,10 +123,10 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 
 		// Apply scaling to get to the dst_box size.  Because the scaling is applied last
 		// it depends on the whether the rotation swapped width and height, which is why
-		// we use orig_box instead of dst_box.
+		// we use src_box_transformed instead of src_box.
 		pixman_transform_scale(&transform, NULL,
-			pixman_double_to_fixed(src_box.width / (double)orig_box.width),
-			pixman_double_to_fixed(src_box.height / (double)orig_box.height));
+			pixman_double_to_fixed(src_box_transformed.width / (double)dst_box.width),
+			pixman_double_to_fixed(src_box_transformed.height / (double)dst_box.height));
 
 		// pixman rotates about the origin which again leaves everything outside of the
 		// viewport.  Translate the result so that its new top-left corner is back at the
