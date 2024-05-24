@@ -1830,8 +1830,12 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	output_state_apply_damage(&render_data, state);
 
-	// don't enter direct scanout if we're using the highlight debug option
-	bool scanout = list_len == 1 && debug_damage != WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT &&
+	// We only want to try direct scanout if:
+	// - There is only one entry in the render list
+	// - There are no color transforms that need to be applied
+	// - Damage highlight debugging is not enabled
+	bool scanout = options->color_transform == NULL &&
+		list_len == 1 && debug_damage != WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT &&
 		scene_entry_try_direct_scanout(&list_data[0], state, &render_data);
 
 	if (scene_output->prev_scanout != scanout) {
