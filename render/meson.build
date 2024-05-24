@@ -46,4 +46,6 @@ if lcms2.found()
 	wlr_deps += lcms2
 	wlr_files += files('color_lcms2.c')
 	features += { 'color-management': true }
+else
+	wlr_files += files('color_fallback.c')
 endif
