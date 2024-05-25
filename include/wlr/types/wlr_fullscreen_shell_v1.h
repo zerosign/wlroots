@@ -1,7 +1,8 @@
 /*
- * This an unstable interface of wlroots. No guarantees are made regarding the
- * future consistency of this API.
+ * This is a deprecated interface of wlroots. It will be removed in a future
+ * version.
  */
+
 #ifndef WLR_USE_UNSTABLE
 #error "Add -DWLR_USE_UNSTABLE to enable unstable wlroots features"
 #endif
