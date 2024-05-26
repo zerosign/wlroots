@@ -89,11 +89,8 @@ static void handle_keyboard_keymap(struct wl_listener *listener, void *data) {
 	struct wlr_seat_keyboard_state *state =
 		wl_container_of(listener, state, keyboard_keymap);
 	struct wlr_seat_client *client;
-	struct wlr_keyboard *keyboard = data;
-	if (keyboard == state->keyboard) {
-		wl_list_for_each(client, &state->seat->clients, link) {
-			seat_client_send_keymap(client, state->keyboard);
-		}
+	wl_list_for_each(client, &state->seat->clients, link) {
+		seat_client_send_keymap(client, state->keyboard);
 	}
 }
 
