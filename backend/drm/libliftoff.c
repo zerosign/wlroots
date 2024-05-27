@@ -7,6 +7,7 @@
 
 #include "backend/drm/drm.h"
 #include "backend/drm/iface.h"
+#include "config.h"
 
 static bool init(struct wlr_drm_backend *drm) {
 	// TODO: lower log level
@@ -436,7 +437,11 @@ static bool crtc_commit(struct wlr_drm_connector *conn,
 		goto out;
 	}
 
+#if HAVE_LIBLIFTOFF_0_5
+	int ret = liftoff_output_apply(crtc->liftoff, req, flags, NULL);
+#else
 	int ret = liftoff_output_apply(crtc->liftoff, req, flags);
+#endif
 	if (ret != 0) {
 		wlr_drm_conn_log(conn, test_only ? WLR_DEBUG : WLR_ERROR,
 			"liftoff_output_apply failed: %s", strerror(-ret));
