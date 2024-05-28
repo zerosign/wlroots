@@ -194,7 +194,7 @@ wlroots = declare_dependency(
 	variables: wlr_vars,
 )
 
-meson.override_dependency('wlroots', wlroots)
+meson.override_dependency(versioned_name, wlroots)
 
 summary(features + internal_features, bool_yn: true)
 
