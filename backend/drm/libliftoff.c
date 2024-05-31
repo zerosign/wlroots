@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <libliftoff.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -10,9 +11,28 @@
 #include "backend/drm/iface.h"
 #include "config.h"
 
+static void log_handler(enum liftoff_log_priority priority, const char *fmt, va_list args) {
+	enum wlr_log_importance importance;
+	switch (priority) {
+	case LIFTOFF_SILENT:
+		importance = WLR_SILENT;
+		break;
+	case LIFTOFF_ERROR:
+		importance = WLR_ERROR;
+		break;
+	case LIFTOFF_DEBUG:
+		importance = WLR_DEBUG;
+		break;
+	}
+	char buf[1024];
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	_wlr_log(importance, "[libliftoff] %s", buf);
+}
+
 static bool init(struct wlr_drm_backend *drm) {
 	// TODO: lower log level
 	liftoff_log_set_priority(LIFTOFF_DEBUG);
+	liftoff_log_set_handler(log_handler);
 
 	int drm_fd = fcntl(drm->fd, F_DUPFD_CLOEXEC, 0);
 	if (drm_fd < 0) {
