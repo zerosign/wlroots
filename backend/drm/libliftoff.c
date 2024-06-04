@@ -12,7 +12,7 @@
 #include "config.h"
 
 static void log_handler(enum liftoff_log_priority priority, const char *fmt, va_list args) {
-	enum wlr_log_importance importance;
+	enum wlr_log_importance importance = WLR_SILENT;
 	switch (priority) {
 	case LIFTOFF_SILENT:
 		importance = WLR_SILENT;
