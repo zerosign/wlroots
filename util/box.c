@@ -15,17 +15,10 @@ void wlr_box_closest_point(const struct wlr_box *box, double x, double y,
 
 	// Note: the width and height of the box are exclusive; that is,
 	// for a 100x100 box at (0,0), the point (99,99) is inside it
-	// while the point (100,100) is outside it.
-	//
-	// Mathematically, there exists no single closest point to the
-	// bottom-right corner of the box while remaining inside it. You
-	// can construct an infinite series approaching the limit, such
-	// as {(99,99), (99.9,99.9), (99.99,99.99)...}, but since the
-	// intervals are half-open, there is no "last" point.
-	//
-	// This function must therefore define an arbitrary "closest"
-	// point. For simplicity and consistency, this is defined to be
-	// (box.x + width - 1, box.y + height - 1).
+	// while the point (100,100) is outside it. nextafter(3) is used
+	// to find the point within the box closest to the bottom-right
+	// corner such that its coordinates can be stored as float64
+	// numbers.
 	//
 	// (The previous implementation was non-linear: with the example
 	// 100x100 box, it would return an input point of (99.9,99.9)
@@ -35,8 +28,8 @@ void wlr_box_closest_point(const struct wlr_box *box, double x, double y,
 	// find the closest x point
 	if (x < box->x) {
 		*dest_x = box->x;
-	} else if (x > box->x + box->width - 1) {
-		*dest_x = box->x + box->width - 1;
+	} else if (x >= box->x + box->width) {
+		*dest_x = nextafter(box->x + box->width, -INFINITY);
 	} else {
 		*dest_x = x;
 	}
@@ -44,8 +37,8 @@ void wlr_box_closest_point(const struct wlr_box *box, double x, double y,
 	// find closest y point
 	if (y < box->y) {
 		*dest_y = box->y;
-	} else if (y > box->y + box->height - 1) {
-		*dest_y = box->y + box->height - 1;
+	} else if (y >= box->y + box->height) {
+		*dest_y = nextafter(box->y + box->height, -INFINITY);
 	} else {
 		*dest_y = y;
 	}
