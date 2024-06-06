@@ -99,6 +99,7 @@ features = {
 internal_features = {
 	'xcb-errors': false,
 	'egl': false,
+	'libliftoff': false,
 }
 internal_config = configuration_data()
 
