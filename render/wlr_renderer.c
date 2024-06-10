@@ -260,7 +260,14 @@ static struct wlr_renderer *renderer_autocreate(struct wlr_backend *backend, int
 	}
 
 	if ((is_auto && !has_render_node(backend)) || strcmp(renderer_name, "pixman") == 0) {
-		renderer = wlr_pixman_renderer_create();
+		if (open_preferred_drm_fd(backend, &drm_fd, &own_drm_fd)) {
+			wlr_log(WLR_DEBUG, "Creating pixman renderer with DRM FD %d", drm_fd);
+			renderer = wlr_pixman_renderer_create_with_drm_fd(drm_fd);
+		} else {
+			wlr_log(WLR_DEBUG, "Creating pixman renderer without DRM");
+			renderer = wlr_pixman_renderer_create();
+		}
+
 		if (renderer) {
 			goto out;
 		} else {

@@ -13,7 +13,7 @@
 #include <wlr/render/wlr_renderer.h>
 
 struct wlr_renderer *wlr_pixman_renderer_create(void);
-
+struct wlr_renderer *wlr_pixman_renderer_create_with_drm_fd(int drm_fd);
 bool wlr_renderer_is_pixman(struct wlr_renderer *wlr_renderer);
 bool wlr_texture_is_pixman(struct wlr_texture *texture);
 
