@@ -187,4 +187,11 @@ struct wlr_surface *wlr_layer_surface_v1_popup_surface_at(
 struct wlr_layer_surface_v1 *wlr_layer_surface_v1_from_resource(
 		struct wl_resource *resource);
 
+/**
+ * Get the edge the exclusive zone must be applied to.
+ *
+ * Returns 0 if the exclusive zone is nonpositive or must not be applied.
+ */
+uint32_t wlr_layer_surface_v1_get_exclusive_edge(struct wlr_layer_surface_v1 *surface);
+
 #endif

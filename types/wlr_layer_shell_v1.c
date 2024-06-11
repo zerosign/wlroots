@@ -654,3 +654,31 @@ struct wlr_surface *wlr_layer_surface_v1_popup_surface_at(
 
 	return NULL;
 }
+
+uint32_t wlr_layer_surface_v1_get_exclusive_edge(struct wlr_layer_surface_v1 *surface) {
+	if (surface->current.exclusive_zone <= 0) {
+		return 0;
+	} else if (surface->current.exclusive_edge != 0) {
+		return surface->current.exclusive_edge;
+	}
+	switch (surface->current.anchor) {
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT |
+			ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
+		return ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT |
+			ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM:
+		return ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
+		return ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT;
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+		return ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
+	default:
+		return 0;
+	}
+}
