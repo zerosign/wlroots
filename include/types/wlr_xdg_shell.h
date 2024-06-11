@@ -36,4 +36,9 @@ struct wlr_xdg_toplevel_configure *send_xdg_toplevel_configure(
 void handle_xdg_toplevel_ack_configure(struct wlr_xdg_toplevel *toplevel,
 	struct wlr_xdg_toplevel_configure *configure);
 
+/**
+ * Returns true if a positioner is complete.
+ */
+bool wlr_xdg_positioner_is_complete(struct wlr_xdg_positioner *positioner);
+
 #endif
