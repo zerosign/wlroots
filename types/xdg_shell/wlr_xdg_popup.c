@@ -422,7 +422,6 @@ void create_xdg_popup(struct wlr_xdg_surface *surface,
 	if (parent) {
 		surface->popup->parent = parent->surface;
 		wl_list_insert(&parent->popups, &surface->popup->link);
-		wl_signal_emit_mutable(&parent->events.new_popup, surface->popup);
 	} else {
 		wl_list_init(&surface->popup->link);
 	}
@@ -430,6 +429,9 @@ void create_xdg_popup(struct wlr_xdg_surface *surface,
 	set_xdg_surface_role_object(surface, surface->popup->resource);
 
 	wl_signal_emit_mutable(&surface->client->shell->events.new_popup, surface->popup);
+	if (parent) {
+		wl_signal_emit_mutable(&parent->events.new_popup, surface->popup);
+	}
 
 	return;
 
