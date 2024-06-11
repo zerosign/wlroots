@@ -64,6 +64,11 @@ bool wlr_output_is_wl(struct wlr_output *output);
 void wlr_wl_output_set_title(struct wlr_output *output, const char *title);
 
 /**
+ * Sets the app_id of a struct wlr_output which is a Wayland toplevel.
+ */
+void wlr_wl_output_set_app_id(struct wlr_output *output, const char *app_id);
+
+/**
  * Returns the remote struct wl_surface used by the Wayland output.
  */
 struct wl_surface *wlr_wl_output_get_surface(struct wlr_output *output);

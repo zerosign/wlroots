@@ -281,6 +281,21 @@ static bool update_title(struct wlr_wl_output *output, const char *title) {
 	return true;
 }
 
+static bool update_app_id(struct wlr_wl_output *output, const char *app_id) {
+	if (app_id == NULL) {
+		app_id = "wlroots";
+	}
+
+	char *wl_app_id = strdup(app_id);
+	if (wl_app_id == NULL) {
+		return false;
+	}
+
+	free(output->app_id);
+	output->app_id = wl_app_id;
+	return true;
+}
+
 static bool output_test(struct wlr_output *wlr_output,
 		const struct wlr_output_state *state) {
 	struct wlr_wl_output *output =
@@ -579,7 +594,7 @@ static bool output_commit(struct wlr_output *wlr_output,
 		output->requested_width = output->requested_height = 0;
 	} else if (output->own_surface && pending_enabled && !output->initialized) {
 		xdg_toplevel_set_title(output->xdg_toplevel, output->title);
-		xdg_toplevel_set_app_id(output->xdg_toplevel, "wlroots");
+		xdg_toplevel_set_app_id(output->xdg_toplevel, output->app_id);
 		wl_surface_commit(output->surface);
 		output->initialized = true;
 
@@ -748,6 +763,7 @@ static void output_destroy(struct wlr_output *wlr_output) {
 	wl_display_flush(output->backend->remote_display);
 
 	free(output->title);
+	free(output->app_id);
 
 	free(output);
 }
@@ -952,6 +968,10 @@ struct wlr_output *wlr_wl_output_create(struct wlr_backend *wlr_backend) {
 		wlr_log_errno(WLR_ERROR, "Could not allocate xdg toplevel title");
 		goto error;
 	}
+	if (!update_app_id(output, NULL)) {
+		wlr_log_errno(WLR_ERROR, "Could not allocate xdg toplevel app_id");
+		goto error;
+	}
 
 	xdg_surface_add_listener(output->xdg_surface,
 			&xdg_surface_listener, output);
@@ -997,6 +1017,16 @@ void wlr_wl_output_set_title(struct wlr_output *output, const char *title) {
 
 	if (update_title(wl_output, title) && wl_output->initialized) {
 		xdg_toplevel_set_title(wl_output->xdg_toplevel, wl_output->title);
+		wl_display_flush(wl_output->backend->remote_display);
+	}
+}
+
+void wlr_wl_output_set_app_id(struct wlr_output *output, const char *app_id) {
+	struct wlr_wl_output *wl_output = get_wl_output_from_output(output);
+	assert(wl_output->xdg_toplevel != NULL);
+
+	if (update_app_id(wl_output, app_id) && wl_output->initialized) {
+		xdg_toplevel_set_app_id(wl_output->xdg_toplevel, wl_output->app_id);
 		wl_display_flush(wl_output->backend->remote_display);
 	}
 }
