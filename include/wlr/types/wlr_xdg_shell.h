@@ -447,6 +447,11 @@ void wlr_xdg_popup_get_position(struct wlr_xdg_popup *popup,
 		double *popup_sx, double *popup_sy);
 
 /**
+ * Returns true if a positioner is complete.
+ */
+bool wlr_xdg_positioner_is_complete(struct wlr_xdg_positioner *positioner);
+
+/**
  * Get the geometry based on positioner rules.
  */
 void wlr_xdg_positioner_rules_get_geometry(
