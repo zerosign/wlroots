@@ -11,7 +11,7 @@
 
 // Note: zwlr_layer_surface_v1 becomes inert on wlr_layer_surface_v1_destroy()
 
-#define LAYER_SHELL_VERSION 4
+#define LAYER_SHELL_VERSION 5
 
 static void resource_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
@@ -264,6 +264,7 @@ static void layer_surface_set_layer(struct wl_client *client,
 		return;
 	}
 	if (layer > ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY) {
+		// XXX: this sends a zwlr_layer_shell_v1 error to a zwlr_layer_surface_v1 object
 		wl_resource_post_error(surface->resource,
 				ZWLR_LAYER_SHELL_V1_ERROR_INVALID_LAYER,
 				"Invalid layer %" PRIu32, layer);
@@ -278,6 +279,31 @@ static void layer_surface_set_layer(struct wl_client *client,
 	surface->pending.layer = layer;
 }
 
+static void layer_surface_set_exclusive_edge(struct wl_client *client,
+		struct wl_resource *surface_resource, uint32_t edge) {
+	struct wlr_layer_surface_v1 *surface =
+		wlr_layer_surface_v1_from_resource(surface_resource);
+	if (!surface) {
+		return;
+	}
+	switch (edge) {
+	case 0:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
+	case ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+		break;
+	default:
+		wl_resource_post_error(surface->resource,
+				ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_EXCLUSIVE_EDGE,
+				"invalid exclusive edge %" PRIu32, edge);
+		return;
+	}
+
+	surface->pending.committed |= WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_EDGE;
+	surface->pending.exclusive_edge = edge;
+}
+
 static const struct zwlr_layer_surface_v1_interface layer_surface_implementation = {
 	.destroy = resource_handle_destroy,
 	.ack_configure = layer_surface_handle_ack_configure,
@@ -288,6 +314,7 @@ static const struct zwlr_layer_surface_v1_interface layer_surface_implementation
 	.set_keyboard_interactivity = layer_surface_handle_set_keyboard_interactivity,
 	.get_popup = layer_surface_handle_get_popup,
 	.set_layer = layer_surface_set_layer,
+	.set_exclusive_edge = layer_surface_set_exclusive_edge,
 };
 
 uint32_t wlr_layer_surface_v1_configure(struct wlr_layer_surface_v1 *surface,
@@ -336,10 +363,11 @@ static void layer_surface_role_client_commit(struct wlr_surface *wlr_surface) {
 		return;
 	}
 
+	uint32_t anchor = surface->pending.anchor;
+
 	const uint32_t horiz = ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
 		ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
-	if (surface->pending.desired_width == 0 &&
-			(surface->pending.anchor & horiz) != horiz) {
+	if (surface->pending.desired_width == 0 && (anchor & horiz) != horiz) {
 		wlr_surface_reject_pending(wlr_surface, surface->resource,
 			ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SIZE,
 			"width 0 requested without setting left and right anchors");
@@ -348,12 +376,17 @@ static void layer_surface_role_client_commit(struct wlr_surface *wlr_surface) {
 
 	const uint32_t vert = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
 		ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
-	if (surface->pending.desired_height == 0 &&
-			(surface->pending.anchor & vert) != vert) {
+	if (surface->pending.desired_height == 0 && (anchor & vert) != vert) {
 		wlr_surface_reject_pending(wlr_surface, surface->resource,
 			ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_SIZE,
 			"height 0 requested without setting top and bottom anchors");
 		return;
+	}
+
+	if ((anchor & surface->pending.exclusive_edge) != surface->pending.exclusive_edge) {
+		wlr_surface_reject_pending(wlr_surface, surface->resource,
+			ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_EXCLUSIVE_EDGE,
+			"exclusive edge is invalid given the surface anchors");
 	}
 }
 
