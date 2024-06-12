@@ -20,7 +20,7 @@ tinywl: tinywl.c xdg-shell-protocol.h
 		$(LIBS)
 
 clean:
-	rm -f tinywl xdg-shell-protocol.h xdg-shell-protocol.c
+	rm -f tinywl xdg-shell-protocol.h
 
 .DEFAULT_GOAL=tinywl
 .PHONY: clean
