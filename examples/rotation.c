@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <drm_fourcc.h>
 #include <getopt.h>
 #include <math.h>
@@ -118,6 +119,7 @@ static void new_output_notify(struct wl_listener *listener, void *data) {
 	wlr_output_init_render(output, sample->allocator, sample->renderer);
 
 	struct sample_output *sample_output = calloc(1, sizeof(*sample_output));
+	assert(sample_output);
 	sample_output->x_offs = sample_output->y_offs = 0;
 	sample_output->x_vel = sample_output->y_vel = 128;
 
@@ -186,7 +188,9 @@ static void new_input_notify(struct wl_listener *listener, void *data) {
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:;
 		struct sample_keyboard *keyboard = calloc(1, sizeof(*keyboard));
+		assert(keyboard);
 		keyboard->wlr_keyboard = wlr_keyboard_from_input_device(device);
+		assert(keyboard->wlr_keyboard);
 		keyboard->sample = sample;
 		wl_signal_add(&device->events.destroy, &keyboard->destroy);
 		keyboard->destroy.notify = keyboard_destroy_notify;

@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
@@ -145,6 +146,7 @@ static void handle_new_surface(struct wl_listener *listener, void *data) {
 	struct wlr_surface *wlr_surface = data;
 
 	struct surface *surface = calloc(1, sizeof(*surface));
+	assert(surface);
 	surface->wlr = wlr_surface;
 
 	surface->commit.notify = surface_handle_commit;

@@ -402,11 +402,11 @@ static ssize_t explicit_find_gpus(struct wlr_session *session,
 			break;
 		}
 
-		ret[i] = session_open_if_kms(session, ptr);
-		if (!ret[i]) {
-			wlr_log(WLR_ERROR, "Unable to open %s as DRM device", ptr);
+		struct wlr_device *dev = session_open_if_kms(session, ptr);
+		if (dev) {
+			ret[i++] = dev;
 		} else {
-			++i;
+			wlr_log(WLR_ERROR, "Unable to open %s as DRM device", ptr);
 		}
 	} while ((ptr = strtok_r(NULL, ":", &save)));
 

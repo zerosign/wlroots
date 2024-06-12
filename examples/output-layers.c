@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -166,6 +167,7 @@ static void server_handle_new_output(struct wl_listener *listener, void *data) {
 	wlr_output_init_render(wlr_output, server->allocator, server->renderer);
 
 	struct output *output = calloc(1, sizeof(*output));
+	assert(output);
 	output->wlr_output = wlr_output;
 	output->server = server;
 	wl_list_init(&output->surfaces);
@@ -247,6 +249,7 @@ static void server_handle_new_surface(struct wl_listener *listener,
 	struct output *output;
 	wl_list_for_each(output, &server->outputs, link) {
 		struct output_surface *output_surface = calloc(1, sizeof(*output_surface));
+		assert(output_surface);
 		output_surface->wlr_surface = wlr_surface;
 		output_surface->server = server;
 		output_surface->destroy.notify = output_surface_handle_destroy;
