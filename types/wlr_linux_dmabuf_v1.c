@@ -1,10 +1,13 @@
 #include <assert.h>
+#include "config.h"
 #include <drm_fourcc.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <poll.h>
+#if HAVE_LINUX_DMA_BUF_H
 #include <linux/dma-buf.h>
 #include <sys/ioctl.h>
+#endif
 #include <sys/mman.h>
 #include <unistd.h>
 #include <wlr/backend.h>
@@ -146,30 +149,39 @@ static bool buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
 		wlr_log(WLR_ERROR, "Fence poll failed: %s", strerror(errno));
 	}
 
+#if HAVE_LINUX_DMA_BUF_H
 	struct dma_buf_sync sync = {
 		.flags = DMA_BUF_SYNC_START,
 	};
-	int mmap_flags = 0;
 	if (flags & WLR_BUFFER_DATA_PTR_ACCESS_READ) {
-		mmap_flags |= PROT_READ;
 		sync.flags |= DMA_BUF_SYNC_READ;
 	}
 	if (flags & WLR_BUFFER_DATA_PTR_ACCESS_WRITE) {
-		mmap_flags |= PROT_WRITE;
 		sync.flags |= DMA_BUF_SYNC_WRITE;
+	}
+#endif
+
+	int mmap_flags = 0;
+	if (flags & WLR_BUFFER_DATA_PTR_ACCESS_READ) {
+		mmap_flags |= PROT_READ;
+	}
+	if (flags & WLR_BUFFER_DATA_PTR_ACCESS_WRITE) {
+		mmap_flags |= PROT_WRITE;
 	}
 
 	if (!buffer->addr) {
 		int size = *stride * buffer->attributes.height;
 		buffer->addr = mmap(NULL, size, mmap_flags,
 			MAP_SHARED, fd, buffer->attributes.offset[0]);
+		buffer->access_flags = flags;
 
+#if HAVE_LINUX_DMA_BUF_H
 		// dmabuf sync - this is for cache coherency
 		if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0) {
 			wlr_log(WLR_ERROR, "dmabuf sync start failed: %s",
 				strerror(errno));
 		}
-		buffer->access_flags = flags;
+#endif
 	}
 	if (buffer->addr == MAP_FAILED) {
 		wlr_log(WLR_ERROR, "Failed to map linux_dmabuf: %s",
@@ -186,6 +198,7 @@ static void buffer_end_data_ptr_access(struct wlr_buffer *wlr_buffer) {
 	struct wlr_dmabuf_v1_buffer *buffer =
 		dmabuf_v1_buffer_from_buffer(wlr_buffer);
 
+#if HAVE_LINUX_DMA_BUF_H
 	struct dma_buf_sync sync = {
 		.flags = DMA_BUF_SYNC_END,
 	};
@@ -198,6 +211,7 @@ static void buffer_end_data_ptr_access(struct wlr_buffer *wlr_buffer) {
 	if (ioctl(buffer->attributes.fd[0], DMA_BUF_IOCTL_SYNC, &sync) < 0) {
 		wlr_log(WLR_ERROR, "dmabuf sync end failed: %s", strerror(errno));
 	}
+#endif
 
 	int res = munmap(buffer->addr,
 		buffer->attributes.stride[0] * buffer->attributes.height);
