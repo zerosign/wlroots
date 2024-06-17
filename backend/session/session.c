@@ -448,6 +448,7 @@ ssize_t wlr_session_find_gpus(struct wlr_session *session,
 		size_t ret_len, struct wlr_device **ret) {
 	const char *explicit = getenv("WLR_DRM_DEVICES");
 	if (explicit) {
+		wlr_log(WLR_INFO, "Opening fixed list of KMS devices from WLR_DRM_DEVICES: %s", explicit);
 		return explicit_find_gpus(session, ret_len, ret, explicit);
 	}
 
