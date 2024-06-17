@@ -404,7 +404,7 @@ static ssize_t explicit_find_gpus(struct wlr_session *session,
 
 		ret[i] = session_open_if_kms(session, ptr);
 		if (!ret[i]) {
-			wlr_log(WLR_ERROR, "Unable to open %s as DRM device", ptr);
+			wlr_log(WLR_ERROR, "Unable to open %s as KMS device", ptr);
 		} else {
 			++i;
 		}
@@ -448,6 +448,7 @@ ssize_t wlr_session_find_gpus(struct wlr_session *session,
 		size_t ret_len, struct wlr_device **ret) {
 	const char *explicit = getenv("WLR_DRM_DEVICES");
 	if (explicit) {
+		wlr_log(WLR_INFO, "Opening fixed list of KMS devices from WLR_DRM_DEVICES: %s", explicit);
 		return explicit_find_gpus(session, ret_len, ret, explicit);
 	}
 
@@ -458,7 +459,7 @@ ssize_t wlr_session_find_gpus(struct wlr_session *session,
 
 	if (udev_enumerate_get_list_entry(en) == NULL) {
 		udev_enumerate_unref(en);
-		wlr_log(WLR_INFO, "Waiting for a DRM card device");
+		wlr_log(WLR_INFO, "Waiting for a KMS device");
 
 		struct find_gpus_add_handler handler = {0};
 		handler.listener.notify = find_gpus_handle_add;
@@ -469,7 +470,7 @@ ssize_t wlr_session_find_gpus(struct wlr_session *session,
 		while (!handler.added) {
 			int ret = wl_event_loop_dispatch(session->event_loop, (int)timeout);
 			if (ret < 0) {
-				wlr_log_errno(WLR_ERROR, "Failed to wait for DRM card device: "
+				wlr_log_errno(WLR_ERROR, "Failed to wait for KMS device: "
 					"wl_event_loop_dispatch failed");
 				udev_enumerate_unref(en);
 				return -1;
