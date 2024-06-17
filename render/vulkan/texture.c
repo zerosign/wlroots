@@ -60,15 +60,17 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 	size_t target_stride = layout.rowPitch;
 	size_t size = target_stride * texture->wlr_texture.height;
 
-	void *map;
-	res = vkMapMemory(dev, texture->memories[0], 0, size, 0, &map);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkMapMemory", res);
-		return false;
+	// Map the image memory if we haven't already
+	if (texture->cpu_mapping == NULL) {
+		res = vkMapMemory(dev, texture->memories[0], 0, size, 0, &texture->cpu_mapping);
+		if (res != VK_SUCCESS) {
+			wlr_vk_error("vkMapMemory", res);
+			return false;
+		}
 	}
 
 	// upload data
-	char *vmap = (char*)map;
+	char *vmap = texture->cpu_mapping;
 	for (int i = 0; i < rects_len; i++) {
 		pixman_box32_t rect = rects[i];
 		uint32_t width = rect.x2 - rect.x1;
@@ -93,8 +95,6 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 			}
 		}
 	}
-
-	vkUnmapMemory(dev, texture->memories[0]);
 
 	return true;
 }
@@ -129,6 +129,11 @@ void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
 	if (texture->buffer != NULL) {
 		wlr_addon_finish(&texture->buffer_addon);
 		texture->buffer = NULL;
+	}
+
+	if (texture->cpu_mapping) {
+		vkUnmapMemory(texture->renderer->dev->dev, texture->memories[0]);
+		texture->cpu_mapping = NULL;
 	}
 
 	// when we recorded a command to fill this image _this_ frame,

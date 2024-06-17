@@ -452,6 +452,8 @@ struct wlr_vk_texture {
 	struct wlr_addon buffer_addon;
 	// For DMA-BUF implicit sync interop
 	VkSemaphore foreign_semaphores[WLR_DMABUF_MAX_PLANES];
+	// Active CPU mapping for writes, if any
+	void *cpu_mapping;
 
 	struct wl_list views; // struct wlr_vk_texture_ds.link
 };
