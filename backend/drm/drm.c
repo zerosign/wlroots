@@ -139,7 +139,7 @@ static bool init_plane(struct wlr_drm_backend *drm,
 		struct wlr_drm_plane *p, const drmModePlane *drm_plane) {
 	uint32_t id = drm_plane->plane_id;
 
-	union wlr_drm_plane_props props = {0};
+	struct wlr_drm_plane_props props = {0};
 	if (!get_drm_plane_props(drm->fd, id, &props)) {
 		return false;
 	}
