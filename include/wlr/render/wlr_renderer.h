@@ -47,6 +47,8 @@ struct wlr_renderer {
 		bool output_color_transform;
 	} features;
 
+	int drm_fd;
+
 	// private state
 
 	const struct wlr_renderer_impl *impl;

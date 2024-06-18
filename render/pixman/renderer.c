@@ -210,15 +210,6 @@ static const struct wlr_drm_format_set *pixman_get_render_formats(
 	return &renderer->drm_formats;
 }
 
-static int pixman_get_drm_fd(struct wlr_renderer *wlr_renderer) {
-	struct wlr_pixman_renderer *renderer = get_renderer(wlr_renderer);
-	if (renderer->drm_fd < 0) {
-		// No DRM FD set
-		return -1;
-	}
-	return renderer->drm_fd;
-}
-
 static struct wlr_pixman_texture *pixman_texture_create(
 		struct wlr_pixman_renderer *renderer, uint32_t drm_format,
 		uint32_t width, uint32_t height) {
@@ -304,10 +295,6 @@ static void pixman_destroy(struct wlr_renderer *wlr_renderer) {
 
 	wlr_drm_format_set_finish(&renderer->drm_formats);
 
-	if (renderer->drm_fd >= 0) {
-		close(renderer->drm_fd);
-	}
-
 	free(renderer);
 }
 
@@ -336,7 +323,6 @@ static const struct wlr_renderer_impl renderer_impl = {
 	.texture_from_buffer = pixman_texture_from_buffer,
 	.destroy = pixman_destroy,
 	.begin_buffer_pass = pixman_begin_buffer_pass,
-	.get_drm_fd = pixman_get_drm_fd,
 };
 
 struct wlr_renderer *wlr_pixman_renderer_create(void) {
@@ -351,8 +337,6 @@ struct wlr_renderer *wlr_pixman_renderer_create(void) {
 	wl_list_init(&renderer->buffers);
 	wl_list_init(&renderer->textures);
 
-	renderer->drm_fd = -1;
-
 	size_t len = 0;
 	const uint32_t *formats = get_pixman_drm_formats(&len);
 
@@ -365,16 +349,6 @@ struct wlr_renderer *wlr_pixman_renderer_create(void) {
 	}
 
 	return &renderer->wlr_renderer;
-}
-
-struct wlr_renderer *wlr_pixman_renderer_create_with_drm_fd(int drm_fd)
-{
-	struct wlr_renderer *renderer = wlr_pixman_renderer_create();
-	if (renderer) {
-		struct wlr_pixman_renderer *pixman_renderer = get_renderer(renderer);
-		pixman_renderer->drm_fd = drm_fd;
-	}
-	return renderer;
 }
 
 pixman_image_t *wlr_pixman_renderer_get_buffer_image(

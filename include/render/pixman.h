@@ -20,7 +20,6 @@ struct wlr_pixman_renderer {
 	struct wl_list buffers; // wlr_pixman_buffer.link
 	struct wl_list textures; // wlr_pixman_texture.link
 
-	int drm_fd;
 	struct wlr_drm_format_set drm_formats;
 };
 
