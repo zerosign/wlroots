@@ -585,8 +585,8 @@ static bool output_commit(struct wlr_output *wlr_output,
 
 		wl_display_flush(output->backend->remote_display);
 		while (!output->configured) {
-			if (wl_event_loop_dispatch(output->backend->event_loop, -1) == -1) {
-				wlr_log(WLR_ERROR, "wl_event_loop_dispatch() failed");
+			if (wl_display_dispatch(output->backend->remote_display) == -1) {
+				wlr_log(WLR_ERROR, "wl_display_dispatch() failed");
 				return false;
 			}
 		}
