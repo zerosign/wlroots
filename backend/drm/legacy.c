@@ -110,7 +110,7 @@ static bool legacy_crtc_commit(const struct wlr_drm_connector_state *state,
 	}
 
 	if (state->base->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
-		if (state->base->adaptive_sync_enabled && !drm_connector_supports_vrr(conn)) {
+		if (state->base->adaptive_sync_enabled && !output->adaptive_sync_supported) {
 			return false;
 		}
 		if (crtc->props.vrr_enabled != 0 &&
