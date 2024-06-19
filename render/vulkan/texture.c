@@ -80,19 +80,19 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		return false;
 	}
 
-	void *vmap;
-	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
-		bsize, 0, &vmap);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkMapMemory", res);
-		free(copies);
-		return false;
+	if (!span.buffer->cpu_mapping) {
+		res = vkMapMemory(dev, span.buffer->memory, 0, VK_WHOLE_SIZE, 0, &span.buffer->cpu_mapping);
+		if (res != VK_SUCCESS) {
+			wlr_vk_error("vkMapMemory", res);
+			free(copies);
+			return false;
+		}
 	}
-	char *map = (char *)vmap;
+	char *map = (char*)span.buffer->cpu_mapping + span.alloc.start;
 
 	// upload data
 
-	uint32_t buf_off = span.alloc.start + (map - (char *)vmap);
+	uint32_t buf_off = span.alloc.start;
 	for (int i = 0; i < rects_len; i++) {
 		pixman_box32_t rect = rects[i];
 		uint32_t width = rect.x2 - rect.x1;
@@ -136,9 +136,6 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 
 		buf_off += height * packed_stride;
 	}
-
-	assert((uint32_t)(map - (char *)vmap) == bsize);
-	vkUnmapMemory(dev, span.buffer->memory);
 
 	// record staging cb
 	// will be executed before next frame

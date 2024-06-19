@@ -187,6 +187,10 @@ static void shared_buffer_destroy(struct wlr_vk_renderer *r,
 	if (buffer->memory) {
 		vkFreeMemory(r->dev->dev, buffer->memory, NULL);
 	}
+	if (buffer->cpu_mapping) {
+		vkUnmapMemory(r->dev->dev, buffer->memory);
+		buffer->cpu_mapping = NULL;
+	}
 
 	wl_list_remove(&buffer->link);
 	free(buffer);
