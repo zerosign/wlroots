@@ -404,6 +404,7 @@ static void handle_pad_added(void *data,
 	struct wlr_wl_seat *seat = data;
 	if (seat->zwp_tablet_pad_v2 != NULL) {
 		wlr_log(WLR_ERROR, "zwp_tablet_pad_v2 is already present");
+		zwp_tablet_pad_v2_destroy(zwp_tablet_pad_v2);
 		return;
 	}
 
@@ -779,6 +780,7 @@ static void handle_tool_added(void *data,
 	struct wlr_wl_seat *seat = data;
 	if (seat->zwp_tablet_tool_v2 != NULL) {
 		wlr_log(WLR_ERROR, "zwp_tablet_tool_v2 already present");
+		zwp_tablet_tool_v2_destroy(zwp_tablet_tool_v2);
 		return;
 	}
 
@@ -860,6 +862,7 @@ static void handle_tab_added(void *data,
 	struct wlr_wl_seat *seat = data;
 	if (seat->zwp_tablet_v2 != NULL) {
 		wlr_log(WLR_ERROR, "zwp_tablet_v2 already present");
+		zwp_tablet_v2_destroy(zwp_tablet_v2);
 		return;
 	}
 
