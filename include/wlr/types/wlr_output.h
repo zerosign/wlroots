@@ -150,6 +150,11 @@ struct wlr_output {
 	enum wlr_output_adaptive_sync_status adaptive_sync_status;
 	uint32_t render_format;
 
+	// Indicates whether making changes to adaptive sync status is supported.
+	// If false, changes to adaptive sync status is guaranteed to fail. If
+	// true, changes may either succeed or fail.
+	bool adaptive_sync_supported;
+
 	bool needs_frame;
 	// damage for cursors and fullscreen surface, in output-local coordinates
 	bool frame_pending;

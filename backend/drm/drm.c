@@ -721,32 +721,6 @@ static bool drm_connector_set_pending_layer_fbs(struct wlr_drm_connector *conn,
 
 static bool drm_connector_alloc_crtc(struct wlr_drm_connector *conn);
 
-bool drm_connector_supports_vrr(struct wlr_drm_connector *conn) {
-	struct wlr_drm_backend *drm = conn->backend;
-
-	struct wlr_drm_crtc *crtc = conn->crtc;
-	if (!crtc) {
-		return false;
-	}
-
-	uint64_t vrr_capable;
-	if (conn->props.vrr_capable == 0 ||
-			!get_drm_prop(drm->fd, conn->id, conn->props.vrr_capable,
-			&vrr_capable) || !vrr_capable) {
-		wlr_drm_conn_log(conn, WLR_DEBUG, "Failed to enable adaptive sync: "
-			"connector doesn't support VRR");
-		return false;
-	}
-
-	if (crtc->props.vrr_enabled == 0) {
-		wlr_drm_conn_log(conn, WLR_DEBUG, "Failed to enable adaptive sync: "
-			"CRTC %"PRIu32" doesn't support VRR", crtc->id);
-		return false;
-	}
-
-	return true;
-}
-
 static bool drm_connector_prepare(struct wlr_drm_connector_state *conn_state, bool test_only) {
 	const struct wlr_output_state *state = conn_state->base;
 	struct wlr_drm_connector *conn = conn_state->connector;
@@ -770,7 +744,9 @@ static bool drm_connector_prepare(struct wlr_drm_connector_state *conn_state, bo
 
 	if ((state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) &&
 			state->adaptive_sync_enabled &&
-			!drm_connector_supports_vrr(conn)) {
+			!output->adaptive_sync_supported) {
+		wlr_drm_conn_log(conn, WLR_DEBUG,
+				"Can't enable adaptive sync: connector doesn't support VRR");
 		return false;
 	}
 
@@ -1585,6 +1561,12 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 			wlr_log(WLR_ERROR, "Failed to introspect 'max bpc' property");
 		}
 	}
+
+	uint64_t vrr_capable = 0;
+	if (wlr_conn->props.vrr_capable != 0) {
+		get_drm_prop(drm->fd, wlr_conn->id, wlr_conn->props.vrr_capable, &vrr_capable);
+	}
+	output->adaptive_sync_supported = vrr_capable;
 
 	size_t edid_len = 0;
 	uint8_t *edid = get_drm_prop_blob(drm->fd,
