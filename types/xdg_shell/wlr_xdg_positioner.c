@@ -203,6 +203,11 @@ static uint32_t xdg_positioner_gravity_to_wlr_edges(
 	return xdg_positioner_anchor_to_wlr_edges((enum xdg_positioner_anchor)gravity);
 }
 
+bool wlr_xdg_positioner_is_complete(struct wlr_xdg_positioner *positioner) {
+	struct wlr_xdg_positioner_rules *rules = &positioner->rules;
+	return rules->size.width > 0 && rules->anchor_rect.width > 0;
+}
+
 void wlr_xdg_positioner_rules_get_geometry(
 		const struct wlr_xdg_positioner_rules *rules, struct wlr_box *box) {
 	box->x = rules->offset.x;

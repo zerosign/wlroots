@@ -129,7 +129,7 @@ void handle_x11_xinput_event(struct wlr_x11_backend *x11,
 		}
 
 		wlr_keyboard_notify_modifiers(&x11->keyboard, ev->mods.base,
-			ev->mods.latched, ev->mods.locked, ev->mods.effective);
+			ev->mods.latched, ev->mods.locked, ev->group.effective);
 		send_key_event(x11, ev->detail - 8, WL_KEYBOARD_KEY_STATE_PRESSED, ev->time);
 		x11->time = ev->time;
 		break;
@@ -139,7 +139,7 @@ void handle_x11_xinput_event(struct wlr_x11_backend *x11,
 			(xcb_input_key_release_event_t *)event;
 
 		wlr_keyboard_notify_modifiers(&x11->keyboard, ev->mods.base,
-			ev->mods.latched, ev->mods.locked, ev->mods.effective);
+			ev->mods.latched, ev->mods.locked, ev->group.effective);
 		send_key_event(x11, ev->detail - 8, WL_KEYBOARD_KEY_STATE_RELEASED, ev->time);
 		x11->time = ev->time;
 		break;

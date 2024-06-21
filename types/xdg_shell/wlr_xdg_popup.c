@@ -323,8 +323,13 @@ static void xdg_popup_handle_reposition(
 		return;
 	}
 
-	struct wlr_xdg_positioner *positioner =
-		wlr_xdg_positioner_from_resource(positioner_resource);
+	struct wlr_xdg_positioner *positioner = wlr_xdg_positioner_from_resource(positioner_resource);
+	if (!wlr_xdg_positioner_is_complete(positioner)) {
+		wl_resource_post_error(popup->base->client->resource,
+			XDG_WM_BASE_ERROR_INVALID_POSITIONER, "positioner object is not complete");
+		return;
+	}
+
 	wlr_xdg_positioner_rules_get_geometry(
 		&positioner->rules, &popup->scheduled.geometry);
 	popup->scheduled.rules = positioner->rules;
@@ -367,14 +372,11 @@ static void xdg_popup_handle_resource_destroy(struct wl_resource *resource) {
 	wlr_xdg_popup_destroy(popup);
 }
 
-void create_xdg_popup(struct wlr_xdg_surface *surface,
-		struct wlr_xdg_surface *parent,
+void create_xdg_popup(struct wlr_xdg_surface *surface, struct wlr_xdg_surface *parent,
 		struct wlr_xdg_positioner *positioner, uint32_t id) {
-	if (positioner->rules.size.width == 0 ||
-			positioner->rules.anchor_rect.width == 0) {
+	if (!wlr_xdg_positioner_is_complete(positioner)) {
 		wl_resource_post_error(surface->client->resource,
-			XDG_WM_BASE_ERROR_INVALID_POSITIONER,
-			"positioner object is not complete");
+			XDG_WM_BASE_ERROR_INVALID_POSITIONER, "positioner object is not complete");
 		return;
 	}
 
@@ -420,12 +422,15 @@ void create_xdg_popup(struct wlr_xdg_surface *surface,
 	if (parent) {
 		surface->popup->parent = parent->surface;
 		wl_list_insert(&parent->popups, &surface->popup->link);
-		wl_signal_emit_mutable(&parent->events.new_popup, surface->popup);
 	} else {
 		wl_list_init(&surface->popup->link);
 	}
 
 	set_xdg_surface_role_object(surface, surface->popup->resource);
+
+	if (parent) {
+		wl_signal_emit_mutable(&parent->events.new_popup, surface->popup);
+	}
 }
 
 void reset_xdg_popup(struct wlr_xdg_popup *popup) {

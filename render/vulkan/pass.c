@@ -143,9 +143,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 	size_t idx = 0;
 	uint32_t render_wait_len = 0;
 	wl_list_for_each_safe(texture, tmp_tex, &renderer->foreign_textures, foreign_link) {
-		VkImageLayout src_layout = VK_IMAGE_LAYOUT_GENERAL;
 		if (!texture->transitioned) {
-			src_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 			texture->transitioned = true;
 		}
 
@@ -155,7 +153,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT,
 			.dstQueueFamilyIndex = renderer->dev->queue_family,
 			.image = texture->image,
-			.oldLayout = src_layout,
+			.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			.srcAccessMask = 0, // ignored anyways
 			.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
@@ -569,9 +567,6 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	wlr_render_texture_options_get_dst_box(options, &dst_box);
 	float alpha = wlr_render_texture_options_get_alpha(options);
 
-	pixman_region32_t clip;
-	get_clip_region(pass, options->clip, &clip);
-
 	float proj[9], matrix[9];
 	wlr_matrix_identity(proj);
 	wlr_matrix_project_box(matrix, &dst_box, options->transform, 0, proj);
@@ -624,6 +619,9 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 		VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(vert_pcr_data), sizeof(float),
 		&alpha);
 
+	pixman_region32_t clip;
+	get_clip_region(pass, options->clip, &clip);
+
 	int clip_rects_len;
 	const pixman_box32_t *clip_rects = pixman_region32_rectangles(&clip, &clip_rects_len);
 	for (int i = 0; i < clip_rects_len; i++) {
@@ -646,6 +644,8 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
 	}
 
 	texture->last_used_cb = pass->command_buffer;
+
+	pixman_region32_fini(&clip);
 }
 
 static const struct wlr_render_pass_impl render_pass_impl = {

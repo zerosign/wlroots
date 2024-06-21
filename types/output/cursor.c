@@ -34,6 +34,16 @@ static bool output_set_hardware_cursor(struct wlr_output *output,
 
 static void output_cursor_damage_whole(struct wlr_output_cursor *cursor);
 
+static void output_disable_hardware_cursor(struct wlr_output *output) {
+	if (output->hardware_cursor == NULL) {
+		return;
+	}
+
+	output_set_hardware_cursor(output, NULL, 0, 0);
+	output_cursor_damage_whole(output->hardware_cursor);
+	output->hardware_cursor = NULL;
+}
+
 void wlr_output_lock_software_cursors(struct wlr_output *output, bool lock) {
 	if (lock) {
 		++output->software_cursor_locks;
@@ -45,10 +55,8 @@ void wlr_output_lock_software_cursors(struct wlr_output *output, bool lock) {
 		lock ? "Disabling" : "Enabling", output->name,
 		output->software_cursor_locks);
 
-	if (output->software_cursor_locks > 0 && output->hardware_cursor != NULL) {
-		output_set_hardware_cursor(output, NULL, 0, 0);
-		output_cursor_damage_whole(output->hardware_cursor);
-		output->hardware_cursor = NULL;
+	if (output->software_cursor_locks > 0) {
+		output_disable_hardware_cursor(output);
 	}
 
 	// If it's possible to use hardware cursors again, don't switch immediately
@@ -359,6 +367,8 @@ static bool output_cursor_attempt_hardware(struct wlr_output_cursor *cursor) {
 		return false;
 	}
 
+	output->hardware_cursor = NULL;
+
 	struct wlr_texture *texture = cursor->texture;
 
 	// If the cursor was hidden or was a software cursor, the hardware
@@ -455,8 +465,8 @@ bool output_cursor_set_texture(struct wlr_output_cursor *cursor,
 		return true;
 	}
 
-	wlr_log(WLR_DEBUG, "Falling back to software cursor on output '%s'",
-		cursor->output->name);
+	wlr_log(WLR_DEBUG, "Falling back to software cursor on output '%s'", output->name);
+	output_disable_hardware_cursor(output);
 	output_cursor_damage_whole(cursor);
 	return true;
 }
@@ -512,8 +522,7 @@ void wlr_output_cursor_destroy(struct wlr_output_cursor *cursor) {
 	output_cursor_reset(cursor);
 	if (cursor->output->hardware_cursor == cursor) {
 		// If this cursor was the hardware cursor, disable it
-		output_set_hardware_cursor(cursor->output, NULL, 0, 0);
-		cursor->output->hardware_cursor = NULL;
+		output_disable_hardware_cursor(cursor->output);
 	}
 	if (cursor->own_texture) {
 		wlr_texture_destroy(cursor->texture);

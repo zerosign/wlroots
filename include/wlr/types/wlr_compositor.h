@@ -288,8 +288,9 @@ bool wlr_surface_has_buffer(struct wlr_surface *surface);
 struct wlr_texture *wlr_surface_get_texture(struct wlr_surface *surface);
 
 /**
- * Get the root of the subsurface tree for this surface. Can return NULL if
- * a surface in the tree has been destroyed.
+ * Get the root of the subsurface tree for this surface.
+ * May return the same surface passed if that surface is the root.
+ * Never returns NULL.
  */
 struct wlr_surface *wlr_surface_get_root_surface(struct wlr_surface *surface);
 

@@ -145,10 +145,13 @@ void wlr_input_popup_surface_v2_send_text_input_rectangle(
 		popup_surface->resource, sbox->x, sbox->y, sbox->width, sbox->height);
 }
 
-static void popup_surface_consider_map(struct wlr_input_popup_surface_v2 *popup_surface) {
-	if (wlr_surface_has_buffer(popup_surface->surface) &&
-			popup_surface->input_method->client_active) {
-		wlr_surface_map(popup_surface->surface);
+static void popup_surface_update_mapped(struct wlr_input_popup_surface_v2 *popup_surface) {
+	if (popup_surface->input_method->client_active) {
+		if (wlr_surface_has_buffer(popup_surface->surface)) {
+			wlr_surface_map(popup_surface->surface);
+		}
+	} else {
+		wlr_surface_unmap(popup_surface->surface);
 	}
 }
 
@@ -159,7 +162,7 @@ static void popup_surface_surface_role_commit(struct wlr_surface *surface) {
 		return;
 	}
 
-	popup_surface_consider_map(popup_surface);
+	popup_surface_update_mapped(popup_surface);
 }
 
 static void popup_surface_surface_role_destroy(struct wlr_surface *surface) {
@@ -245,7 +248,7 @@ static void im_get_input_popup_surface(struct wl_client *client,
 
 	wl_signal_init(&popup_surface->events.destroy);
 
-	popup_surface_consider_map(popup_surface);
+	popup_surface_update_mapped(popup_surface);
 
 	wl_list_insert(&input_method->popup_surfaces, &popup_surface->link);
 	wl_signal_emit_mutable(&input_method->events.new_popup_surface, popup_surface);
@@ -489,7 +492,7 @@ void wlr_input_method_v2_send_done(struct wlr_input_method_v2 *input_method) {
 	input_method->current_serial++;
 	struct wlr_input_popup_surface_v2 *popup_surface;
 	wl_list_for_each(popup_surface, &input_method->popup_surfaces, link) {
-		popup_surface_consider_map(popup_surface);
+		popup_surface_update_mapped(popup_surface);
 	}
 }
 

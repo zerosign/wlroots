@@ -791,7 +791,7 @@ void wlr_vk_texture_get_image_attribs(struct wlr_texture *texture,
 	attribs->image = vk_texture->image;
 	attribs->format = vk_texture->format->vk;
 	attribs->layout = vk_texture->transitioned ?
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
 }
 
 bool wlr_vk_texture_has_alpha(struct wlr_texture *texture) {
