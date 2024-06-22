@@ -38,131 +38,63 @@ static VkImageAspectFlagBits mem_plane_aspect(unsigned i) {
 // Will transition the texture to shaderReadOnlyOptimal layout for reading
 // from fragment shader later on
 static bool write_pixels(struct wlr_vk_texture *texture,
-		uint32_t stride, const pixman_region32_t *region, const void *vdata,
-		VkImageLayout old_layout, VkPipelineStageFlags src_stage,
-		VkAccessFlags src_access) {
+		uint32_t stride, const pixman_region32_t *region, const void *vdata) {
 	VkResult res;
-	struct wlr_vk_renderer *renderer = texture->renderer;
 	VkDevice dev = texture->renderer->dev->dev;
 
 	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(texture->format->drm);
 	assert(format_info);
 
-	uint32_t bsize = 0;
-
-	// deferred upload by transfer; using staging buffer
-	// calculate maximum side needed
 	int rects_len = 0;
 	const pixman_box32_t *rects = pixman_region32_rectangles(region, &rects_len);
-	for (int i = 0; i < rects_len; i++) {
-		pixman_box32_t rect = rects[i];
-		uint32_t width = rect.x2 - rect.x1;
-		uint32_t height = rect.y2 - rect.y1;
 
-		// make sure assumptions are met
-		assert((uint32_t)rect.x2 <= texture->wlr_texture.width);
-		assert((uint32_t)rect.y2 <= texture->wlr_texture.height);
+	// Get image layout
+	VkImageSubresource subresource = {
+		.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.mipLevel = 0,
+		.arrayLayer = 0,
+	};
+	VkSubresourceLayout layout;
+	vkGetImageSubresourceLayout(dev, texture->image, &subresource, &layout);
 
-		bsize += height * pixel_format_info_min_stride(format_info, width);
+	size_t target_stride = layout.rowPitch;
+	size_t size = target_stride * texture->wlr_texture.height;
+
+	// Map the image memory if we haven't already
+	if (texture->cpu_mapping == NULL) {
+		res = vkMapMemory(dev, texture->memories[0], 0, size, 0, &texture->cpu_mapping);
+		if (res != VK_SUCCESS) {
+			wlr_vk_error("vkMapMemory", res);
+			return false;
+		}
 	}
-
-	VkBufferImageCopy *copies = calloc((size_t)rects_len, sizeof(*copies));
-	if (!copies) {
-		wlr_log(WLR_ERROR, "Failed to allocate image copy parameters");
-		return false;
-	}
-
-	// get staging buffer
-	struct wlr_vk_buffer_span span = vulkan_get_stage_span(renderer, bsize, format_info->bytes_per_block);
-	if (!span.buffer || span.alloc.size != bsize) {
-		wlr_log(WLR_ERROR, "Failed to retrieve staging buffer");
-		free(copies);
-		return false;
-	}
-
-	void *vmap;
-	res = vkMapMemory(dev, span.buffer->memory, span.alloc.start,
-		bsize, 0, &vmap);
-	if (res != VK_SUCCESS) {
-		wlr_vk_error("vkMapMemory", res);
-		free(copies);
-		return false;
-	}
-	char *map = (char *)vmap;
 
 	// upload data
-
-	uint32_t buf_off = span.alloc.start + (map - (char *)vmap);
+	char *vmap = texture->cpu_mapping;
 	for (int i = 0; i < rects_len; i++) {
 		pixman_box32_t rect = rects[i];
 		uint32_t width = rect.x2 - rect.x1;
 		uint32_t height = rect.y2 - rect.y1;
 		uint32_t src_x = rect.x1;
 		uint32_t src_y = rect.y1;
-		uint32_t packed_stride = (uint32_t)pixel_format_info_min_stride(format_info, width);
+		uint32_t packed_width = width * format_info->bytes_per_block;
 
-		// write data into staging buffer span
-		const char *pdata = vdata; // data iterator
-		pdata += stride * src_y;
-		pdata += format_info->bytes_per_block * src_x;
-		if (src_x == 0 && width == texture->wlr_texture.width &&
-				stride == packed_stride) {
-			memcpy(map, pdata, packed_stride * height);
-			map += packed_stride * height;
+		char *src = (char*)vdata +
+			stride * src_y +
+			format_info->bytes_per_block * src_x;
+		char *dst = (char*)vmap +
+			target_stride * src_y +
+			format_info->bytes_per_block * src_x;
+		if (packed_width == stride && packed_width == target_stride) {
+			memcpy(dst, src, height * packed_width);
 		} else {
-			for (unsigned i = 0u; i < height; ++i) {
-				memcpy(map, pdata, packed_stride);
-				pdata += stride;
-				map += packed_stride;
+			for (unsigned i = 0; i < height; i++) {
+				memcpy(dst, src, packed_width);
+				src += stride;
+				dst += target_stride;
 			}
 		}
-
-		copies[i] = (VkBufferImageCopy) {
-			.imageExtent.width = width,
-			.imageExtent.height = height,
-			.imageExtent.depth = 1,
-			.imageOffset.x = src_x,
-			.imageOffset.y = src_y,
-			.imageOffset.z = 0,
-			.bufferOffset = buf_off,
-			.bufferRowLength = width,
-			.bufferImageHeight = height,
-			.imageSubresource.mipLevel = 0,
-			.imageSubresource.baseArrayLayer = 0,
-			.imageSubresource.layerCount = 1,
-			.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-		};
-
-
-		buf_off += height * packed_stride;
 	}
-
-	assert((uint32_t)(map - (char *)vmap) == bsize);
-	vkUnmapMemory(dev, span.buffer->memory);
-
-	// record staging cb
-	// will be executed before next frame
-	VkCommandBuffer cb = vulkan_record_stage_cb(renderer);
-	if (cb == VK_NULL_HANDLE) {
-		free(copies);
-		return false;
-	}
-
-	vulkan_change_layout(cb, texture->image,
-		old_layout, src_stage, src_access,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_ACCESS_TRANSFER_WRITE_BIT);
-
-	vkCmdCopyBufferToImage(cb, span.buffer->buffer, texture->image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)rects_len, copies);
-	vulkan_change_layout(cb, texture->image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_ACCESS_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_SHADER_READ_BIT);
-	texture->last_used_cb = renderer->stage.cb;
-
-	free(copies);
 
 	return true;
 }
@@ -186,8 +118,7 @@ static bool vulkan_texture_update_from_buffer(struct wlr_texture *wlr_texture,
 		goto out;
 	}
 
-	ok = write_pixels(texture, stride, damage, data, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+	ok = write_pixels(texture, stride, damage, data);
 
 out:
 	wlr_buffer_end_data_ptr_access(buffer);
@@ -198,6 +129,11 @@ void vulkan_texture_destroy(struct wlr_vk_texture *texture) {
 	if (texture->buffer != NULL) {
 		wlr_addon_finish(&texture->buffer_addon);
 		texture->buffer = NULL;
+	}
+
+	if (texture->cpu_mapping) {
+		vkUnmapMemory(texture->renderer->dev->dev, texture->memories[0]);
+		texture->cpu_mapping = NULL;
 	}
 
 	// when we recorded a command to fill this image _this_ frame,
@@ -428,10 +364,10 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 		.arrayLayers = 1,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED,
 		.extent = (VkExtent3D) { width, height, 1 },
-		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.usage = vulkan_shm_tex_usage,
+		.tiling = VK_IMAGE_TILING_LINEAR,
+		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		.pNext = fmt->shm.has_mutable_srgb ? &list_info : NULL,
 	};
 	if (fmt->shm.has_mutable_srgb) {
@@ -448,7 +384,8 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 	vkGetImageMemoryRequirements(dev, texture->image, &mem_reqs);
 
 	int mem_type_index = vulkan_find_mem_type(renderer->dev,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mem_reqs.memoryTypeBits);
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+		mem_reqs.memoryTypeBits);
 	if (mem_type_index == -1) {
 		wlr_log(WLR_ERROR, "failed to find suitable vulkan memory type");
 		goto error;
@@ -475,8 +412,7 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 
 	pixman_region32_t region;
 	pixman_region32_init_rect(&region, 0, 0, width, height);
-	if (!write_pixels(texture, stride, &region, data, VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0)) {
+	if (!write_pixels(texture, stride, &region, data)) {
 		goto error;
 	}
 
