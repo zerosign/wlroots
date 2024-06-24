@@ -18,7 +18,8 @@ bool output_ensure_buffer(struct wlr_output *output,
 bool output_cursor_set_texture(struct wlr_output_cursor *cursor,
 	struct wlr_texture *texture, bool own_texture, const struct wlr_fbox *src_box,
 	int dst_width, int dst_height, enum wl_output_transform transform,
-	int32_t hotspot_x, int32_t hotspot_y);
+	int32_t hotspot_x, int32_t hotspot_y, struct wlr_drm_syncobj_timeline *wait_timeline,
+	uint64_t wait_point);
 
 void output_defer_present(struct wlr_output *output, struct wlr_output_event_present event);
 

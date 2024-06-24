@@ -3,6 +3,7 @@
 #include <string.h>
 #include <wlr/backend.h>
 #include <wlr/render/swapchain.h>
+#include <wlr/render/drm_syncobj.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_damage_ring.h>
@@ -117,6 +118,7 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
 		scene_buffer_set_buffer(scene_buffer, NULL);
 		scene_buffer_set_texture(scene_buffer, NULL);
 		pixman_region32_fini(&scene_buffer->opaque_region);
+		wlr_drm_syncobj_timeline_unref(scene_buffer->wait_timeline);
 	} else if (node->type == WLR_SCENE_NODE_TREE) {
 		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
 
@@ -898,6 +900,18 @@ void wlr_scene_buffer_set_filter_mode(struct wlr_scene_buffer *scene_buffer,
 	scene_node_update(&scene_buffer->node, NULL);
 }
 
+void wlr_scene_buffer_set_wait_timeline(struct wlr_scene_buffer *scene_buffer,
+		struct wlr_drm_syncobj_timeline *timeline, uint64_t src_point) {
+	wlr_drm_syncobj_timeline_unref(scene_buffer->wait_timeline);
+	if (timeline != NULL) {
+		scene_buffer->wait_timeline = wlr_drm_syncobj_timeline_ref(timeline);
+		scene_buffer->wait_point = src_point;
+	} else {
+		scene_buffer->wait_timeline = NULL;
+		scene_buffer->wait_point = 0;
+	}
+}
+
 static struct wlr_texture *scene_buffer_get_texture(
 		struct wlr_scene_buffer *scene_buffer, struct wlr_renderer *renderer) {
 	if (scene_buffer->buffer == NULL || scene_buffer->texture != NULL) {
@@ -1244,6 +1258,8 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 			.filter_mode = scene_buffer->filter_mode,
 			.blend_mode = pixman_region32_not_empty(&opaque) ?
 				WLR_RENDER_BLEND_MODE_PREMULTIPLIED : WLR_RENDER_BLEND_MODE_NONE,
+			.wait_timeline = scene_buffer->wait_timeline,
+			.wait_point = scene_buffer->wait_point,
 		});
 
 		struct wlr_scene_output_sample_event sample_event = {
@@ -1406,6 +1422,14 @@ struct wlr_scene_output *wlr_scene_output_create(struct wlr_scene *scene,
 		prev_output_link = &current_output->link;
 	}
 
+	int drm_fd = wlr_backend_get_drm_fd(output->backend);
+	if (drm_fd >= 0 && output->timeline && output->renderer != NULL && output->renderer->features.timeline) {
+		scene_output->in_timeline = wlr_drm_syncobj_timeline_create(drm_fd);
+		if (scene_output->in_timeline == NULL) {
+			return NULL;
+		}
+	}
+
 	scene_output->index = prev_output_index + 1;
 	assert(scene_output->index < 64);
 	wl_list_insert(prev_output_link, &scene_output->link);
@@ -1454,7 +1478,7 @@ void wlr_scene_output_destroy(struct wlr_scene_output *scene_output) {
 	wl_list_remove(&scene_output->output_commit.link);
 	wl_list_remove(&scene_output->output_damage.link);
 	wl_list_remove(&scene_output->output_needs_frame.link);
-
+	wlr_drm_syncobj_timeline_unref(scene_output->in_timeline);
 	wl_array_release(&scene_output->render_list);
 	free(scene_output);
 }
@@ -1669,6 +1693,9 @@ static bool scene_entry_try_direct_scanout(struct render_list_entry *entry,
 	}
 
 	wlr_output_state_set_buffer(&pending, buffer->buffer);
+	if (buffer->wait_timeline != NULL) {
+		wlr_output_state_set_wait_timeline(&pending, buffer->wait_timeline, buffer->wait_point);
+	}
 
 	if (!wlr_output_test_state(scene_output->output, &pending)) {
 		wlr_output_state_finish(&pending);
@@ -1879,10 +1906,13 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		timer->pre_render_duration = timespec_to_nsec(&duration);
 	}
 
+	scene_output->in_point++;
 	struct wlr_render_pass *render_pass = wlr_renderer_begin_buffer_pass(output->renderer, buffer,
 			&(struct wlr_buffer_pass_options){
 		.timer = timer ? timer->render_timer : NULL,
 		.color_transform = options->color_transform,
+		.signal_timeline = scene_output->in_timeline,
+		.signal_point = scene_output->in_point,
 	});
 	if (render_pass == NULL) {
 		wlr_buffer_unlock(buffer);
@@ -1988,6 +2018,11 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 
 	wlr_output_state_set_buffer(state, buffer);
 	wlr_buffer_unlock(buffer);
+
+	if (scene_output->in_timeline != NULL) {
+		wlr_output_state_set_wait_timeline(state, scene_output->in_timeline,
+			scene_output->in_point);
+	}
 
 	return true;
 }

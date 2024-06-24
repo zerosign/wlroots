@@ -4,6 +4,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/util/transform.h>
 #include "types/wlr_scene.h"
@@ -140,6 +141,7 @@ static void surface_reconfigure(struct wlr_scene_surface *scene_surface) {
 
 	if (width <= 0 || height <= 0) {
 		wlr_scene_buffer_set_buffer(scene_buffer, NULL);
+		wlr_scene_buffer_set_wait_timeline(scene_buffer, NULL, 0);
 		pixman_region32_fini(&opaque);
 		return;
 	}
@@ -169,6 +171,22 @@ static void surface_reconfigure(struct wlr_scene_surface *scene_surface) {
 	}
 
 	pixman_region32_fini(&opaque);
+
+	struct wlr_drm_syncobj_timeline *wait_timeline = NULL;
+	uint64_t wait_point = 0;
+	struct wlr_linux_drm_syncobj_surface_v1_state *syncobj_surface_state =
+		wlr_linux_drm_syncobj_v1_get_surface_state(surface);
+	if (syncobj_surface_state != NULL) {
+		wait_timeline = syncobj_surface_state->acquire_timeline;
+		wait_point = syncobj_surface_state->acquire_point;
+	}
+	wlr_scene_buffer_set_wait_timeline(scene_buffer, wait_timeline, wait_point);
+
+	if (syncobj_surface_state != NULL && surface->buffer != NULL &&
+			(surface->current.committed & WLR_SURFACE_STATE_BUFFER)) {
+		wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer(syncobj_surface_state,
+			&surface->buffer->base);
+	}
 }
 
 static void handle_scene_surface_surface_commit(

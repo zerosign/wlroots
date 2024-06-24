@@ -467,3 +467,40 @@ wlr_linux_drm_syncobj_v1_get_surface_state(struct wlr_surface *wlr_surface) {
 	}
 	return &surface->current;
 }
+
+struct release_signaller {
+	struct wlr_drm_syncobj_timeline *timeline;
+	uint64_t point;
+	struct wl_listener buffer_release;
+};
+
+static void release_signaller_handle_buffer_release(struct wl_listener *listener, void *data) {
+	struct release_signaller *signaller = wl_container_of(listener, signaller, buffer_release);
+
+	if (drmSyncobjTimelineSignal(signaller->timeline->drm_fd, &signaller->timeline->handle,
+			&signaller->point, 1) != 0) {
+		wlr_log(WLR_ERROR, "drmSyncobjTimelineSignal() failed");
+	}
+
+	wlr_drm_syncobj_timeline_unref(signaller->timeline);
+	free(signaller);
+}
+
+bool wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer(
+		struct wlr_linux_drm_syncobj_surface_v1_state *state, struct wlr_buffer *buffer) {
+	assert(buffer->n_locks > 0);
+	assert(state->release_timeline != NULL);
+
+	struct release_signaller *signaller = calloc(1, sizeof(*signaller));
+	if (signaller == NULL) {
+		return false;
+	}
+
+	signaller->timeline = wlr_drm_syncobj_timeline_ref(state->release_timeline);
+	signaller->point = state->release_point;
+
+	signaller->buffer_release.notify = release_signaller_handle_buffer_release;
+	wl_signal_add(&buffer->events.release, &signaller->buffer_release);
+
+	return true;
+}

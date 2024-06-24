@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/swapchain.h>
+#include <wlr/render/drm_syncobj.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/util/log.h>
@@ -257,6 +258,8 @@ static struct wlr_buffer *render_cursor_buffer(struct wlr_output_cursor *cursor)
 		.src_box = cursor->src_box,
 		.dst_box = dst_box,
 		.transform = transform,
+		.wait_timeline = cursor->wait_timeline,
+		.wait_point = cursor->wait_point,
 	});
 
 	if (!wlr_render_pass_submit(pass)) {
@@ -341,20 +344,22 @@ bool wlr_output_cursor_set_buffer(struct wlr_output_cursor *cursor,
 	hotspot_y /= cursor->output->scale;
 
 	return output_cursor_set_texture(cursor, texture, true, &src_box,
-		dst_width, dst_height, WL_OUTPUT_TRANSFORM_NORMAL, hotspot_x, hotspot_y);
+		dst_width, dst_height, WL_OUTPUT_TRANSFORM_NORMAL, hotspot_x, hotspot_y,
+		NULL, 0);
 }
 
 static void output_cursor_handle_renderer_destroy(struct wl_listener *listener,
 		void *data) {
 	struct wlr_output_cursor *cursor = wl_container_of(listener, cursor, renderer_destroy);
 	output_cursor_set_texture(cursor, NULL, false, NULL, 0, 0,
-		WL_OUTPUT_TRANSFORM_NORMAL, 0, 0);
+		WL_OUTPUT_TRANSFORM_NORMAL, 0, 0, NULL, 0);
 }
 
 bool output_cursor_set_texture(struct wlr_output_cursor *cursor,
 		struct wlr_texture *texture, bool own_texture, const struct wlr_fbox *src_box,
 		int dst_width, int dst_height, enum wl_output_transform transform,
-		int32_t hotspot_x, int32_t hotspot_y) {
+		int32_t hotspot_x, int32_t hotspot_y,
+		struct wlr_drm_syncobj_timeline *wait_timeline, uint64_t wait_point) {
 	struct wlr_output *output = cursor->output;
 
 	output_cursor_reset(cursor);
@@ -380,6 +385,15 @@ bool output_cursor_set_texture(struct wlr_output_cursor *cursor,
 	}
 	cursor->texture = texture;
 	cursor->own_texture = own_texture;
+
+	wlr_drm_syncobj_timeline_unref(cursor->wait_timeline);
+	if (wait_timeline != NULL) {
+		cursor->wait_timeline = wlr_drm_syncobj_timeline_ref(wait_timeline);
+		cursor->wait_point = wait_point;
+	} else {
+		cursor->wait_timeline = NULL;
+		cursor->wait_point = 0;
+	}
 
 	wl_list_remove(&cursor->renderer_destroy.link);
 	if (texture != NULL) {
@@ -457,6 +471,7 @@ void wlr_output_cursor_destroy(struct wlr_output_cursor *cursor) {
 	if (cursor->own_texture) {
 		wlr_texture_destroy(cursor->texture);
 	}
+	wlr_drm_syncobj_timeline_unref(cursor->wait_timeline);
 	wl_list_remove(&cursor->link);
 	free(cursor);
 }

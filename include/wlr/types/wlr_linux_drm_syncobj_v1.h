@@ -43,4 +43,13 @@ struct wlr_linux_drm_syncobj_manager_v1 *wlr_linux_drm_syncobj_manager_v1_create
 struct wlr_linux_drm_syncobj_surface_v1_state *wlr_linux_drm_syncobj_v1_get_surface_state(
 	struct wlr_surface *surface);
 
+/**
+ * Signal the release point when wlr_buffer.events.release is emitted.
+ *
+ * Compositors unwilling to track fine-grained commit release can call this
+ * helper on surface commit.
+ */
+bool wlr_linux_drm_syncobj_v1_state_signal_release_with_buffer(
+	struct wlr_linux_drm_syncobj_surface_v1_state *state, struct wlr_buffer *buffer);
+
 #endif

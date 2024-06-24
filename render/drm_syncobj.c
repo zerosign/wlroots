@@ -67,6 +67,28 @@ void wlr_drm_syncobj_timeline_unref(struct wlr_drm_syncobj_timeline *timeline) {
 	free(timeline);
 }
 
+int wlr_drm_syncobj_timeline_export(struct wlr_drm_syncobj_timeline *timeline) {
+	int drm_syncobj_fd = -1;
+	if (drmSyncobjHandleToFD(timeline->drm_fd, timeline->handle, &drm_syncobj_fd) != 0) {
+		wlr_log_errno(WLR_ERROR, "drmSyncobjHandleToFD failed");
+		return -1;
+	}
+	return drm_syncobj_fd;
+}
+
+bool wlr_drm_syncobj_timeline_transfer(struct wlr_drm_syncobj_timeline *dst,
+		uint64_t dst_point, struct wlr_drm_syncobj_timeline *src, uint64_t src_point) {
+	assert(dst->drm_fd == src->drm_fd);
+
+	if (drmSyncobjTransfer(dst->drm_fd, dst->handle, dst_point,
+			src->handle, src_point, 0) != 0) {
+		wlr_log_errno(WLR_ERROR, "drmSyncobjTransfer failed");
+		return false;
+	}
+
+	return true;
+}
+
 int wlr_drm_syncobj_timeline_export_sync_file(struct wlr_drm_syncobj_timeline *timeline,
 		uint64_t src_point) {
 	int sync_file_fd = -1;

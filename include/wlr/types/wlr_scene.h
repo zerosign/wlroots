@@ -191,6 +191,9 @@ struct wlr_scene_buffer {
 	int buffer_width, buffer_height;
 	bool buffer_is_opaque;
 
+	struct wlr_drm_syncobj_timeline *wait_timeline;
+	uint64_t wait_point;
+
 	struct wl_listener buffer_release;
 	struct wl_listener renderer_destroy;
 };
@@ -224,6 +227,9 @@ struct wlr_scene_output {
 	struct wl_list damage_highlight_regions;
 
 	struct wl_array render_list;
+
+	struct wlr_drm_syncobj_timeline *in_timeline;
+	uint64_t in_point;
 };
 
 struct wlr_scene_timer {
@@ -450,6 +456,9 @@ void wlr_scene_buffer_set_filter_mode(struct wlr_scene_buffer *scene_buffer,
  */
 void wlr_scene_buffer_send_frame_done(struct wlr_scene_buffer *scene_buffer,
 	struct timespec *now);
+
+void wlr_scene_buffer_set_wait_timeline(struct wlr_scene_buffer *scene_buffer,
+	struct wlr_drm_syncobj_timeline *timeline, uint64_t src_point);
 
 /**
  * Add a viewport for the specified output to the scene-graph.
