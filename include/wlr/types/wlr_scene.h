@@ -90,6 +90,8 @@ struct wlr_scene_tree {
 	struct wlr_scene_node node;
 
 	struct wl_list children; // wlr_scene_node.link
+
+	bool is_root;
 };
 
 /** The root scene-graph node. */
