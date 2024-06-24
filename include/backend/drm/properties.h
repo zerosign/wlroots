@@ -28,7 +28,7 @@ union wlr_drm_connector_props {
 
 		uint32_t crtc_id;
 	};
-	uint32_t props[4];
+	uint32_t props[1];
 };
 
 union wlr_drm_crtc_props {
@@ -43,7 +43,7 @@ union wlr_drm_crtc_props {
 		uint32_t active;
 		uint32_t mode_id;
 	};
-	uint32_t props[6];
+	uint32_t props[1];
 };
 
 union wlr_drm_plane_props {
@@ -68,7 +68,7 @@ union wlr_drm_plane_props {
 		uint32_t hotspot_x;
 		uint32_t hotspot_y;
 	};
-	uint32_t props[16];
+	uint32_t props[1];
 };
 
 bool get_drm_connector_props(int fd, uint32_t id,
