@@ -42,7 +42,8 @@ static const uint32_t COMMIT_OUTPUT_STATE =
 	WLR_OUTPUT_STATE_ENABLED |
 	WLR_OUTPUT_STATE_GAMMA_LUT |
 	WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED |
-	WLR_OUTPUT_STATE_LAYERS;
+	WLR_OUTPUT_STATE_LAYERS |
+	WLR_OUTPUT_STATE_IMAGE_DESCRIPTION;
 
 static const uint32_t SUPPORTED_OUTPUT_STATE =
 	WLR_OUTPUT_STATE_BACKEND_OPTIONAL | COMMIT_OUTPUT_STATE;
@@ -748,6 +749,21 @@ static bool drm_connector_prepare(struct wlr_drm_connector_state *conn_state, bo
 		wlr_drm_conn_log(conn, WLR_DEBUG,
 				"Can't enable adaptive sync: connector doesn't support VRR");
 		return false;
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_IMAGE_DESCRIPTION) {
+		if (conn->backend->iface != &atomic_iface) {
+			wlr_log(WLR_DEBUG, "Image descriptions are only supported by the atomic interface");
+			return false;
+		}
+		if (conn->props.hdr_output_metadata == 0) {
+			wlr_log(WLR_DEBUG, "HDR_OUTPUT_METADATA property not supported");
+			return false;
+		}
+		if (conn->props.colorspace == 0) {
+			wlr_log(WLR_DEBUG, "Colorspace property not supported");
+			return false;
+		}
 	}
 
 	if (test_only && conn->backend->parent) {

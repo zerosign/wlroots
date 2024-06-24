@@ -54,6 +54,25 @@ enum wlr_output_adaptive_sync_status {
 	WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED,
 };
 
+enum wlr_output_transfer_function {
+	WLR_OUTPUT_TRANSFER_FUNCTION_BT709 = 0,
+	WLR_OUTPUT_TRANSFER_FUNCTION_ST2084_PQ = 11,
+};
+
+struct wlr_output_image_description {
+	enum wlr_output_transfer_function transfer_function;
+	struct {
+		struct {
+			double x, y;
+		} red, green, blue, white;
+	} primaries;
+	struct {
+		double min, max;
+	} mastering_luminance;
+	double max_cll;
+	double max_fall;
+};
+
 enum wlr_output_state_field {
 	WLR_OUTPUT_STATE_BUFFER = 1 << 0,
 	WLR_OUTPUT_STATE_DAMAGE = 1 << 1,
@@ -66,6 +85,7 @@ enum wlr_output_state_field {
 	WLR_OUTPUT_STATE_RENDER_FORMAT = 1 << 8,
 	WLR_OUTPUT_STATE_SUBPIXEL = 1 << 9,
 	WLR_OUTPUT_STATE_LAYERS = 1 << 10,
+	WLR_OUTPUT_STATE_IMAGE_DESCRIPTION = 1 << 11,
 };
 
 enum wlr_output_state_mode_type {
@@ -109,6 +129,8 @@ struct wlr_output_state {
 
 	struct wlr_output_layer_state *layers;
 	size_t layers_len;
+
+	struct wlr_output_image_description image_description;
 };
 
 struct wlr_output_impl;
