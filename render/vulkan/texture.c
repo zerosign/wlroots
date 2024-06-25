@@ -456,7 +456,8 @@ static struct wlr_texture *vulkan_texture_from_pixels(
 		img_info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 	}
 
-	if (renderer->dev->api.vkGetMemoryHostPointerPropertiesEXT) {
+	if (renderer->direct_shm_import &&
+			renderer->dev->api.vkGetMemoryHostPointerPropertiesEXT) {
 		img_info.tiling = VK_IMAGE_TILING_LINEAR;
 		img_info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
 

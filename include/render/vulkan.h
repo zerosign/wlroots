@@ -324,6 +324,8 @@ struct wlr_vk_renderer {
 		VkImage dst_image;
 		VkDeviceMemory dst_img_memory;
 	} read_pixels_cache;
+
+	bool direct_shm_import;
 };
 
 // vertex shader push constant range data
