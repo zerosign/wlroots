@@ -29,7 +29,7 @@ struct wlr_drm_plane {
 
 	struct wlr_drm_format_set formats;
 
-	union wlr_drm_plane_props props;
+	struct wlr_drm_plane_props props;
 
 	uint32_t initial_crtc_id;
 	struct liftoff_plane *liftoff;
@@ -71,7 +71,7 @@ struct wlr_drm_crtc {
 	struct wlr_drm_plane *primary;
 	struct wlr_drm_plane *cursor;
 
-	union wlr_drm_crtc_props props;
+	struct wlr_drm_crtc_props props;
 };
 
 struct wlr_drm_backend {
@@ -181,7 +181,7 @@ struct wlr_drm_connector {
 	struct wlr_drm_crtc *crtc;
 	uint32_t possible_crtcs;
 
-	union wlr_drm_connector_props props;
+	struct wlr_drm_connector_props props;
 
 	bool cursor_enabled;
 	int cursor_x, cursor_y;

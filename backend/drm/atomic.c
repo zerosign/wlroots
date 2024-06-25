@@ -320,7 +320,7 @@ void drm_atomic_connector_rollback_commit(struct wlr_drm_connector_state *state)
 
 static void plane_disable(struct atomic *atom, struct wlr_drm_plane *plane) {
 	uint32_t id = plane->id;
-	const union wlr_drm_plane_props *props = &plane->props;
+	const struct wlr_drm_plane_props *props = &plane->props;
 	atomic_add(atom, id, props->fb_id, 0);
 	atomic_add(atom, id, props->crtc_id, 0);
 }
@@ -329,7 +329,7 @@ static void set_plane_props(struct atomic *atom, struct wlr_drm_backend *drm,
 		struct wlr_drm_plane *plane, struct wlr_drm_fb *fb, uint32_t crtc_id,
 		int32_t x, int32_t y) {
 	uint32_t id = plane->id;
-	const union wlr_drm_plane_props *props = &plane->props;
+	const struct wlr_drm_plane_props *props = &plane->props;
 
 	if (fb == NULL) {
 		wlr_log(WLR_ERROR, "Failed to acquire FB for plane %"PRIu32, plane->id);
