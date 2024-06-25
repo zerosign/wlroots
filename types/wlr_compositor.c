@@ -782,6 +782,7 @@ static struct wlr_surface *surface_create(struct wl_client *client,
 	wl_signal_init(&surface->events.unmap);
 	wl_signal_init(&surface->events.destroy);
 	wl_signal_init(&surface->events.new_subsurface);
+	wl_signal_init(&surface->events.surface_output_enter);
 	wl_list_init(&surface->current_outputs);
 	wl_list_init(&surface->cached);
 	pixman_region32_init(&surface->buffer_damage);
@@ -1090,6 +1091,8 @@ void wlr_surface_send_enter(struct wlr_surface *surface,
 			wl_surface_send_enter(surface->resource, resource);
 		}
 	}
+
+	wl_signal_emit_mutable(&surface->events.surface_output_enter, output);
 }
 
 void wlr_surface_send_leave(struct wlr_surface *surface,
@@ -1110,6 +1113,7 @@ void wlr_surface_send_leave(struct wlr_surface *surface,
 			break;
 		}
 	}
+	wl_signal_emit_mutable(&surface->events.surface_output_enter, output);
 }
 
 void wlr_surface_send_frame_done(struct wlr_surface *surface,

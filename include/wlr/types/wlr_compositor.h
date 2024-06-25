@@ -184,6 +184,12 @@ struct wlr_surface {
 		struct wl_signal commit;
 
 		/**
+		 * The `surface_output_enter` event signals that the surface has entered or leaved
+		 * an output.
+		 */
+		struct wl_signal surface_output_enter;
+
+		/**
 		 * The `map` event signals that the surface has a non-null buffer
 		 * committed and is ready to be displayed.
 		 */
