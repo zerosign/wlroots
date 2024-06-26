@@ -41,9 +41,7 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		uint32_t stride, const pixman_region32_t *region, const void *vdata,
 		VkImageLayout old_layout, VkPipelineStageFlags src_stage,
 		VkAccessFlags src_access) {
-	VkResult res;
 	struct wlr_vk_renderer *renderer = texture->renderer;
-	VkDevice dev = texture->renderer->dev->dev;
 
 	const struct wlr_pixel_format_info *format_info = drm_get_pixel_format_info(texture->format->drm);
 	assert(format_info);
@@ -78,15 +76,6 @@ static bool write_pixels(struct wlr_vk_texture *texture,
 		wlr_log(WLR_ERROR, "Failed to retrieve staging buffer");
 		free(copies);
 		return false;
-	}
-
-	if (!span.buffer->cpu_mapping) {
-		res = vkMapMemory(dev, span.buffer->memory, 0, VK_WHOLE_SIZE, 0, &span.buffer->cpu_mapping);
-		if (res != VK_SUCCESS) {
-			wlr_vk_error("vkMapMemory", res);
-			free(copies);
-			return false;
-		}
 	}
 	char *map = (char*)span.buffer->cpu_mapping + span.alloc.start;
 
