@@ -443,6 +443,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
 		wlr_log(WLR_ERROR, "Failed to sync render buffer");
 	}
 
+	wlr_color_transform_unref(pass->color_transform);
 	wlr_buffer_unlock(render_buffer->wlr_buffer);
 	rect_union_finish(&pass->updated_region);
 	free(pass);
