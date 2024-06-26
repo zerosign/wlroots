@@ -91,6 +91,7 @@ struct wlr_wl_output {
 	struct wl_list presentation_feedbacks;
 
 	char *title;
+	char *app_id;
 
 	// 0 if not requested
 	int32_t requested_width, requested_height;
