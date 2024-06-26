@@ -309,6 +309,12 @@ struct wlr_vk_buffer_span vulkan_get_stage_span(struct wlr_vk_renderer *r,
 		goto error;
 	}
 
+	res = vkMapMemory(r->dev->dev, buf->memory, 0, VK_WHOLE_SIZE, 0, &buf->cpu_mapping);
+	if (res != VK_SUCCESS) {
+		wlr_vk_error("vkMapMemory", res);
+		goto error;
+	}
+
 	struct wlr_vk_allocation *a = wl_array_add(&buf->allocs, sizeof(*a));
 	if (a == NULL) {
 		wlr_log_errno(WLR_ERROR, "Allocation failed");

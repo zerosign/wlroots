@@ -822,15 +822,8 @@ static bool create_3d_lut_image(struct wlr_vk_renderer *renderer,
 		goto fail_imageview;
 	}
 
-	if (!span.buffer->cpu_mapping) {
-		res = vkMapMemory(dev, span.buffer->memory, span.alloc.start, size, 0, &span.buffer->cpu_mapping);
-		if (res != VK_SUCCESS) {
-			wlr_vk_error("vkMapMemory", res);
-			goto fail_imageview;
-		}
-	}
-
-	float *dst = span.buffer->cpu_mapping;
+	char *map = (char*)span.buffer->cpu_mapping + span.alloc.start;
+	float *dst = (float*)map;
 	size_t dim_len = lut_3d->dim_len;
 	for (size_t b_index = 0; b_index < dim_len; b_index++) {
 		for (size_t g_index = 0; g_index < dim_len; g_index++) {
