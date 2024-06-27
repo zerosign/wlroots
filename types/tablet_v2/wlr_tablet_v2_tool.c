@@ -8,7 +8,7 @@
 #include <wlr/util/log.h>
 #include "util/set.h"
 #include "util/time.h"
-#include "tablet-unstable-v2-protocol.h"
+#include "tablet-v2-protocol.h"
 
 static const struct wlr_tablet_tool_v2_grab_interface default_tool_grab_interface;
 

@@ -10,7 +10,7 @@
 #include "backend/wayland.h"
 #include "util/time.h"
 
-#include "tablet-unstable-v2-client-protocol.h"
+#include "tablet-v2-client-protocol.h"
 
 struct tablet_tool {
 	/* static */

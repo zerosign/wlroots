@@ -7,7 +7,7 @@
 #include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/util/log.h>
 
-#include "tablet-unstable-v2-protocol.h"
+#include "tablet-v2-protocol.h"
 
 void destroy_tablet_v2(struct wl_resource *resource) {
 	struct wlr_tablet_client_v2 *tablet = tablet_client_from_resource(resource);

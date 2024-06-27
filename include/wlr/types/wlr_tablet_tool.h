@@ -15,7 +15,7 @@
 
 /*
  * Copy+Paste from libinput, but this should neither use libinput, nor
- * tablet-unstable-v2 headers, so we can't include them
+ * tablet-v2 headers, so we can't include them
  */
 enum wlr_tablet_tool_type {
 	/** A generic pen */
