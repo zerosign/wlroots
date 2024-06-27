@@ -23,7 +23,7 @@ struct wlr_color_transform *wlr_color_transform_init_linear_to_icc(
 	cmsContext ctx = cmsCreateContext(NULL, NULL);
 	if (ctx == NULL) {
 		wlr_log(WLR_ERROR, "cmsCreateContext failed");
-		return false;
+		return NULL;
 	}
 
 	cmsSetLogErrorHandlerTHR(ctx, handle_lcms_error);
