@@ -110,6 +110,20 @@ struct wlr_surface_role {
 	void (*destroy)(struct wlr_surface *surface);
 };
 
+struct wlr_surface_output_commit {
+	struct wlr_surface_output *surface_output;
+
+	struct wl_list link; // wlr_surface_output.surface_output_commits
+
+	uint32_t surface_commit_seq;
+	uint32_t output_commit_seq;
+	bool presented;
+	struct timespec *when;
+
+	struct wl_listener output_commit;
+	struct wl_listener output_present;
+};
+
 struct wlr_surface_output {
 	struct wlr_surface *surface;
 	struct wlr_output *output;
@@ -117,6 +131,9 @@ struct wlr_surface_output {
 	struct wl_list link; // wlr_surface.current_outputs
 	struct wl_listener bind;
 	struct wl_listener destroy;
+
+	struct wl_listener surface_commit;
+	struct wl_list surface_output_commits; // wlr_surface_output_commit.link
 };
 
 struct wlr_surface {
@@ -182,6 +199,12 @@ struct wlr_surface {
 	struct {
 		struct wl_signal client_commit;
 		struct wl_signal commit;
+
+		/**
+		 * The `commit_present` event signals whether the commit requests
+		 * on the surface are presented on its outputs or discarded.
+		 */
+		struct wl_signal commit_present;
 
 		/**
 		 * The `map` event signals that the surface has a non-null buffer
