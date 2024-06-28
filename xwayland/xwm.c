@@ -1677,7 +1677,7 @@ static int x11_event_handler(int fd, uint32_t mask, void *data) {
 		count++;
 
 		if (xwm->xwayland->user_event_handler &&
-				xwm->xwayland->user_event_handler(xwm, event)) {
+				xwm->xwayland->user_event_handler(xwm->xwayland, event)) {
 			free(event);
 			continue;
 		}
