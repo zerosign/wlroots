@@ -169,6 +169,71 @@ static bool output_test(struct wlr_output *wlr_output,
 	return true;
 }
 
+static bool output_test_capabilities(struct wlr_output *wlr_output,
+		const struct wlr_output_state *state) {
+	struct wlr_x11_output *output = get_x11_output_from_output(wlr_output);
+	struct wlr_x11_backend *x11 = output->x11;
+
+	uint32_t unsupported = state->committed & ~SUPPORTED_OUTPUT_STATE;
+	if (unsupported != 0) {
+		return false;
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
+		if (!state->adaptive_sync_enabled) {
+			return false;
+		}
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_RENDER_FORMAT) {
+		bool supported = false;
+
+		if (x11->have_dri3) {
+			struct wlr_drm_format_set *formats =
+				&output->x11->primary_dri3_formats;
+			for (size_t idx = 0; idx < formats->len; idx++) {
+				const struct wlr_drm_format *format = &formats->formats[idx];
+				if (format->format == state->render_format) {
+					supported = true;
+					break;
+				}
+			}
+		}
+		if (!supported && x11->have_shm) {
+			struct wlr_drm_format_set *formats =
+				&output->x11->primary_shm_formats;
+			for (size_t idx = 0; idx < formats->len; idx++) {
+				const struct wlr_drm_format *format = &formats->formats[idx];
+				if (format->format == state->render_format) {
+					supported = true;
+					break;
+				}
+			}
+		}
+		if (!supported) {
+			return false;
+		}
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_BUFFER) {
+		struct wlr_buffer *buffer = state->buffer;
+		struct wlr_dmabuf_attributes dmabuf_attrs;
+		struct wlr_shm_attributes shm_attrs;
+		uint32_t format = DRM_FORMAT_INVALID;
+		if (wlr_buffer_get_dmabuf(buffer, &dmabuf_attrs)) {
+			format = dmabuf_attrs.format;
+		} else if (wlr_buffer_get_shm(buffer, &shm_attrs)) {
+			format = shm_attrs.format;
+		}
+		if (format != x11->x11_format->drm) {
+			wlr_log(WLR_DEBUG, "Unsupported buffer format");
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static void destroy_x11_buffer(struct wlr_x11_buffer *buffer) {
 	if (!buffer) {
 		return;
@@ -550,6 +615,7 @@ static const struct wlr_output_impl output_impl = {
 	.set_cursor = output_set_cursor,
 	.move_cursor = output_move_cursor,
 	.get_primary_formats = output_get_primary_formats,
+	.test_capabilities = output_test_capabilities,
 };
 
 struct wlr_output *wlr_x11_output_create(struct wlr_backend *backend) {

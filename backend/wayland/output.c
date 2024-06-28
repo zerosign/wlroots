@@ -370,6 +370,59 @@ static bool output_test(struct wlr_output *wlr_output,
 	return true;
 }
 
+static bool output_test_capabilities(struct wlr_output *output,
+		const struct wlr_output_state *state) {
+	struct wlr_wl_output *wlr_wl_output =
+		get_wl_output_from_output(output);
+
+	uint32_t unsupported = state->committed & ~SUPPORTED_OUTPUT_STATE;
+	if (unsupported != 0) {
+		return false;
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) {
+		if (!state->adaptive_sync_enabled) {
+			return false;
+		}
+	}
+
+	if (state->committed & WLR_OUTPUT_STATE_RENDER_FORMAT) {
+		bool supported = false;
+
+		struct wlr_drm_format_set *formats =
+			&wlr_wl_output->backend->linux_dmabuf_v1_formats;
+		for (size_t idx = 0; idx < formats->len; idx++) {
+			const struct wlr_drm_format *format = &formats->formats[idx];
+			if (format->format == state->render_format) {
+				supported = true;
+				break;
+			}
+		}
+		if (!supported) {
+			struct wlr_drm_format_set *formats =
+				&wlr_wl_output->backend->shm_formats;
+			for (size_t idx = 0; idx < formats->len; idx++) {
+				const struct wlr_drm_format *format = &formats->formats[idx];
+				if (format->format == state->render_format) {
+					supported = true;
+					break;
+				}
+			}
+
+		}
+		if (!supported) {
+			return false;
+		}
+	}
+
+	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
+			!test_buffer(wlr_wl_output->backend, state->buffer)) {
+		return false;
+	}
+
+	return true;
+}
+
 static void output_layer_handle_addon_destroy(struct wlr_addon *addon) {
 	struct wlr_wl_output_layer *layer = wl_container_of(addon, layer, addon);
 
@@ -794,6 +847,7 @@ static const struct wlr_output_impl output_impl = {
 	.move_cursor = output_move_cursor,
 	.get_cursor_formats = output_get_formats,
 	.get_primary_formats = output_get_formats,
+	.test_capabilities = output_test_capabilities,
 };
 
 bool wlr_output_is_wl(struct wlr_output *wlr_output) {
