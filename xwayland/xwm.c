@@ -38,6 +38,7 @@ static const char *const atom_map[ATOM_LAST] = {
 	[WM_TAKE_FOCUS] = "WM_TAKE_FOCUS",
 	[WINDOW] = "WINDOW",
 	[NET_ACTIVE_WINDOW] = "_NET_ACTIVE_WINDOW",
+	[NET_CLOSE_WINDOW] = "_NET_CLOSE_WINDOW",
 	[NET_WM_MOVERESIZE] = "_NET_WM_MOVERESIZE",
 	[NET_SUPPORTING_WM_CHECK] = "_NET_SUPPORTING_WM_CHECK",
 	[NET_WM_STATE_FOCUSED] = "_NET_WM_STATE_FOCUSED",
@@ -206,6 +207,7 @@ static struct wlr_xwayland_surface *xwayland_surface_create(
 	wl_signal_init(&surface->events.request_maximize);
 	wl_signal_init(&surface->events.request_fullscreen);
 	wl_signal_init(&surface->events.request_activate);
+	wl_signal_init(&surface->events.request_close);
 	wl_signal_init(&surface->events.associate);
 	wl_signal_init(&surface->events.dissociate);
 	wl_signal_init(&surface->events.set_class);
@@ -1445,6 +1447,15 @@ static void xwm_handle_net_active_window_message(struct wlr_xwm *xwm,
 	wl_signal_emit_mutable(&surface->events.request_activate, NULL);
 }
 
+static void xwm_handle_net_close_window_message(struct wlr_xwm *xwm,
+		xcb_client_message_event_t *ev) {
+	struct wlr_xwayland_surface *surface = lookup_surface(xwm, ev->window);
+	if (surface == NULL) {
+		return;
+	}
+	wl_signal_emit_mutable(&surface->events.request_close, NULL);
+}
+
 static void pending_startup_id_destroy(struct pending_startup_id *pending) {
 	wl_list_remove(&pending->link);
 	free(pending->msg);
@@ -1552,6 +1563,8 @@ static void xwm_handle_client_message(struct wlr_xwm *xwm,
 		xwm_handle_wm_protocols_message(xwm, ev);
 	} else if (ev->type == xwm->atoms[NET_ACTIVE_WINDOW]) {
 		xwm_handle_net_active_window_message(xwm, ev);
+	} else if (ev->type == xwm->atoms[NET_CLOSE_WINDOW]) {
+		xwm_handle_net_close_window_message(xwm, ev);
 	} else if (ev->type == xwm->atoms[NET_STARTUP_INFO] ||
 			ev->type == xwm->atoms[NET_STARTUP_INFO_BEGIN]) {
 		xwm_handle_net_startup_info_message(xwm, ev);
@@ -2212,6 +2225,7 @@ struct wlr_xwm *xwm_create(struct wlr_xwayland *xwayland, int wm_fd) {
 	xcb_atom_t supported[] = {
 		xwm->atoms[NET_WM_STATE],
 		xwm->atoms[NET_ACTIVE_WINDOW],
+		xwm->atoms[NET_CLOSE_WINDOW],
 		xwm->atoms[NET_WM_MOVERESIZE],
 		xwm->atoms[NET_WM_STATE_FOCUSED],
 		xwm->atoms[NET_WM_STATE_MODAL],
