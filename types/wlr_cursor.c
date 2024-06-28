@@ -288,6 +288,7 @@ static void cursor_warp_unchecked(struct wlr_cursor *cur,
 
 	struct wlr_cursor_output_cursor *output_cursor;
 	wl_list_for_each(output_cursor, &cur->state->output_cursors, link) {
+		output_cursor->output_cursor->max_latency = cur->max_latency;
 		output_cursor_move(output_cursor);
 	}
 }
@@ -668,6 +669,11 @@ void wlr_cursor_set_surface(struct wlr_cursor *cur, struct wlr_surface *surface,
 	cur->state->surface_hotspot.y = hotspot_y;
 
 	cursor_update_outputs(cur);
+}
+
+void wlr_cursor_set_max_latency(struct wlr_cursor *cur, int max_latency) {
+		cur->max_latency = max_latency;
+		wlr_log(WLR_DEBUG, "setting max_latency %i", max_latency);
 }
 
 static void handle_pointer_motion(struct wl_listener *listener, void *data) {
