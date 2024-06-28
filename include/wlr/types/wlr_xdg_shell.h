@@ -153,14 +153,23 @@ enum wlr_xdg_toplevel_configure_field {
 	WLR_XDG_TOPLEVEL_CONFIGURE_WM_CAPABILITIES = 1 << 1,
 };
 
+/**
+ * State set in an toplevel configure sequence.
+ */
 struct wlr_xdg_toplevel_configure {
+	// Bitmask of optional fields which are set
 	uint32_t fields; // enum wlr_xdg_toplevel_configure_field
+
+	// The following fields must always be set to reflect the current state
 	bool maximized, fullscreen, resizing, activated, suspended;
 	uint32_t tiled; // enum wlr_edges
 	int32_t width, height;
+
+	// Only for WLR_XDG_TOPLEVEL_CONFIGURE_BOUNDS
 	struct {
 		int32_t width, height;
 	} bounds;
+	// Only for WLR_XDG_TOPLEVEL_CONFIGURE_WM_CAPABILITIES
 	uint32_t wm_capabilities; // enum wlr_xdg_toplevel_wm_capabilities
 };
 
@@ -355,6 +364,12 @@ struct wlr_xdg_positioner *wlr_xdg_positioner_from_resource(
  * amount of time, the ping_timeout event will be emitted.
  */
 void wlr_xdg_surface_ping(struct wlr_xdg_surface *surface);
+
+/**
+ * Configure the toplevel. Returns the associated configure serial.
+ */
+uint32_t wlr_xdg_toplevel_configure(struct wlr_xdg_toplevel *toplevel,
+		const struct wlr_xdg_toplevel_configure *configure);
 
 /**
  * Request that this toplevel surface be the given size. Returns the associated

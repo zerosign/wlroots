@@ -545,6 +545,30 @@ void wlr_xdg_toplevel_send_close(struct wlr_xdg_toplevel *toplevel) {
 	xdg_toplevel_send_close(toplevel->resource);
 }
 
+uint32_t wlr_xdg_toplevel_configure(struct wlr_xdg_toplevel *toplevel,
+		const struct wlr_xdg_toplevel_configure *configure) {
+	toplevel->scheduled.width = configure->width;
+	toplevel->scheduled.height = configure->height;
+	toplevel->scheduled.maximized = configure->maximized;
+	toplevel->scheduled.fullscreen = configure->fullscreen;
+	toplevel->scheduled.resizing = configure->resizing;
+	toplevel->scheduled.activated = configure->activated;
+	toplevel->scheduled.suspended = configure->suspended;
+	toplevel->scheduled.tiled = configure->tiled;
+
+	if (configure->fields & WLR_XDG_TOPLEVEL_CONFIGURE_BOUNDS) {
+		toplevel->scheduled.fields |= WLR_XDG_TOPLEVEL_CONFIGURE_BOUNDS;
+		toplevel->scheduled.bounds = configure->bounds;
+	}
+
+	if (configure->fields & WLR_XDG_TOPLEVEL_CONFIGURE_WM_CAPABILITIES) {
+		toplevel->scheduled.fields |= WLR_XDG_TOPLEVEL_CONFIGURE_WM_CAPABILITIES;
+		toplevel->scheduled.wm_capabilities = configure->wm_capabilities;
+	}
+
+	return wlr_xdg_surface_schedule_configure(toplevel->base);
+}
+
 uint32_t wlr_xdg_toplevel_set_size(struct wlr_xdg_toplevel *toplevel,
 		int32_t width, int32_t height) {
 	assert(width >= 0 && height >= 0);
