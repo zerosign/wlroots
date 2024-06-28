@@ -21,7 +21,7 @@ struct wlr_pointer {
 
 	const struct wlr_pointer_impl *impl;
 
-	char *output_name;
+	struct wlr_output *output;
 
 	struct {
 		struct wl_signal motion; // struct wlr_pointer_motion_event
