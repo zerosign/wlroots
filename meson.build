@@ -111,7 +111,7 @@ wayland_server = dependency('wayland-server',
 )
 
 drm = dependency('libdrm',
-	version: '>=2.4.120',
+	version: '>=2.4.122',
 	fallback: 'libdrm',
 	default_options: [
 		'intel=disabled',

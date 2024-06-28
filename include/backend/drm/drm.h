@@ -29,6 +29,9 @@ struct wlr_drm_plane {
 
 	struct wlr_drm_format_set formats;
 
+	struct wlr_output_cursor_size *cursor_sizes;
+	size_t cursor_sizes_len;
+
 	struct wlr_drm_plane_props props;
 
 	uint32_t initial_crtc_id;

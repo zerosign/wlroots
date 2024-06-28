@@ -135,6 +135,26 @@ bool check_drm_features(struct wlr_drm_backend *drm) {
 	return true;
 }
 
+static bool init_plane_cursor_sizes(struct wlr_drm_plane *plane,
+		const struct drm_plane_size_hint *hints, size_t hints_len) {
+	assert(hints_len > 0);
+	plane->cursor_sizes = calloc(hints_len, sizeof(plane->cursor_sizes[0]));
+	if (plane->cursor_sizes == NULL) {
+		return false;
+	}
+	plane->cursor_sizes_len = hints_len;
+
+	for (size_t i = 0; i < hints_len; i++) {
+		const struct drm_plane_size_hint hint = hints[i];
+		plane->cursor_sizes[i] = (struct wlr_output_cursor_size){
+			.width = hint.width,
+			.height = hint.height,
+		};
+	}
+
+	return true;
+}
+
 static bool init_plane(struct wlr_drm_backend *drm,
 		struct wlr_drm_plane *p, const drmModePlane *drm_plane) {
 	uint32_t id = drm_plane->plane_id;
@@ -184,6 +204,37 @@ static bool init_plane(struct wlr_drm_backend *drm,
 		}
 
 		drmModeFreePropertyBlob(blob);
+	}
+
+	uint64_t size_hints_blob_id = 0;
+	if (p->props.size_hints) {
+		if (!get_drm_prop(drm->fd, p->id, p->props.size_hints, &size_hints_blob_id)) {
+			wlr_log(WLR_ERROR, "Failed to read SIZE_HINTS property");
+			return false;
+		}
+	}
+	if (size_hints_blob_id != 0) {
+		drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(drm->fd, size_hints_blob_id);
+		if (!blob) {
+			wlr_log(WLR_ERROR, "Failed to read SIZE_HINTS blob");
+			return false;
+		}
+
+		const struct drm_plane_size_hint *size_hints = blob->data;
+		size_t size_hints_len = blob->length / sizeof(size_hints[0]);
+		if (!init_plane_cursor_sizes(p, size_hints, size_hints_len)) {
+			return false;
+		}
+
+		drmModeFreePropertyBlob(blob);
+	} else {
+		const struct drm_plane_size_hint size_hint = {
+			.width = drm->cursor_width,
+			.height = drm->cursor_height,
+		};
+		if (!init_plane_cursor_sizes(p, &size_hint, 1)) {
+			return false;
+		}
 	}
 
 	assert(drm->num_crtcs <= 32);
@@ -1003,8 +1054,15 @@ static bool drm_connector_set_cursor(struct wlr_output *output,
 	conn->cursor_enabled = false;
 	drm_fb_clear(&conn->cursor_pending_fb);
 	if (buffer != NULL) {
-		if ((uint64_t)buffer->width != drm->cursor_width ||
-				(uint64_t)buffer->height != drm->cursor_height) {
+		bool found = false;
+		for (size_t i = 0; i < plane->cursor_sizes_len; i++) {
+			struct wlr_output_cursor_size size = plane->cursor_sizes[i];
+			if (size.width == buffer->width && size.height == buffer->height) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
 			wlr_drm_conn_log(conn, WLR_DEBUG, "Cursor buffer size mismatch");
 			return false;
 		}
@@ -1130,11 +1188,18 @@ static const struct wlr_drm_format_set *drm_connector_get_cursor_formats(
 	return &plane->formats;
 }
 
-static void drm_connector_get_cursor_size(struct wlr_output *output,
-		int *width, int *height) {
-	struct wlr_drm_backend *drm = get_drm_backend_from_backend(output->backend);
-	*width = (int)drm->cursor_width;
-	*height = (int)drm->cursor_height;
+static const struct wlr_output_cursor_size *drm_connector_get_cursor_sizes(struct wlr_output *output,
+		size_t *len) {
+	struct wlr_drm_connector *conn = get_drm_connector_from_output(output);
+	if (!drm_connector_alloc_crtc(conn)) {
+		return NULL;
+	}
+	struct wlr_drm_plane *plane = conn->crtc->cursor;
+	if (!plane) {
+		return NULL;
+	}
+	*len = plane->cursor_sizes_len;
+	return plane->cursor_sizes;
 }
 
 static const struct wlr_drm_format_set *drm_connector_get_primary_formats(
@@ -1160,7 +1225,7 @@ static const struct wlr_output_impl output_impl = {
 	.commit = drm_connector_commit,
 	.get_gamma_size = drm_connector_get_gamma_size,
 	.get_cursor_formats = drm_connector_get_cursor_formats,
-	.get_cursor_size = drm_connector_get_cursor_size,
+	.get_cursor_sizes = drm_connector_get_cursor_sizes,
 	.get_primary_formats = drm_connector_get_primary_formats,
 };
 
