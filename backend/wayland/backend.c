@@ -393,7 +393,11 @@ static void registry_global(void *data, struct wl_registry *registry,
 		wl->legacy_drm = wl_registry_bind(registry, name, &wl_drm_interface, 1);
 		wl_drm_add_listener(wl->legacy_drm, &legacy_drm_listener, wl);
 	} else if (strcmp(iface, wl_shm_interface.name) == 0) {
-		wl->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+		uint32_t target_version = version;
+		if (version > 2) {
+			target_version = 2;
+		}
+		wl->shm = wl_registry_bind(registry, name, &wl_shm_interface, target_version);
 		wl_shm_add_listener(wl->shm, &shm_listener, wl);
 	} else if (strcmp(iface, xdg_activation_v1_interface.name) == 0) {
 		wl->activation_v1 = wl_registry_bind(registry, name,
@@ -515,7 +519,11 @@ static void backend_destroy(struct wlr_backend *backend) {
 		wl_drm_destroy(wl->legacy_drm);
 	}
 	if (wl->shm) {
-		wl_shm_destroy(wl->shm);
+		if (wl_shm_get_version(wl->shm) >= WL_SHM_RELEASE_SINCE_VERSION) {
+			wl_shm_release(wl->shm);
+		} else {
+			wl_shm_destroy(wl->shm);
+		}
 	}
 	if (wl->zwp_relative_pointer_manager_v1) {
 		zwp_relative_pointer_manager_v1_destroy(wl->zwp_relative_pointer_manager_v1);
