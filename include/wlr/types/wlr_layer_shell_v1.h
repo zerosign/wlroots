@@ -49,6 +49,7 @@ enum wlr_layer_surface_v1_state_field {
 	WLR_LAYER_SURFACE_V1_STATE_MARGIN = 1 << 3,
 	WLR_LAYER_SURFACE_V1_STATE_KEYBOARD_INTERACTIVITY = 1 << 4,
 	WLR_LAYER_SURFACE_V1_STATE_LAYER = 1 << 5,
+	WLR_LAYER_SURFACE_V1_STATE_EXCLUSIVE_EDGE = 1 << 6,
 };
 
 struct wlr_layer_surface_v1_state {
@@ -62,6 +63,7 @@ struct wlr_layer_surface_v1_state {
 	enum zwlr_layer_surface_v1_keyboard_interactivity keyboard_interactive;
 	uint32_t desired_width, desired_height;
 	enum zwlr_layer_shell_v1_layer layer;
+	uint32_t exclusive_edge;
 
 	uint32_t configure_serial;
 	uint32_t actual_width, actual_height;
@@ -184,5 +186,12 @@ struct wlr_surface *wlr_layer_surface_v1_popup_surface_at(
  */
 struct wlr_layer_surface_v1 *wlr_layer_surface_v1_from_resource(
 		struct wl_resource *resource);
+
+/**
+ * Get the edge the exclusive zone must be applied to.
+ *
+ * Returns 0 if the exclusive zone is nonpositive or must not be applied.
+ */
+uint32_t wlr_layer_surface_v1_get_exclusive_edge(struct wlr_layer_surface_v1 *surface);
 
 #endif

@@ -35,40 +35,26 @@ static void scene_layer_surface_handle_layer_surface_unmap(
 	wlr_scene_node_set_enabled(&scene_layer_surface->tree->node, false);
 }
 
-static void layer_surface_exclusive_zone(
-		struct wlr_layer_surface_v1_state *state,
+static void layer_surface_exclusive_zone(struct wlr_layer_surface_v1 *surface,
 		struct wlr_box *usable_area) {
-	switch (state->anchor) {
+	struct wlr_layer_surface_v1_state *state = &surface->current;
+	switch (wlr_layer_surface_v1_get_exclusive_edge(surface)) {
 	case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
-	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT):
-		// Anchor top
 		usable_area->y += state->exclusive_zone + state->margin.top;
 		usable_area->height -= state->exclusive_zone + state->margin.top;
 		break;
 	case ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM:
-	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT):
-		// Anchor bottom
 		usable_area->height -= state->exclusive_zone + state->margin.bottom;
 		break;
 	case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
-	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT):
-		// Anchor left
 		usable_area->x += state->exclusive_zone + state->margin.left;
 		usable_area->width -= state->exclusive_zone + state->margin.left;
 		break;
 	case ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
-	case (ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
-			ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT):
-		// Anchor right
 		usable_area->width -= state->exclusive_zone + state->margin.right;
 		break;
+	default: // no edge
+		return;
 	}
 
 	if (usable_area->width < 0) {
@@ -136,8 +122,8 @@ void wlr_scene_layer_surface_v1_configure(
 	wlr_scene_node_set_position(&scene_layer_surface->tree->node, box.x, box.y);
 	wlr_layer_surface_v1_configure(layer_surface, box.width, box.height);
 
-	if (layer_surface->surface->mapped && state->exclusive_zone > 0) {
-		layer_surface_exclusive_zone(state, usable_area);
+	if (layer_surface->surface->mapped) {
+		layer_surface_exclusive_zone(layer_surface, usable_area);
 	}
 }
 
